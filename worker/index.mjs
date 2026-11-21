@@ -46,6 +46,7 @@ export default {async fetch(req,env){try{
   const rows=await db.prepare('SELECT id,faction,name,model,sheet_revision,source_publication,source_page FROM scs_templates WHERE faction=? ORDER BY name,model').bind('Centauri Republic').all();return json(rows.results);
  }
  if(path==='/api/scs/templates'&&req.method==='POST'){
+  const host=await db.prepare('SELECT id FROM games WHERE host_id=? LIMIT 1').bind(user.id).first();if(!host)return fail('Only battle hosts can import SCS templates',403);
   const b=await readBody(req),definition=b.definition,check=validateSCS(definition);
   if(!check.valid)return json({error:'Invalid SCS',details:check.errors},400);
   const id=uuid();try{
