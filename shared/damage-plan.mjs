@@ -20,7 +20,7 @@ export function facingChart({hullClass,attackArc,charts}){
  if(!charts[section])throw new RangeError('No applicable chart: '+section);
  return {section,requiresChoice:false};
 }
-export function damagePlan({mode,damage,hullClass,attackArc,charts,offensiveEW=0,rakingSize=10,damageDice=null,sideChoice=null}){
+export function damagePlan({mode,damage,hullClass,attackArc,charts,offensiveEW=0,rakingSize=10,damageDice=null,sideChoice=null,remainderSections=null}){
  if(!validInt(damage)||damage<1)throw new RangeError('damage');
  const facing=facingChart({hullClass,attackArc,charts});
  if(facing.requiresChoice&&!facing.choices.includes(sideChoice))return {requiresChoice:true,choices:facing.choices};
@@ -49,6 +49,7 @@ export function damagePlan({mode,damage,hullClass,attackArc,charts,offensiveEW=0
  }else throw new RangeError('Piercing hull rules unavailable');
  if(sections.some(s=>!charts[s]))throw new RangeError('Piercing path references missing chart');
  const base=Math.floor(damage/sections.length),remainder=damage%sections.length;
- // Remaining points are allocated to the first volley per Compendium piercing rules.
- return {mode,requiresChoice:false,toHitModifier:-4,overkillLost:true,rerollPrimaryOnOuterChart:true,volleys:sections.map((section,i)=>({section,damage:base+(i===0?remainder:0),armourGroup:i}))};
+ // The target assigns extra points to DIFFERENT sections (Compendium example).
+ if(remainder>0&&(!Array.isArray(remainderSections)||remainderSections.length!==remainder||new Set(remainderSections).size!==remainder||remainderSections.some(s=>!sections.includes(s))))return {mode,requiresChoice:true,choiceType:'piercingRemainder',remainder,choices:sections};
+ return {mode,requiresChoice:false,toHitModifier:-4,overkillLost:true,rerollPrimaryOnOuterChart:true,volleys:sections.map((section,i)=>({section,damage:base+(remainderSections?.includes(section)?1:0),armourGroup:i}))};
 }
