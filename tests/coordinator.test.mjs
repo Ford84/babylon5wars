@@ -1,0 +1,10 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {requiredPlayers,followingPhase,canSubmit,safeShip} from '../shared/coordinator.mjs';
+import {phaseById} from '../shared/phases.mjs';
+const members=[{user_id:'a',initiative_rank:2},{user_id:'b',initiative_rank:1},{user_id:'c',initiative_rank:3}];
+test('all members must submit in a simultaneous phase',()=>{const p=phaseById('ew_commit');assert.deepEqual(requiredPlayers(p,members,['a']),['b','c']);assert.equal(canSubmit(p,members,['a'],'a'),false);assert.equal(canSubmit(p,members,['a'],'b'),true)});
+test('movement orders only from next eligible player',()=>{const p=phaseById('movement');assert.deepEqual(requiredPlayers(p,members,[]),['b']);assert.deepEqual(requiredPlayers(p,members,['b']),['a']);assert.deepEqual(requiredPlayers(p,members,['b','a']),['c']);assert.equal(canSubmit(p,members,[],'a'),false)});
+test('automatic reveal phase is skipped after commitment',()=>{assert.equal(followingPhase('ew_commit',1).phase.id,'jump');assert.equal(followingPhase('fire_commit',2).phase.id,'fire_resolution')});
+test('end-of-turn wraps and increments',()=>{assert.deepEqual(followingPhase('adjust',4),{phase:phaseById('power'),turn:5})});
+test('private ship state only sent to owner',()=>{const ship={id:'s',owner_id:'a',public_state_json:'{"damage":3}',private_state_json:'{"orders":"secret"}'};assert.deepEqual(safeShip(ship,'b').public_state,{damage:3});assert.equal(safeShip(ship,'b').private_state,undefined);assert.deepEqual(safeShip(ship,'a').private_state,{orders:'secret'})});
+test('completed simultaneous player no longer appears as pending',()=>{const p=phaseById('fire_commit');assert.deepEqual(requiredPlayers(p,members,['a','b']),['c']);assert.deepEqual(requiredPlayers(p,members,['a','b','c']),[])});
