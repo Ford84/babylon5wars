@@ -1,0 +1,8 @@
+{
+  "name": "babylon5wars",
+  "main": "worker/index.mjs",
+  "compatibility_date": "2026-11-01",
+  "assets": {"directory": "./dist", "binding": "ASSETS", "run_worker_first": ["/api/*"]},
+  "d1_databases": [{"binding": "DB", "database_name": "b5w-private", "database_id": "f921fcb3-c5af-47fa-a49f-bc8a733e89db"}],
+  "r2_buckets": [{"binding": "SHIP_IMAGES", "bucket_name": "b5w-ship-images"}]
+}
