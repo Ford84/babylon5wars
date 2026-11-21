@@ -20,6 +20,7 @@ export default {async fetch(req,env){try{
  if(!path.startsWith('/api/'))return env.ASSETS.fetch(req);
  if(req.method!=='GET'&&!originOk(req))return fail('Cross-origin requests are not allowed',403);
  if(path==='/api/health')return json({ok:true,phaseCount:PHASES.length});
+ if(path==='/api/diagnostics'){const checks={database:false,passwordHash:false};try{const row=await db.prepare('SELECT COUNT(*) AS n FROM users').first();checks.database=typeof row?.n==='number';}catch(e){console.error('diagnostics database',e);}try{const h=await hashPassword('diagnostic-password-1234');checks.passwordHash=h.startsWith('pbkdf2:210000:');}catch(e){console.error('diagnostics password hash',e);}return json({checks,ready:Object.values(checks).every(Boolean)});}
  if(path==='/api/phases')return json(PHASES);
  if(path==='/api/register'&&req.method==='POST'){
   const b=await readBody(req),name=String(b.name||'').trim(),password=String(b.password||'');if(name.length<3||name.length>80||password.length<12||password.length>256)return fail('Name 3–80 characters and password 12–256 characters required');
@@ -95,4 +96,4 @@ export default {async fetch(req,env){try{
   return json({submitted:true,advanced:isFinal,nextPhase:next?.phase.id||null});
  }
  return fail('Not found',404);
- }catch(e){return fail('Server error',500);}}};
+ }catch(e){console.error('Worker request failed',e);return fail('Server error',500);}}};
