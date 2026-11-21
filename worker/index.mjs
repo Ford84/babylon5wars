@@ -78,6 +78,27 @@ export default {async fetch(req,env){try{
  if(route==='invite'&&req.method==='POST'){if(user.id!==game.host_id)return fail('Host only',403);const token=hex(bytes(24));await db.prepare("INSERT INTO invitations(token_hash,game_id,created_by,expires_at) VALUES(?,?,?,datetime('now','+7 days'))").bind(await sha(token),gameId,user.id).run();return json({token,expiresInDays:7});}
  if(route==='initiative'&&req.method==='POST'){if(user.id!==game.host_id)return fail('Host only',403);const b=await readBody(req);if(!members.some(m=>m.user_id===b.playerId)||!Number.isInteger(b.rank)||b.rank<0||b.rank>999)return fail('Invalid player or rank');if(game.phase_id==='movement')return fail('Cannot change initiative during movement',409);await db.prepare('UPDATE memberships SET initiative_rank=? WHERE game_id=? AND user_id=?').bind(b.rank,gameId,b.playerId).run();return json({ok:true});}
  if(route==='ships'&&req.method==='POST'){const b=await readBody(req);if(!validateFacing(b.facing)||!Number.isInteger(b.q)||!Number.isInteger(b.r)||Math.abs(b.q)>10000||Math.abs(b.r)>10000)return fail('Invalid hex/facing');const owner=b.ownerId||user.id;if(owner!==user.id&&user.id!==game.host_id)return fail('Cannot create another player\'s ship',403);if(!members.some(m=>m.user_id===owner))return fail('Owner is not a member');const id=uuid(),label=String(b.label||'Ship').slice(0,80);await db.batch([db.prepare('INSERT INTO ships(id,game_id,owner_id,label,q,r,facing) VALUES(?,?,?,?,?,?,?)').bind(id,gameId,owner,label,b.q,b.r,b.facing),event(db,game,user.id,'ship_created',{shipId:id,label,ownerId:owner,q:b.q,r:b.r,facing:b.facing})]);return json({id},201);}
+ if(route==='attach-scs'&&req.method==='POST'){
+  if(user.id!==game.host_id)return fail('Host only',403);
+  const b=await readBody(req);
+  if(!/^[a-f0-9-]{36}$/i.test(String(b.shipId||''))||!/^[a-f0-9-]{36}$/i.test(String(b.templateId||'')))return fail('Invalid ship or template ID');
+  const ship=await db.prepare('SELECT id,template_id,public_state_json,private_state_json FROM ships WHERE id=? AND game_id=?').bind(b.shipId,gameId).first();
+  if(!ship)return fail('Ship not found',404);
+  if(ship.template_id)return fail('Ship already has an SCS; replacement requires a separate audited workflow',409);
+  const template=await db.prepare('SELECT definition_json FROM scs_templates WHERE id=?').bind(b.templateId).first();
+  if(!template)return fail('SCS template not found',404);
+  const definition=JSON.parse(template.definition_json),check=validateSCS(definition);
+  if(!check.valid)return fail('Stored SCS is invalid',409);
+  if(game.phase_id!=='power'||game.turn!==1)return fail('Attach an SCS before the battle begins',409);
+  const state=initialSCSState(definition);
+  const publicState={...JSON.parse(ship.public_state_json||'{}'),scs:{templateId:b.templateId,revision:definition.source.sheetRevision,systemStatus:Object.fromEntries(Object.entries(state.systems).map(([id,s])=>[id,{damage:s.damage,deactivated:s.deactivated}]))}};
+  const result=await db.batch([
+   db.prepare('UPDATE ships SET template_id=?,public_state_json=?,private_state_json=? WHERE id=? AND game_id=? AND template_id IS NULL').bind(b.templateId,JSON.stringify(publicState),JSON.stringify({...JSON.parse(ship.private_state_json||'{}'),scs:state}),b.shipId,gameId),
+   event(db,game,user.id,'scs_attached',{shipId:b.shipId,templateId:b.templateId,revision:definition.source.sheetRevision})
+  ]);
+  if(result[0].meta.changes!==1)return fail('Ship changed; reload',409);
+  return json({attached:true,shipId:b.shipId,templateId:b.templateId});
+ }
  if(route==='ship-image'&&req.method==='PUT'){
   if(!env.SHIP_IMAGES)return fail('Image storage unavailable',503);
   const shipId=url.searchParams.get('shipId');
