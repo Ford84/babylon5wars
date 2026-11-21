@@ -1,4 +1,5 @@
 import {PHASES,phaseById,validateFacing} from '../shared/phases.mjs';
+import {validateSCS,initialSCSState} from '../shared/scs.mjs';
 import {powerBudget,ewAllocation,initiative,initiativeOrder} from '../shared/preturn.mjs';
 import {requiredPlayers,followingPhase,canSubmit,safeShip} from '../shared/coordinator.mjs';
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'}});
@@ -40,6 +41,25 @@ export default {async fetch(req,env){try{
   try{const result=b.operation==='power'?powerBudget(b.input):b.operation==='ew'?ewAllocation(b.input):b.operation==='initiative'?initiative(b.input):initiativeOrder(b.input.units);
    return json({operation:b.operation,result,authoritative:false,note:'Calculation only; values must be verified against the SCS. No game state modified.'});
   }catch(e){if(e instanceof RangeError||e instanceof TypeError)return fail('Invalid rules input: '+e.message);throw e;}
+ }
+ if(path==='/api/scs/templates'&&req.method==='GET'){
+  const rows=await db.prepare('SELECT id,faction,name,model,sheet_revision,source_publication,source_page FROM scs_templates WHERE faction=? ORDER BY name,model').bind('Centauri Republic').all();return json(rows.results);
+ }
+ if(path==='/api/scs/templates'&&req.method==='POST'){
+  const b=await readBody(req),definition=b.definition,check=validateSCS(definition);
+  if(!check.valid)return json({error:'Invalid SCS',details:check.errors},400);
+  const id=uuid();try{
+   await db.prepare('INSERT INTO scs_templates(id,faction,name,model,sheet_revision,source_publication,source_page,definition_json,created_by) VALUES(?,?,?,?,?,?,?,?,?)')
+    .bind(id,definition.faction,definition.name,definition.model,definition.source.sheetRevision,definition.source.publication,definition.source.page,JSON.stringify(definition),user.id).run();
+  }catch(e){if(String(e).includes('UNIQUE'))return fail('This SCS revision is already imported',409);throw e;}
+  return json({id,validated:true},201);
+ }
+ if(path.startsWith('/api/scs/templates/')&&req.method==='GET'){
+  const id=path.slice('/api/scs/templates/'.length);
+  if(!/^[a-f0-9-]{36}$/i.test(id))return fail('Invalid template ID');
+  const record=await db.prepare('SELECT definition_json FROM scs_templates WHERE id=?').bind(id).first();
+  if(!record)return fail('SCS not found',404);
+  return json({definition:JSON.parse(record.definition_json)});
  }
  if(path==='/api/logout'&&req.method==='POST'){const token=req.headers.get('authorization').slice(7);await db.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await sha(token)).run();return json({ok:true});}
  if(path==='/api/me')return json(user);
