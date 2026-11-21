@@ -99,6 +99,29 @@ export default {async fetch(req,env){try{
   if(result[0].meta.changes!==1)return fail('Ship changed; reload',409);
   return json({attached:true,shipId:b.shipId,templateId:b.templateId});
  }
+ if(route==='host-damage-override'&&req.method==='POST'){
+  if(user.id!==game.host_id)return fail('Host only',403);
+  const b=await readBody(req);
+  if(b.expectedRevision!==game.revision)return fail('Game state changed; reload',409);
+  if(!/^[a-f0-9-]{36}$/i.test(String(b.shipId||''))||typeof b.systemId!=='string'||b.systemId.length>64||!Number.isInteger(b.newDamage)||b.newDamage<0||typeof b.reason!=='string'||b.reason.trim().length<8||b.reason.length>500)return fail('Invalid override');
+  const ship=await db.prepare('SELECT id,template_id,public_state_json,private_state_json FROM ships WHERE id=? AND game_id=?').bind(b.shipId,gameId).first();
+  if(!ship?.template_id)return fail('Ship has no validated SCS',409);
+  const privateState=JSON.parse(ship.private_state_json||'{}'),publicState=JSON.parse(ship.public_state_json||'{}');
+  const system=privateState.scs?.systems?.[b.systemId];
+  if(!system||!Number.isInteger(system.boxes)||b.newDamage>system.boxes)return fail('Unknown system or invalid damage',400);
+  const previous=system.damage;
+  if(previous===b.newDamage)return fail('Damage is unchanged',409);
+  system.damage=b.newDamage;
+  if(!publicState.scs?.systemStatus?.[b.systemId])return fail('Public system status missing',409);
+  publicState.scs.systemStatus[b.systemId].damage=b.newDamage;
+  const batch=await db.batch([
+   db.prepare('UPDATE games SET revision=revision+1 WHERE id=? AND revision=?').bind(gameId,game.revision),
+   db.prepare('UPDATE ships SET private_state_json=?,public_state_json=? WHERE id=? AND game_id=?').bind(JSON.stringify(privateState),JSON.stringify(publicState),b.shipId,gameId),
+   event(db,game,user.id,'host_damage_override',{shipId:b.shipId,systemId:b.systemId,previous,newDamage:b.newDamage,reason:b.reason.trim()})
+  ]);
+  if(batch[0].meta.changes!==1||batch[1].meta.changes!==1)return fail('Concurrent change; reload',409);
+  return json({ok:true,shipId:b.shipId,systemId:b.systemId,previous,newDamage:b.newDamage,revision:game.revision+1});
+ }
  if(route==='ship-image'&&req.method==='PUT'){
   if(!env.SHIP_IMAGES)return fail('Image storage unavailable',503);
   const shipId=url.searchParams.get('shipId');
