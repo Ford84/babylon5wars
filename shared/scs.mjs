@@ -51,7 +51,7 @@ export function validateSCS(s){
 }
 export function initialSCSState(s){
  const check=validateSCS(s);if(!check.valid)throw new RangeError(check.errors.join('; '));
- return {schemaVersion:1,sourceRevision:s.source.sheetRevision,systems:Object.fromEntries(s.systems.map(sys=>[sys.id,{damage:0,deactivated:false,criticalEffects:[]}])),power:{spent:0,allocations:{}},ew:{defensive:0,offensive:{},extra:{}},initiative:{roll:null,total:null},movement:{thrustSpent:0,turnDelay:0}};
+ return {schemaVersion:1,sourceRevision:s.source.sheetRevision,systems:Object.fromEntries(s.systems.map(sys=>[sys.id,{boxes:sys.boxes,armour:sys.armour,damage:0,deactivated:false,criticalEffects:[]}])),power:{spent:0,allocations:{}},ew:{defensive:0,offensive:{},extra:{}},initiative:{roll:null,total:null},movement:{thrustSpent:0,turnDelay:0}};
 }
 export function redactSCSForPlayer(s){
  const {source,...rest}=s;
