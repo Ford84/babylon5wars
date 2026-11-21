@@ -20,10 +20,15 @@ export function extraEWCost(originalRating,points){
  integer(originalRating,'original sensor rating');integer(points,'extra EW');
  return points*originalRating+points*(points+1)/2;
 }
-export function ewAllocation({sensors,extra=[],defensive=0,offensive={},closeCombat=0}){
+export function ewAllocation({sensors,extra=[],defensive=0,offensive={},closeCombat=0,unitType='ship'}){
  if(!Array.isArray(sensors)||!Array.isArray(extra)||sensors.length!==extra.length)throw new RangeError('sensor arrays');
  integer(defensive,'defensive EW');integer(closeCombat,'close combat EW');
  let total=0,powerCost=0;
+ if(unitType!=='ship'&&unitType!=='base')throw new RangeError('unit type');
+ if(unitType==='ship'&&extra.some(x=>x>0)){
+  const strongest=Math.max(...sensors.filter(s=>s.active!==false).map(s=>s.current),-Infinity);
+  if(extra.some((x,i)=>x>0&&(sensors[i].active===false||sensors[i].current!==strongest)))throw new RangeError('ships may boost only a strongest active sensor');
+ }
  sensors.forEach((s,i)=>{
   integer(s.original,'original sensor rating');if(!Number.isInteger(s.current))throw new RangeError('current sensor rating');
   const purchased=integer(extra[i],'purchased EW');
