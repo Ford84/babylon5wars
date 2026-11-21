@@ -1,0 +1,10 @@
+PRAGMA foreign_keys=ON;
+CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, display_name TEXT NOT NULL, password_hash TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS games (id TEXT PRIMARY KEY, title TEXT NOT NULL, host_id TEXT NOT NULL REFERENCES users(id), turn INTEGER NOT NULL DEFAULT 1, phase_id TEXT NOT NULL DEFAULT 'power', revision INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS memberships (game_id TEXT NOT NULL REFERENCES games(id), user_id TEXT NOT NULL REFERENCES users(id), faction TEXT, role TEXT NOT NULL DEFAULT 'player', PRIMARY KEY(game_id,user_id));
+CREATE TABLE IF NOT EXISTS ships (id TEXT PRIMARY KEY, game_id TEXT NOT NULL REFERENCES games(id), owner_id TEXT NOT NULL REFERENCES users(id), template_id TEXT, label TEXT NOT NULL, q INTEGER NOT NULL, r INTEGER NOT NULL, facing INTEGER NOT NULL CHECK(facing BETWEEN 0 AND 5), speed INTEGER NOT NULL DEFAULT 0, heading INTEGER NOT NULL DEFAULT 0, public_state_json TEXT NOT NULL DEFAULT '{}', private_state_json TEXT NOT NULL DEFAULT '{}');
+CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, game_id TEXT NOT NULL REFERENCES games(id), turn INTEGER NOT NULL, phase_id TEXT NOT NULL, player_id TEXT NOT NULL REFERENCES users(id), payload_json TEXT NOT NULL, submitted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(game_id,turn,phase_id,player_id));
+CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, game_id TEXT NOT NULL REFERENCES games(id), turn INTEGER NOT NULL, phase_id TEXT NOT NULL, actor_id TEXT, event_type TEXT NOT NULL, public_json TEXT NOT NULL DEFAULT '{}', private_json TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX IF NOT EXISTS idx_orders_phase ON orders(game_id,turn,phase_id);
+CREATE INDEX IF NOT EXISTS idx_events_game ON events(game_id,created_at);
