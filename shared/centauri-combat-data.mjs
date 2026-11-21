@@ -21,7 +21,7 @@ export function validateHitChart(chart){
 }
 export function hitLocation(chart,roll){if(!validateHitChart(chart))throw new RangeError('Invalid hit chart');if(!Number.isInteger(roll)||roll<1||roll>20)throw new RangeError('d20');return chart.find(([lo,hi])=>roll>=lo&&roll<=hi)[2];}
 export const SENTRI_FLIGHT_DATA={
- id:'centauri-sentri-v3-2e-sf',fighterCount:6,flightSlotsPerSheet:8,
+ id:'centauri-sentri-v3-2e-sf',fighterCount:6,flightsPerPrintedSheet:8,
  armour:{forward:3,port:3,starboard:3,aft:2},
  weapon:{name:'Light Particle Gun',guns:2,linked:true,damage:'1d6+2',rangePenaltyPerHex:-2,rateOfFire:'once per turn'},
  flightLevelCombat:[{relative:'5 or more above',fraction:'0'},{relative:'3–4 above',fraction:'1/6'},{relative:'1–2 above',fraction:'1/3'},{relative:'0–2 below',fraction:'1/2'},{relative:'3–4 below',fraction:'2/3'},{relative:'5–6 below',fraction:'5/6'},{relative:'7 or more below',fraction:'all'}]
