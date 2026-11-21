@@ -4,7 +4,7 @@ const obj=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const int=(v,min=0)=>Number.isInteger(v)&&v>=min;
 const str=(v,max=120)=>typeof v==='string'&&v.trim().length>0&&v.length<=max;
 const kinds=new Set(['reactor','engine','sensor','thruster','weapon','structure','command','hangar','shield','other']);
-const sides=new Set(['forward','aft','port','starboard','primary','other']);
+// Section IDs come from each printed sheet, never a universal hull layout.
 export function validateSCS(s){
  const errors=[];
  if(!obj(s))return {valid:false,errors:['SCS must be an object']};
@@ -18,6 +18,8 @@ export function validateSCS(s){
  for(const field of ['combatPoints','initiativeBonus','extraPower','engineEfficiency','turnCost','turnDelay']){
   if(!int(s.stats?.[field],field==='extraPower'||field==='initiativeBonus'?-10000:0))errors.push('invalid stats.'+field);
  }
+ if(!Array.isArray(s.sections)||s.sections.length===0)errors.push('sections required');
+ else {const ids=new Set();for(const section of s.sections){if(!obj(section)||!str(section.id,64)||ids.has(section.id))errors.push('duplicate or invalid section');else ids.add(section.id);}}
  if(!Array.isArray(s.systems)||s.systems.length===0)errors.push('systems required');
  else {
   const ids=new Set();
@@ -25,7 +27,7 @@ export function validateSCS(s){
    if(!obj(sys)||!str(sys.id,64)||ids.has(sys.id)){errors.push('duplicate or missing system id');continue;}
    ids.add(sys.id);
    if(!kinds.has(sys.kind))errors.push(sys.id+': invalid kind');
-   if(!sides.has(sys.section))errors.push(sys.id+': invalid section');
+   if(!s.sections?.some(section=>section.id===sys.section))errors.push(sys.id+': undefined section');
    if(!int(sys.armour)||!int(sys.boxes)||sys.boxes===0)errors.push(sys.id+': invalid armour/boxes');
    if(sys.power!==null&&sys.power!==undefined&&!int(sys.power))errors.push(sys.id+': invalid power');
    if(sys.kind==='sensor'&&!int(sys.sensorStrength))errors.push(sys.id+': sensor strength required');
@@ -40,6 +42,10 @@ export function validateSCS(s){
   for(const sys of s.systems||[])if(sys?.kind==='weapon'&&!cards.has(sys.weaponCardId))errors.push(sys.id+': missing weapon datacard');
  }
  if(!obj(s.hitLocations)||Object.keys(s.hitLocations).length===0)errors.push('hit location charts required');
+ else for(const [sectionId,chart] of Object.entries(s.hitLocations)){
+  if(!s.sections?.some(section=>section.id===sectionId))errors.push('hit chart references undefined section: '+sectionId);
+  if(!Array.isArray(chart)||!chart.length)errors.push('invalid hit chart: '+sectionId);
+ }
  if(!obj(s.notes))errors.push('notes object required');
  return {valid:errors.length===0,errors};
 }
