@@ -11,6 +11,9 @@ on:
       - 'shared/**'
       - 'migrations/**'
   workflow_dispatch:
+concurrency:
+  group: babylon5wars-movement-staging
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
