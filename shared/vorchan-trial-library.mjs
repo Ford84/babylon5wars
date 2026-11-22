@@ -13,7 +13,7 @@ export const VORCHAN_LIBRARY_RECORD=Object.freeze({
  turnDelay:[1,1,1,2,2,2,3,3,3,4,4,4],
  hangar:{fighters:0,shuttles:2,shuttleThrust:4,shuttleArmour:0,shuttleDefence:[8,10]},
  weapons:[
-  {id:'plasma-accelerator',name:'Plasma Accelerator',mounts:1,class:'Plasma',modes:['Standard'],damage:'4d10+12 minus 1 per hex',rangePenalty:'-1 per hex',fireControl:[3,1,-4],intercept:null,rateOfFire:'1 per 3 turns',alternates:[{rateOfFire:'1 per turn',damage:'1d10+4 minus 1 per hex'},{rateOfFire:'1 per 2 turns',damage:'2d10+8 minus 1 per hex'}]},
+  {id:'plasma-accelerator',name:'Plasma Accelerator',mounts:2,class:'Plasma',modes:['Standard'],damage:'4d10+12 minus 1 per hex',rangePenalty:'-1 per hex',fireControl:[3,1,-4],intercept:null,rateOfFire:'1 per 3 turns',alternates:[{rateOfFire:'1 per turn',damage:'1d10+4 minus 1 per hex'},{rateOfFire:'1 per 2 turns',damage:'2d10+8 minus 1 per hex'}]},
   {id:'twin-array',name:'Twin Array',mounts:2,class:'Particle',modes:['Standard'],damage:'1d10+4',rangePenalty:'-2 per hex',fireControl:[4,5,6],intercept:-2,rateOfFire:'2 per turn'}
  ],
  hitCharts:CENTAURI_HIT_CHARTS['centauri-vorchan-v3-2e-sf'],
@@ -27,7 +27,7 @@ export function validateVorchanLibraryRecord(record){
  if(record.engineEfficiency?.power!==2||record.engineEfficiency?.thrust!==1)problems.push('engine efficiency mismatch');
  if(record.accelerationCost!==2||record.initiativeBonus!==8)problems.push('movement/initiative mismatch');
  if(record.turnCost?.length!==12||record.turnDelay?.length!==12)problems.push('missing speed tables');
- if(record.weapons?.length!==2||record.weapons[0].mounts!==1||record.weapons[1].mounts!==2)problems.push('weapon inventory mismatch');
+ if(record.weapons?.length!==2||record.weapons[0].mounts!==2||record.weapons[1].mounts!==2)problems.push('weapon inventory mismatch');
  if(!record.hitCharts?.forward||!record.hitCharts?.aft||!record.hitCharts?.primary)problems.push('hit charts missing');
  return {valid:problems.length===0,problems,automaticCombatReady:record.damageDiagram?.verifiedIndividualBoxes===true&&record.damageDiagram?.verifiedArmour===true};
 }
