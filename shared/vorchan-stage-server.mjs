@@ -15,10 +15,11 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
  const carried=previous?orientationAtMovementStart({...previous,turn:turn-1},turn):null;
  const old=trial.movement?.turn===turn?trial.movement.state:carried?{...base,...carried,remaining:Math.abs(ship.speed),moved:0,thrustSpent:0,started:false,normalSinceSlide:true,slideDirection:null,history:[],version:0}:base;
  if(old.q!==ship.q||old.r!==ship.r||(trial.movement?.turn===turn&&old.facing!==ship.facing)||old.speed!==ship.speed)throw new RangeError('Movement state out of sync');
- const purchased=trial.movement?.turn===turn?trial.movement.purchasedThrust:0;
+ const purchased=trial.movement?.turn===turn?trial.movement.purchasedThrust:(trial.powerAllocation?.turn===turn?trial.powerAllocation.purchasedThrust:0);
  let nextPurchase=purchased,moveAction=action;
  if(action.type==='speed'){
   if(!Number.isInteger(action.purchasedThrust)||action.purchasedThrust<0||action.purchasedThrust>Math.floor(LIB.extraPower/LIB.engineEfficiency.power))throw new RangeError('Unverified thrust budget; only printed extra reactor power can be purchased');
+  if(trial.powerAllocation?.turn===turn&&action.purchasedThrust!==trial.powerAllocation.purchasedThrust)throw new RangeError('Thrust purchase must match committed power allocation');
   nextPurchase=action.purchasedThrust;
   moveAction={type:'speed',change:action.change};
  }
@@ -61,6 +62,6 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
   if(point.q<0||point.q>=20||point.r<0||point.r>=32)throw new RangeError('Outside trial map bounds');
   // Ordinary ships may share a hex. Ramming is a separate declared action.
  }
- const updatedTrial={...trial,movement:{turn,purchasedThrust:nextPurchase,powerSpent:nextPurchase*LIB.engineEfficiency.power,state:next}};
+ const updatedTrial={...trial,movement:{turn,purchasedThrust:nextPurchase,powerSpent:trial.powerAllocation?.turn===turn?trial.powerAllocation.thrustPower:nextPurchase*LIB.engineEfficiency.power,state:next}};
  return {nextShip:{q:next.q,r:next.r,facing:next.facing,speed:next.speed},nextPrivateState:{...privateState,trial:updatedTrial},movement:next,spent:next.thrustSpent,powerSpent:updatedTrial.movement.powerSpent};
 }
