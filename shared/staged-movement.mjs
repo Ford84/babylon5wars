@@ -5,7 +5,7 @@ import {advanceHex} from './movement-rules.mjs';
 const integer=Number.isInteger;
 export function newStagedMovement({q,r,facing,speed,version=0}){
  if(![q,r,facing,speed,version].every(integer)||facing<0||facing>5||version<0)throw new RangeError('Invalid ship movement state');
- return {q,r,facing,speed,version,remaining:Math.abs(speed),moved:0,turnDelayRemaining:0,thrustSpent:0,history:[],started:false};
+ return {q,r,facing,speed,version,remaining:Math.abs(speed),moved:0,turnDelayRemaining:0,thrustSpent:0,history:[],started:false,motionFacing:facing,slideDirection:null,normalSinceSlide:true,rolled:false,rollInProgress:false,pivotActive:false,pivotInProgress:false,pivotTurn:null};
 }
 export function stagedMove(state,action,limits){
  if(!state||!action||!limits||!integer(state.remaining)||state.remaining<0)throw new RangeError('Invalid movement state');
@@ -20,19 +20,28 @@ export function stagedMove(state,action,limits){
  }
  if(action.type==='advance'){
   if(!integer(action.hexes)||action.hexes<1||action.hexes>state.remaining)throw new RangeError('Invalid movement segment');
-  const heading=state.speed<0?(state.facing+3)%6:state.facing;
+  const heading=state.speed<0?((state.motionFacing??state.facing)+3)%6:(state.motionFacing??state.facing);
   let point={q:state.q,r:state.r};const path=[];
   for(let i=0;i<action.hexes;i++){point=advanceHex(point,heading);if(Math.abs(point.q)>10000||Math.abs(point.r)>10000)throw new RangeError('Coordinate limit');path.push(point);}
-  return {...state,...point,remaining:state.remaining-action.hexes,moved:state.moved+action.hexes,turnDelayRemaining:Math.max(0,state.turnDelayRemaining-action.hexes),started:true,version:state.version+1,history:[...state.history,{type:'advance',hexes:action.hexes,path}]};
+  return {...state,...point,remaining:state.remaining-action.hexes,moved:state.moved+action.hexes,turnDelayRemaining:Math.max(0,state.turnDelayRemaining-action.hexes),normalSinceSlide:true,started:true,version:state.version+1,history:[...state.history,{type:'advance',hexes:action.hexes,path}]};
+ }
+ if(action.type==='slide'){
+  if(state.remaining<1||state.speed===0)throw new RangeError('Slide requires remaining movement');
+  if(![-1,1].includes(action.direction)||state.slideDirection!==null&&state.slideDirection!==action.direction||!state.normalSinceSlide)throw new RangeError('Slide direction or forward-movement interval invalid');
+  if(!integer(action.cost)||action.cost<1||state.thrustSpent+action.cost>limits.availableThrust)throw new RangeError('Insufficient slide thrust');
+  const motion=state.speed<0?((state.motionFacing??state.facing)+3)%6:(state.motionFacing??state.facing);
+  const destination=advanceHex({q:state.q,r:state.r},(motion+action.direction+6)%6);
+  return {...state,...destination,remaining:state.remaining-1,moved:state.moved+1,thrustSpent:state.thrustSpent+action.cost,turnDelayRemaining:Math.max(0,state.turnDelayRemaining-1),slideDirection:action.direction,normalSinceSlide:false,started:true,version:state.version+1,history:[...state.history,{type:'slide',direction:action.direction,cost:action.cost,path:[destination]}]};
  }
  if(action.type==='turn'){
+  if(state.pivotActive||state.pivotInProgress||state.rollInProgress)throw new RangeError('Turn prohibited during pivot or roll');
   if(![ -1,1 ].includes(action.direction))throw new RangeError('Turn must be one 60-degree step');
   if(state.turnDelayRemaining>0)throw new RangeError('Turn delay not satisfied');
   if(!integer(action.cost)||action.cost<1||!integer(action.delay)||action.delay<0)throw new RangeError('Verified turn cost and delay required');
   if(!integer(action.shortenBy||0)||action.shortenBy<0||action.shortenBy>Math.max(0,action.delay-1))throw new RangeError('Invalid turn shortening');
   const spent=action.cost+(action.shortenBy??0);
   if(state.thrustSpent+spent>limits.availableThrust)throw new RangeError('Insufficient thrust');
-  return {...state,facing:(state.facing+action.direction+6)%6,turnDelayRemaining:action.delay-(action.shortenBy??0),thrustSpent:state.thrustSpent+spent,started:true,version:state.version+1,history:[...state.history,{type:'turn',direction:action.direction,spent,shortenBy:action.shortenBy??0}]};
+  return {...state,facing:(state.facing+action.direction+6)%6,motionFacing:(state.facing+action.direction+6)%6,turnDelayRemaining:action.delay-(action.shortenBy??0),thrustSpent:state.thrustSpent+spent,started:true,version:state.version+1,history:[...state.history,{type:'turn',direction:action.direction,spent,shortenBy:action.shortenBy??0}]};
  }
  throw new RangeError('Unknown movement action');
 }
