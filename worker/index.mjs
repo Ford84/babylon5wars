@@ -1,4 +1,5 @@
 import {commitVorchanPower,commitVorchanEW} from '../shared/vorchan-preturn.mjs';
+import {resolveVorchanOverthrust} from '../shared/vorchan-overthrust-phase.mjs';
 import {applyVorchanStage} from '../shared/vorchan-stage-server.mjs';
 import {getBuiltinShip,listBuiltinShips} from '../shared/ship-catalog.mjs';
 import {VORCHAN_SCS_IDENTIFICATION,auditVorchanIdentification} from '../shared/vorchan-scs-identification.mjs';
@@ -331,6 +332,18 @@ export default {async fetch(req,env){try{
   const inserts=[db.prepare('INSERT INTO orders(id,game_id,turn,phase_id,player_id,payload_json) VALUES(?,?,?,?,?,?)').bind(uuid(),gameId,game.turn,game.phase_id,user.id,serialized),event(db,game,user.id,'order_committed',{playerId:user.id,phaseId:game.phase_id,turn:game.turn})];
   if(isFinal){
    if(phase.secret)inserts.push(event(db,game,null,'orders_revealed',{phaseId:game.phase_id,turn:game.turn,orders:[...previous.map(o=>({playerId:o.player_id,payload:JSON.parse(o.payload_json)})),{playerId:user.id,payload}]}));
+   if(game.phase_id==='criticals'){
+    const shipRows=(await db.prepare('SELECT id,private_state_json FROM ships WHERE game_id=?').bind(gameId).all()).results;
+    for(const shipRow of shipRows){
+     const oldPrivate=JSON.parse(shipRow.private_state_json||'{}');
+     if(!oldPrivate.trial||oldPrivate.trial.libraryId!==VORCHAN_LIBRARY_RECORD.id)continue;
+     const resolved=resolveVorchanOverthrust(oldPrivate.trial,game.turn,()=>crypto.getRandomValues(new Uint32Array(1))[0]%20+1);
+     if(!resolved.results.length)continue;
+     const newPrivate=JSON.stringify({...oldPrivate,trial:resolved.trial});
+     inserts.push(db.prepare('UPDATE ships SET private_state_json=? WHERE id=? AND game_id=? AND private_state_json=?').bind(newPrivate,shipRow.id,gameId,shipRow.private_state_json));
+     inserts.push(event(db,game,null,'vorchan_overthrust_resolved',{shipId:shipRow.id,results:resolved.results}));
+    }
+   }
    inserts.push(db.prepare('UPDATE games SET phase_id=?,turn=?,revision=revision+1 WHERE id=? AND revision=?').bind(next.phase.id,next.turn,gameId,game.revision));
    inserts.push(event(db,game,null,'phase_advanced',{from:game.phase_id,to:next.phase.id,nextTurn:next.turn}));
   }
