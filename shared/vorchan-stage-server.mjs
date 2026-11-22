@@ -2,7 +2,7 @@
 // never turn cost, turn delay, or thrust limits.
 import {pivotStart,pivotHalt,rollStart,rollHalt,orientationAtMovementStart} from './orientation-stage.mjs';
 import {adjustTurnDelay} from './speed-integration.mjs';
-import {newStagedMovement,stagedMove,turnCostAtSpeed} from './staged-movement.mjs';
+import {newStagedMovement,stagedMove,turnCostAtSpeed,vorchanTurnDelayAtSpeed} from './staged-movement.mjs';
 import {vorchanPowerBudget} from './vorchan-power-economy.mjs';
 import {effectiveThrusterRating,overthrustChecksForTurn,manoeuvreIncrementalEngineCost} from './thruster-criticals.mjs';
 import {validateManoeuvreThrusters} from './manoeuvre-thrusters.mjs';
@@ -16,7 +16,7 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
  const trial=privateState?.trial;
  if(!trial||trial.libraryId!==LIB.id)throw new RangeError('Not a Vorchan trial ship');
  if(!action||typeof action!=='object'||Array.isArray(action)||!['speed','advance','turn','slide','pivot-start','pivot-halt','roll-start','roll-halt'].includes(action.type))throw new RangeError('Invalid staged action');
- if(Object.keys(action).some(k=>!({speed:['type','change','purchasedThrust','thrusters'],advance:['type','hexes'],turn:['type','direction','thrusters'],slide:['type','direction','thrusters'], 'pivot-start':['type','direction','thrusterPair','oddTo','thrusters'], 'pivot-halt':['type','thrusterPair','oddTo','thrusters'], 'roll-start':['type','thrusters'], 'roll-halt':['type','thrusters']}[action.type].includes(k))))throw new RangeError('Client cannot supply movement costs or limits');
+ if(Object.keys(action).some(k=>!({speed:['type','change','purchasedThrust','thrusters'],advance:['type','hexes'],turn:['type','direction','thrusters','shortenBy'],slide:['type','direction','thrusters'], 'pivot-start':['type','direction','thrusterPair','oddTo','thrusters'], 'pivot-halt':['type','thrusterPair','oddTo','thrusters'], 'roll-start':['type','thrusters'], 'roll-halt':['type','thrusters']}[action.type].includes(k))))throw new RangeError('Client cannot supply movement costs or limits');
  const previous=trial.movement?.turn===turn-1?trial.movement.state:null;
  const base=newStagedMovement({q:ship.q,r:ship.r,facing:ship.facing,speed:ship.speed,version:0});
  const carried=previous?orientationAtMovementStart({...previous,turn:turn-1},turn):null;
@@ -36,8 +36,9 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
  }
  if(action.type==='turn'){
   const speed=Math.abs(old.speed);
-  if(speed<1||speed>12)throw new RangeError('Stationary and high-speed turns require separate verified rules');
-  moveAction={type:'turn',direction:action.direction,cost:turnCostAtSpeed(old.speed,LIB.turnCost),delay:LIB.turnDelay[speed-1]};
+  const delay=vorchanTurnDelayAtSpeed(old.speed,LIB.turnDelay);
+  if(action.shortenBy!==undefined&&(!Number.isInteger(action.shortenBy)||action.shortenBy<0||action.shortenBy>Math.max(0,delay-1)))throw new RangeError('Invalid turn shortening');
+  moveAction={type:'turn',direction:action.direction,cost:turnCostAtSpeed(old.speed,LIB.turnCost),delay,shortenBy:action.shortenBy??0};
  }
  const committed=trial.powerAllocation?.turn===turn?trial.powerAllocation:null;
  if(committed&&nextPurchase!==committed.purchasedThrust)throw new RangeError('Thrust purchase must match committed power allocation');
@@ -65,9 +66,9 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
   if(old.pivotActive&&action.type==='speed')throw new RangeError('Cannot change speed while pivoted');
   next=stagedMove(old,moveAction,limits);
  }
- if(action.type==='turn')next={...next,turnDelayOriginal:moveAction.delay,hexesSinceTurn:0};
+ if(action.type==='turn')next={...next,turnDelayOriginal:moveAction.delay-moveAction.shortenBy,hexesSinceTurn:0};
  if((action.type==='advance'||action.type==='slide')&&old.turnDelayRemaining>0)next={...next,turnDelayOriginal:old.turnDelayOriginal,hexesSinceTurn:(old.hexesSinceTurn??0)+(action.type==='slide'?1:action.hexes)};
- if(action.type==='speed'&&old.turnDelayRemaining>0){const speed=Math.abs(next.speed);if(speed>12)throw new RangeError('Speed beyond verified turn-delay chart');const delay=speed===0?0:LIB.turnDelay[speed-1];next={...next,turnDelayRemaining:adjustTurnDelay({oldRequired:old.turnDelayOriginal??old.turnDelayRemaining,hexesSinceTurn:old.hexesSinceTurn??0,newRequired:delay}).remaining,turnDelayOriginal:delay};}
+ if(action.type==='speed'&&old.turnDelayRemaining>0){const speed=Math.abs(next.speed);const delay=vorchanTurnDelayAtSpeed(next.speed,LIB.turnDelay);next={...next,turnDelayRemaining:adjustTurnDelay({oldRequired:old.turnDelayOriginal??old.turnDelayRemaining,hexesSinceTurn:old.hexesSinceTurn??0,newRequired:delay}).remaining,turnDelayOriginal:delay};}
  const newPath=next.history.at(-1)?.path||[];
  for(const point of newPath){
   if(point.q<0||point.q>=20||point.r<0||point.r>=32)throw new RangeError('Outside trial map bounds');
