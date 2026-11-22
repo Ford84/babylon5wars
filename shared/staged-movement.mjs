@@ -30,9 +30,9 @@ export function stagedMove(state,action,limits){
   if(state.turnDelayRemaining>0)throw new RangeError('Turn delay not satisfied');
   if(!integer(action.cost)||action.cost<1||!integer(action.delay)||action.delay<0)throw new RangeError('Verified turn cost and delay required');
   if(!integer(action.shortenBy||0)||action.shortenBy<0||action.shortenBy>Math.max(0,action.delay-1))throw new RangeError('Invalid turn shortening');
-  const spent=action.cost+action.shortenBy;
+  const spent=action.cost+(action.shortenBy??0);
   if(state.thrustSpent+spent>limits.availableThrust)throw new RangeError('Insufficient thrust');
-  return {...state,facing:(state.facing+action.direction+6)%6,turnDelayRemaining:action.delay-action.shortenBy,thrustSpent:state.thrustSpent+spent,started:true,version:state.version+1,history:[...state.history,{type:'turn',direction:action.direction,spent,shortenBy:action.shortenBy}]};
+  return {...state,facing:(state.facing+action.direction+6)%6,turnDelayRemaining:action.delay-(action.shortenBy??0),thrustSpent:state.thrustSpent+spent,started:true,version:state.version+1,history:[...state.history,{type:'turn',direction:action.direction,spent,shortenBy:action.shortenBy??0}]};
  }
  throw new RangeError('Unknown movement action');
 }
