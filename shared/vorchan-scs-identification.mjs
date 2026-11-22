@@ -7,8 +7,8 @@ export const VORCHAN_SCS_IDENTIFICATION=Object.freeze({
  sections:['forward','primary','aft','port','starboard'],
  systems:[
   {id:'retro',kind:'thruster',section:'forward',armour:4,boxes:10,rows:[5,5],iconValue:null,verified:true},
-  {id:'forward_port_thrust',kind:'thruster',section:'forward',armour:3,boxes:6,rows:[3,3],verified:true},
-  {id:'forward_starboard_thrust',kind:'thruster',section:'forward',armour:3,boxes:6,rows:[3,3],verified:true},
+  {id:'forward_port_thrust',kind:'thruster',section:'forward',armour:3,boxes:6,rows:[3,3],verified:false},
+  {id:'forward_starboard_thrust',kind:'thruster',section:'forward',armour:3,boxes:6,rows:[3,3],verified:false},
   {id:'plasma_forward',kind:'weapon',section:'forward',armour:4,boxes:8,rows:[4,4],weaponCardId:'plasma_accelerator',verified:true},
   {id:'forward_structure',kind:'structure',section:'forward',armour:5,boxes:48,rows:[2,2,2,4,4,6,6,8,8,4,2],verified:true},
   {id:'twin_forward_port',kind:'weapon',section:'forward',armour:5,boxes:10,rows:[5,5],weaponCardId:'twin_array',iconValue:3,verified:true},
@@ -27,11 +27,12 @@ export const VORCHAN_SCS_IDENTIFICATION=Object.freeze({
   {id:'jump_drive',kind:'other',section:'aft',armour:6,boxes:16,rows:[4,4,4,4],verified:true}
  ],
  weapons:[{id:'plasma_accelerator',printedMounts:1},{id:'twin_array',printedMounts:2}],
- completeness:{allSystemsLocated:true,allArmourIdentified:true,allDamageBoxesCounted:true,allWeaponArcsIdentified:true,sensorStrengthVerified:false,freeThrustVerified:false}
+ completeness:{allSystemsLocated:false,allArmourIdentified:false,allDamageBoxesCounted:false,allWeaponArcsIdentified:true,sensorStrengthVerified:false,freeThrustVerified:true}
 });
 export function auditVorchanIdentification(){
  const s=VORCHAN_SCS_IDENTIFICATION.systems;
  const issues=[];
+ if(s.some(x=>!x.verified))issues.push('SCS contains unverified system identification; do not enable automatic combat');
  for(const sys of s){
   if(sys.verified&&(!Number.isInteger(sys.boxes)||sys.rows.reduce((a,b)=>a+b,0)!==sys.boxes))issues.push(sys.id+': damage box mismatch');
   if(!Number.isInteger(sys.armour))issues.push(sys.id+': armour missing');
