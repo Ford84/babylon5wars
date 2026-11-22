@@ -1,0 +1,19 @@
+{
+  "manifestVersion": 1,
+  "destination": "b5w-movement-test / scs_templates",
+  "status": "blocked",
+  "reason": "Do not import unverified or incomplete official SCS definitions",
+  "ships": [
+    {"name": "Balsavor Gunship", "status": "blocked", "issues": ["Legacy compound vector subsystem boxes not fully extracted", "SCS v1 required fields not fully reconciled"]},
+    {"name": "Varilon Close Escort", "status": "blocked", "issues": ["Legacy compound vector subsystem boxes not fully extracted", "SCS v1 required fields not fully reconciled"]},
+    {"name": "Falenna Garrison Ship", "status": "blocked", "issues": ["Detected vector groups are not a fully reconciled installed-system inventory", "SCS v1 required fields not fully reconciled"]},
+    {"name": "Nalor Armoured Cruiser", "status": "blocked", "issues": ["Detected vector groups are not a fully reconciled installed-system inventory", "SCS v1 required fields not fully reconciled"]},
+    {"name": "Navask Escort Destroyer", "status": "blocked", "issues": ["Detected vector groups are not a fully reconciled installed-system inventory", "SCS v1 required fields not fully reconciled"]}
+  ],
+  "importRequirements": [
+    "Verified extraction with individually identified vector boxes for all installed components",
+    "Source-backed armour, weapon datacards, complete hit-location charts and required ship statistics",
+    "Passing validateVectorExtraction and validateSCS",
+    "Explicit dry-run and test database import approval"
+  ]
+}
