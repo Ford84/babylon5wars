@@ -10,6 +10,8 @@ export function weaponCritical({systemId,roll,marked,alreadyDestroyed=false}){
  if(!integer(roll)||roll<1||roll>20||!integer(marked)||marked<0||marked>sys.boxes)throw new RangeError('Invalid critical roll or damage');
  if(alreadyDestroyed||marked===sys.boxes||marked===0)return {eligible:false,systemId,effects:[]};
  const modified=roll+marked;
+ // The printed chart omits result 13 (1–12, then 14–18). Never guess its effect.
+ if(modified===13)return {eligible:true,systemId,roll,modifier:marked,modified,requiresRuleClarification:true,effects:[]};
  const range=modified>=14&&modified<=18||modified>=25;
  const damage=modified>=19;
  return {eligible:true,systemId,roll,modifier:marked,modified,effects:[...(range?['range_penalty_worsened']:[]),...(damage?['damage_minus_2_per_die_minimum_1']:[])]};
