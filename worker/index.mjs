@@ -1,5 +1,6 @@
 import {commitVorchanPower,commitVorchanEW} from '../shared/vorchan-preturn.mjs';
 import {applyVorchanStage} from '../shared/vorchan-stage-server.mjs';
+import {getBuiltinShip,listBuiltinShips} from '../shared/ship-catalog.mjs';
 import {VORCHAN_SCS_IDENTIFICATION,auditVorchanIdentification} from '../shared/vorchan-scs-identification.mjs';
 import {VORCHAN_LIBRARY_RECORD,newVorchanTrialState,vorchanThrustPreview} from '../shared/vorchan-trial-library.mjs';
 import {PHASES,phaseById,validateFacing} from '../shared/phases.mjs';
@@ -29,6 +30,8 @@ export default {async fetch(req,env){try{
  if(path==='/api/health')return json({ok:true,phaseCount:PHASES.length});
  if(path==='/api/diagnostics'){const checks={database:false,passwordHash:false};try{const row=await db.prepare('SELECT COUNT(*) AS n FROM users').first();checks.database=typeof row?.n==='number';}catch(e){console.error('diagnostics database',e);}try{const h=await hashPassword('diagnostic-password-1234');checks.passwordHash=h.startsWith('pbkdf2:100000:');}catch(e){checks.passwordHashError={name:String(e?.name||'Error'),message:String(e?.message||'Unknown').slice(0,200)};console.error('diagnostics password hash',e);}return json({checks,ready:checks.database&&checks.passwordHash});}
  if(path==='/api/phases')return json(PHASES);
+ if(path==='/api/ships/catalog'&&req.method==='GET')return json(listBuiltinShips());
+ if(path.startsWith('/api/ships/catalog/')&&req.method==='GET'){const ship=getBuiltinShip(decodeURIComponent(path.slice('/api/ships/catalog/'.length)));return ship?json(ship):fail('Ship not found',404);}
  if(path==='/api/register'&&req.method==='POST'){
   const b=await readBody(req),name=String(b.name||'').trim(),password=String(b.password||'');if(name.length<3||name.length>80||password.length<12||password.length>256)return fail('Name 3–80 characters and password 12–256 characters required');
   const id=uuid();try{await db.prepare('INSERT INTO users(id,display_name,password_hash) VALUES(?,?,?)').bind(id,name,await hashPassword(password)).run();}catch(e){if(String(e).includes('UNIQUE'))return fail('Player name already exists',409);throw e;}return json({id},201);
@@ -128,6 +131,7 @@ export default {async fetch(req,env){try{
   const existing=await db.prepare('SELECT COUNT(*) AS n FROM ships WHERE game_id=?').bind(gameId).first();
   if(existing.n!==0)return fail('Trial requires an empty battlefield',409);
   const b=await readBody(req);
+  if(b.shipCatalogId!==VORCHAN_LIBRARY_RECORD.id||!getBuiltinShip(b.shipCatalogId)?.selectable)return fail('Select a supported ship from the catalogue',400);
   if(b.expectedRevision!==game.revision)return fail('Game changed; reload',409);
   const positions=[{q:3,r:10,facing:0},{q:15,r:10,facing:3}];
   const ids=[uuid(),uuid()];
