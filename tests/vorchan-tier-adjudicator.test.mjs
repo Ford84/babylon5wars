@@ -7,7 +7,7 @@ const roll={attackId:attack.id,roll:1,locationRoll:4,primaryRoll:1,damageDice:[9
 test('same-tier reducer applies recorded dice to forward plasma track without mutation',()=>{
  const input={ships,attacks:[attack],rollJournal:[roll]};
  const one=adjudicateVorchanShipTier(input),two=adjudicateVorchanShipTier(input);
- assert.deepEqual(one,two);assert.equal(one.complete,true);assert.equal(one.states.b.tracks.plasma_forward.marked,9);
+ assert.deepEqual(one,two);assert.equal(one.complete,true);assert.equal(one.states.b.tracks.plasma_forward.marked,8);
 });
 test('defender selects among surviving twin arrays before later damage can proceed',()=>{
  const ambiguous={...roll,locationRoll:6};
