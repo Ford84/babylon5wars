@@ -22,12 +22,12 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
   if(speed<1||speed>12)throw new RangeError('Stationary and high-speed turns require separate verified rules');
   moveAction={type:'turn',direction:action.direction,cost:turnCostAtSpeed(old.speed,LIB.turnCost),delay:LIB.turnDelay[speed-1]};
  }
- const limits={availableThrust:nextPurchase,accelCost:LIB.accelerationCost};
+ const limits={availableThrust:10+nextPurchase,accelCost:LIB.accelerationCost};
  const next=stagedMove(old,moveAction,limits);
  const newPath=next.history.at(-1)?.path||[];
  for(const point of newPath){
   if(point.q<0||point.q>=20||point.r<0||point.r>=32)throw new RangeError('Outside trial map bounds');
-  if(otherShips.some(s=>s.id!==ship.id&&s.q===point.q&&s.r===point.r))throw new RangeError('Movement intersects occupied hex; collision rules not yet supported');
+  // Ordinary ships may share a hex. Ramming is a separate declared action.
  }
  const updatedTrial={...trial,movement:{turn,purchasedThrust:nextPurchase,powerSpent:nextPurchase*LIB.engineEfficiency.power,state:next}};
  return {nextShip:{q:next.q,r:next.r,facing:next.facing,speed:next.speed},nextPrivateState:{...privateState,trial:updatedTrial},movement:next,spent:next.thrustSpent,powerSpent:updatedTrial.movement.powerSpent};
