@@ -42,3 +42,15 @@ export function manoeuvreEngineCost(allocation,effectsById={}){
  }
  return cost;
 }
+
+export function manoeuvreIncrementalEngineCost(allocation,ledger,effectsById={}){
+ let cost=0;
+ for(const [id,output] of Object.entries(allocation)){
+  if(!integer(output)||!ledger[id])throw new RangeError('Invalid thruster output');
+  const effects=effectsById[id]??{};
+  if(!integer(effects.efficiencyLosses??0)||!integer(effects.outletFailures??0))throw new RangeError('Invalid critical effect');
+  cost+=output*(1+(effects.efficiencyLosses??0));
+  if(output>0&&ledger[id].used===0)cost+=(effects.outletFailures??0);
+ }
+ return cost;
+}
