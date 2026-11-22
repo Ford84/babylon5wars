@@ -3,7 +3,7 @@
 import {pivotStart,pivotHalt,rollStart,rollHalt,orientationAtMovementStart} from './orientation-stage.mjs';
 import {adjustTurnDelay} from './speed-integration.mjs';
 import {newStagedMovement,stagedMove,turnCostAtSpeed} from './staged-movement.mjs';
-import {effectiveThrusterRating,overthrustChecksForTurn} from './thruster-criticals.mjs';
+import {effectiveThrusterRating,overthrustChecksForTurn,manoeuvreIncrementalEngineCost} from './thruster-criticals.mjs';
 import {validateManoeuvreThrusters} from './manoeuvre-thrusters.mjs';
 import {createThrusterLedger,allocateThrusterThrust} from './thruster-ledger.mjs';
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
@@ -81,8 +81,12 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
  for(const [id,entry] of Object.entries(ledger))if(entry.rating!==effectiveRatings[id])throw new RangeError('Thruster rating changed during turn; requires adjudication');
  // Existing damage and critical effects must be adjudicated before trusting undamaged ratings.
  if(manoeuvreCost&&Object.keys(trial.systemDamage||{}).length)throw new RangeError('Damaged thruster allocation requires adjudication');
- const accounted=allocateThrusterThrust(ledger,allocation,{availableThrust:limits.availableThrust,alreadySpent:old.thrustSpent});
+ const extraEngineCost=manoeuvreIncrementalEngineCost(allocation,ledger,criticalEffects);
+ const previousEngineSpent=trial.movement?.turn===turn?(trial.movement.engineThrustSpent??old.thrustSpent):0;
+ const engineThrustSpent=previousEngineSpent+extraEngineCost;
+ if(engineThrustSpent>limits.availableThrust)throw new RangeError('Insufficient engine thrust after thruster efficiency/outlet losses');
+ const accounted=allocateThrusterThrust(ledger,allocation,{availableThrust:Math.max(limits.availableThrust,old.thrustSpent+manoeuvreCost),alreadySpent:old.thrustSpent});
  const checks=overthrustChecksForTurn(accounted.ledger,trial.thrusterDamageBoxes??{});
- const updatedTrial={...trial,movement:{turn,purchasedThrust:nextPurchase,powerSpent:trial.powerAllocation?.turn===turn?trial.powerAllocation.thrustPower:nextPurchase*LIB.engineEfficiency.power,state:next,thrusterLedger:accounted.ledger,pendingOverthrustChecks:checks}};
- return {nextShip:{q:next.q,r:next.r,facing:next.facing,speed:next.speed},nextPrivateState:{...privateState,trial:updatedTrial},movement:next,spent:next.thrustSpent,powerSpent:updatedTrial.movement.powerSpent};
+ const updatedTrial={...trial,movement:{turn,purchasedThrust:nextPurchase,powerSpent:trial.powerAllocation?.turn===turn?trial.powerAllocation.thrustPower:nextPurchase*LIB.engineEfficiency.power,state:next,engineThrustSpent,thrusterLedger:accounted.ledger,pendingOverthrustChecks:checks}};
+ return {nextShip:{q:next.q,r:next.r,facing:next.facing,speed:next.speed},nextPrivateState:{...privateState,trial:updatedTrial},movement:next,spent:next.thrustSpent,engineThrustSpent,powerSpent:updatedTrial.movement.powerSpent};
 }
