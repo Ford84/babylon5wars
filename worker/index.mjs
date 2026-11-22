@@ -26,7 +26,7 @@ return {crewBAB:s.crewBAB,training:s.training,sensors:s.sensors,stealth:s.stealt
  ...(Number.isInteger(s.armourBase)?{armourBase:s.armourBase}:{}),...(Number.isInteger(s.armourShielded)?{armourShielded:s.armourShielded}:{}),
  ...(Number.isInteger(s.stealthBase)?{stealthBase:s.stealthBase}:{}),...(Number.isInteger(s.sensorsInstalled)?{sensorsInstalled:s.sensorsInstalled}:{}),
  ...(Number.isInteger(s.structureMaximum)?{structureMaximum:s.structureMaximum}:{}),
- targetingBonus:Number.isInteger(s.targetingBonus)?s.targetingBonus:0, weapons:s.weapons.map(w=>({name:w.name.trim(),arc:w.arc,range:w.range,offence:w.offence,special:typeof w.special==='string'?w.special.slice(0,160):'',automatic:w.automatic!==false&&w.offence>0}))}}
+ targetingBonus:Number.isInteger(s.targetingBonus)?s.targetingBonus:Math.min(20,Math.max(0,Number(String(s.features||'').match(/Targeting Computer\s*\(\+(\d+)\)/i)?.[1]||0))), weapons:s.weapons.map(w=>({name:w.name.trim(),arc:w.arc,range:w.range,offence:w.offence,special:typeof w.special==='string'?w.special.slice(0,160):'',automatic:w.automatic!==false&&w.offence>0}))}}
 
 function trait(w){const x=w.special||'';const rapid=x.match(/Rapid Fire\s*(\d+)/i);const beam=x.match(/Beam\s*(\d+)d(\d+)/i);const intercept=x.match(/Intercept\s*(\d+)/i);return {rapid:rapid?Math.min(20,Number(rapid[1])):1,beam:beam?[Number(beam[1]),Number(beam[2])]:null,intercept:intercept?Number(intercept[1]):0,electro:/Electro[\s-]*Pulse/i.test(x),array:/\bArray\b/i.test(x)}}
 function rollAttack(bonus,dv){const die=d20();return {die,bonus,hit:die===20||(die!==1&&die+bonus>=dv)}}
@@ -74,7 +74,7 @@ else if(type==='fire'){const target=list.find(s=>s.id===b.targetId);if(!target||
 const guns=stats.weapons.filter(w=>(w.automatic!==false&&w.offence>0||enhanced&&trait(w).electro)&&(w.arc===arc||w.arc==='turret')&&(w.range==='long'||range===0)&&!(enhanced&&trait(w).intercept>0&&actor.interceptorScreen?.includes(stats.weapons.indexOf(w))));
 if(!guns.length)return bad('No eligible weapons within that arc and range');const check=d20(),success=skill(check,stats.training,5),penalty=success?0:-4;const result=computeBarrage({weapons:guns,attacker:actor,target,checkPenalty:penalty,enhanced});
 let offence=result.offence,intercept=null;
-if(enhanced&&target.interceptorScreen?.length&&!result.hits.some(h=>h.beam)){
+if(enhanced&&result.offence>0&&target.interceptorScreen?.length&&!result.hits.some(h=>h.beam)){
 const idx=target.interceptorScreen.find(i=>!target.interceptorsUsed?.includes(i));if(idx!==undefined){const gun=target.stats.weapons[idx],t=trait(gun),roll=d20(),score=roll+target.stats.training,success=skill(roll,target.stats.training,result.highestAttack);if(!target.interceptorsUsed)target.interceptorsUsed=[];target.interceptorsUsed.push(idx);intercept={gun:gun.name,roll,score,dc:result.highestAttack,success,reduction:success?t.intercept:0};if(success)offence=Math.max(0,offence-t.intercept)}}
 const dmg=Math.max(0,offence-target.stats.armour);target.remaining=Math.max(0,target.remaining-dmg);if(target.remaining===0){target.status='neutralised';target.actions_left=0}
 const beamDamage=enhanced&&dmg>0?result.hits.filter(h=>h.beam).map(h=>({gun:h.gun,armourLoss:rollDice(h.beam[0],h.beam[1])})):[];if(beamDamage.length){target.stats.armour=Math.max(0,target.stats.armour-beamDamage.reduce((n,b)=>n+b.armourLoss,0))}
