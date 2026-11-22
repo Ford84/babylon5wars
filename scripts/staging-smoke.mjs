@@ -52,3 +52,17 @@ if(lateInvite.status!==409)throw Error('Invitation allowed after start');
 const lateShip=await post('/api/games/'+id+'/ships',{label:'Late',q:2,r:2,facing:0},host);
 if(lateShip.status!==409)throw Error('Ship added after start');
 console.log('PASS full two-account staging lifecycle, invitation, SCS database, start and post-start locks');
+
+const tokens=[host,guest];
+async function phaseOrder(token,phase){const d=await authed('/api/games/'+id,token);if(d.game.phase_id!==phase)throw Error('Expected '+phase+', got '+d.game.phase_id);const r=await post('/api/games/'+id+'/orders',{expectedRevision:d.game.revision,payload:{notes:'Automated staging integration',acknowledgedPhase:phase,acknowledgedProcedures:true}},token);if(r.status!==200)throw Error('Lock '+phase+' failed '+JSON.stringify(r));}
+async function commitShipAction(token,route,body){const d=await authed('/api/games/'+id,token);const own=d.ships.find(s=>s.owner_id===d.members.find(m=>m.display_name===credentials[tokens.indexOf(token)].name)?.user_id);if(!own)throw Error('Owned ship missing');const r=await post('/api/games/'+id+'/'+route,{shipId:own.id,expectedRevision:d.game.revision,...body},token);if(r.status!==200)throw Error(route+' failed '+JSON.stringify(r));return r.body;}
+for(const token of tokens){await commitShipAction(token,'trial-power',{purchasedThrust:0,extraEW:0,deactivated:[]});await phaseOrder(token,'power');}
+for(const token of tokens){await commitShipAction(token,'trial-roll',{});await phaseOrder(token,'initiative');}
+for(const token of tokens){await commitShipAction(token,'trial-ew',{defensive:2,offensive:{}});await phaseOrder(token,'ew_commit');}
+for(const phase of ['jump','terrain_pre'])for(const token of tokens)await phaseOrder(token,phase);
+let movement=await authed('/api/games/'+id,host);if(movement.game.phase_id!=='movement')throw Error('Movement phase not reached');
+for(const token of tokens)await phaseOrder(token,'movement');
+const afterMovement=await authed('/api/games/'+id,host);
+if(afterMovement.game.phase_id!=='terrain_post')throw Error('Stationary ship movement could not complete');
+console.log('PASS two-player authoritative SCS power, initiative, EW and stationary movement phase advancement');
+
