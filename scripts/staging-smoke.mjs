@@ -1,0 +1,18 @@
+const base='https://babylon5wars-movement-test.brettsidford.workers.dev';
+const get=async path=>{const response=await fetch(base+path);const data=await response.json();if(!response.ok)throw Error(path+' HTTP '+response.status+': '+JSON.stringify(data));return data;};
+const health=await get('/api/health');
+if(health.ok!==true||health.phaseCount!==23)throw Error('Unexpected health result: '+JSON.stringify(health));
+console.log('PASS /api/health, 23 phases');
+const diagnostics=await get('/api/diagnostics');
+if(diagnostics.ready!==true||!diagnostics.checks?.database||!diagnostics.checks?.passwordHash)throw Error('D1 or password diagnostics failed: '+JSON.stringify(diagnostics));
+console.log('PASS /api/diagnostics, isolated D1 and password hashing');
+const phases=await get('/api/phases');
+if(!Array.isArray(phases)||phases.length!==23)throw Error('Incorrect phase catalogue');
+console.log('PASS /api/phases');
+const catalogue=await get('/api/ships/catalog');
+if(!Array.isArray(catalogue)||!catalogue.length)throw Error('Ship catalogue missing');
+console.log('PASS /api/ships/catalog');
+const unauthorised=await fetch(base+'/api/games/nonexistent/trial-movement',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
+if(unauthorised.status!==401)throw Error('Movement API unauthorised request returned '+unauthorised.status);
+console.log('PASS movement authorisation gate');
+console.log('STAGING SMOKE PASSED '+base);
