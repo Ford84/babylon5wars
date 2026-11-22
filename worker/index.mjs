@@ -337,7 +337,7 @@ export default {async fetch(req,env){try{
    if(ships.some(s=>{const m=JSON.parse(s.private_state_json||'{}').trial?.movement;const speed=Number(s.speed||0);return speed===0?Boolean(m&&m.turn===game.turn&&m.state.remaining!==0):!m||m.turn!==game.turn||m.state.remaining!==0;}))return fail('Complete each trial ship\'s required movement before locking your order',409);
   }
   if(game.phase_id==='initiative'){
-   const shipStates=(await db.prepare('SELECT id,private_state_json,public_state_json FROM ships WHERE game_id=?').bind(gameId).all()).results;
+   const shipStates=(await db.prepare('SELECT id,owner_id,private_state_json,public_state_json FROM ships WHERE game_id=? AND owner_id=?').bind(gameId,user.id).all()).results;
    const missing=shipStates.filter(s=>{const p=JSON.parse(s.public_state_json||'{}'),v=JSON.parse(s.private_state_json||'{}');return p.trial&&v.trial?.initiative?.turn!==game.turn||s.template_id&&v.scs?.initiative?.turn!==game.turn;});
    if(missing.length)return fail('Roll initiative individually for every ship before advancing: '+missing.map(s=>s.id).join(', '),409);
   }
