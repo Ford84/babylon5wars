@@ -37,3 +37,7 @@ test('aft engine and two flanking aft thrusters have distinct vector-key types',
  assert.equal(byId.aft_port_thrust.iconValue,5);
  assert.equal(byId.aft_starboard_thrust.iconValue,5);
 });
+
+test('movement cannot invent reactor-funded thrust without power phase commitment',()=>{
+ assert.throws(()=>apply(ship(),state(),1,{type:'speed',change:1,purchasedThrust:1,thrusters:{aft_port_thrust:2}}),/pre-turn power phase/);
+});
