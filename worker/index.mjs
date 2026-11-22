@@ -423,7 +423,7 @@ export default {async fetch(req,env){try{
    inserts.push(db.prepare('UPDATE games SET phase_id=?,turn=?,revision=revision+1 WHERE id=? AND revision=?').bind(next.phase.id,next.turn,gameId,game.revision));
    inserts.push(event(db,game,null,'phase_advanced',{from:game.phase_id,to:next.phase.id,nextTurn:next.turn}));
   }
-  try{const results=await db.batch(inserts);if(results[0].meta.changes!==1||isFinal&&results[results.length-2].meta.changes!==1)return fail('Concurrent update; reload',409);}catch(e){if(/UNIQUE|constraint|abort/i.test(String(e)))return fail('Order already submitted or phase changed; reload',409);throw e;}
+  try{const results=await db.batch(inserts);if(results[0].meta.changes!==1||isFinal&&!holdsCombat&&results[results.length-2].meta.changes!==1)return fail('Concurrent update; reload',409);}catch(e){if(/UNIQUE|constraint|abort/i.test(String(e)))return fail('Order already submitted or phase changed; reload',409);throw e;}
   return json({submitted:true,advanced:isFinal&&!holdsCombat,pendingCombat:holdsCombat,nextPhase:next?.phase.id||null});
  }
  return fail('Not found',404);
