@@ -3,7 +3,7 @@
 const valid=n=>Number.isInteger(n)&&n>=0;
 export function pivotStart(state,{direction,cost,thrusterPair}){
  if(![-1,1].includes(direction)||!valid(cost)||cost<1||!['forward-port','aft-starboard','forward-starboard','aft-port'].includes(thrusterPair))throw new RangeError('Invalid pivot');
- if(state.rollInProgress||state.pivotInProgress||state.pivotTurn===state.turn)throw new RangeError('Pivot prohibited');
+ if(state.rollInProgress||state.pivotActive||state.pivotInProgress||state.pivotTurn===state.turn)throw new RangeError('Pivot prohibited');
  const clockwise=direction===1;
  if(clockwise&&!['forward-port','aft-starboard'].includes(thrusterPair)||!clockwise&&!['forward-starboard','aft-port'].includes(thrusterPair))throw new RangeError('Wrong pivot thruster pair');
  return {...state,facing:(state.facing+direction+6)%6,pivotInProgress:true,pivotActive:true,pivotDirection:direction,pivotTurn:state.turn,pivotStartPair:thrusterPair,pivotThrustSpent:(state.pivotThrustSpent||0)+cost};
