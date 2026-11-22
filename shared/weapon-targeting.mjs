@@ -1,0 +1,91 @@
+// B5W 2E Compendium, Weapons Fire: direction, arcs, LOS, EW and range.
+// Pure preview only. Missing SCS arc/LOS facts fail closed, never silently approve fire.
+import {hexDistance} from './phases.mjs';
+import {ewAttackModifier} from './ew-combat.mjs';
+import {VORCHAN_LIBRARY_RECORD as VORCHAN} from './vorchan-trial-library.mjs';
+const finite=n=>typeof n==='number'&&Number.isFinite(n);
+const int=n=>Number.isInteger(n);
+const RAD=Math.PI/180;
+const xy=p=>({x:Math.sqrt(3)*(p.q+p.r/2),y:1.5*p.r});
+const directionAngle=(a,b)=>{const p=xy(a),t=xy(b);return Math.atan2(t.y-p.y,t.x-p.x)*180/Math.PI};
+const norm=a=>((a%360)+360)%360;
+const delta=(a,b)=>((a-b+540)%360)-180;
+// Facing 0 points to axial +q (east), 1 to +q,-r (north-east),
+// 2 to -r (north-west), 3 to -q, 4 to -q,+r, 5 to +r.
+export function bearingDegrees(shooter,target,{sameHexPrevious=null}={}){
+ if(![shooter?.q,shooter?.r,target?.q,target?.r].every(int))throw new RangeError('Invalid hex coordinates');
+ if(shooter.q===target.q&&shooter.r===target.r){
+  if(!sameHexPrevious||![sameHexPrevious.shooter?.q,sameHexPrevious.shooter?.r,sameHexPrevious.target?.q,sameHexPrevious.target?.r].every(int))return {requiresChoice:true,reason:'Same-hex fire needs the positions immediately before the last entry'};
+  return bearingDegrees(sameHexPrevious.shooter,sameHexPrevious.target);
+ }
+ return {angle:norm(directionAngle(shooter,target)),requiresChoice:false};
+}
+export function facingDirections(shooter,target,options={}){
+ if(!int(target?.facing)||target.facing<0||target.facing>5)throw new RangeError('Invalid target facing');
+ const bearing=bearingDegrees(target,shooter,options);
+ if(bearing.requiresChoice)return bearing;
+ const relative=norm(bearing.angle+target.facing*60);
+ // Forward 60°, port/starboard 120° each, aft 60°.
+ const sector=relative<30||relative>330?'forward':relative<150?'port':relative<210?'aft':'starboard';
+ const boundary=[30,150,210,330].find(n=>Math.abs(relative-n)<1e-8);
+ const choices=boundary===30?['forward','port']:boundary===150?['port','aft']:boundary===210?['aft','starboard']:boundary===330?['starboard','forward']:null;
+ if(choices)return {requiresChoice:true,choices,reason:'Defender chooses a boundary direction for all shots from this shooter in this turn',relative};
+ return {requiresChoice:false,direction:sector,relative};
+}
+export function checkMountArc({shooter,target,arc,sameHexPrevious=null}){
+ if(!int(shooter?.facing)||shooter.facing<0||shooter.facing>5)throw new RangeError('Invalid shooter facing');
+ if(!arc||arc.verified!==true||!finite(arc.start)||!finite(arc.end))return {allowed:false,verified:false,reason:'Original SCS mount firing arc has not been verified'};
+ const bearing=bearingDegrees(shooter,target,{sameHexPrevious});
+ if(bearing.requiresChoice)return {allowed:false,verified:true,...bearing};
+ const relative=norm(bearing.angle+shooter.facing*60);
+ const start=norm(arc.start),end=norm(arc.end);
+ const allowed=start<=end?relative>=start-1e-8&&relative<=end+1e-8:relative>=start-1e-8||relative<=end+1e-8;
+ return {allowed,verified:true,relative,reason:allowed?null:'Target outside physical weapon arc'};
+}
+const cross=(a,b,c)=>(b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
+const intersects=(a,b,c,d)=>{const e=1e-9;const ab1=cross(a,b,c),ab2=cross(a,b,d),cd1=cross(c,d,a),cd2=cross(c,d,b);return ((ab1>=-e&&ab2<=e||ab1<=e&&ab2>=-e)&&(cd1>=-e&&cd2<=e||cd1<=e&&cd2>=-e));};
+export function lineOfSight({shooter,target,blockingHexes=[]}){
+ if(!Array.isArray(blockingHexes))throw new RangeError('Invalid terrain');
+ const a=xy(shooter),b=xy(target);
+ for(const h of blockingHexes){
+  if(!int(h.q)||!int(h.r))throw new RangeError('Invalid terrain hex');
+  if(h.q===shooter.q&&h.r===shooter.r||h.q===target.q&&h.r===target.r)continue;
+  const p=xy(h),vertices=Array.from({length:6},(_,i)=>({x:p.x+Math.cos((60*i+30)*RAD),y:p.y+Math.sin((60*i+30)*RAD)}));
+  if(vertices.some((v,i)=>intersects(a,b,v,vertices[(i+1)%6])))return {clear:false,blockedBy:{q:h.q,r:h.r}};
+ }
+ return {clear:true};
+}
+export function weaponRangePenalty({range,penaltyPerStep,hexesPerStep=1}){
+ if(!int(range)||range<0||!int(penaltyPerStep)||penaltyPerStep>0||!int(hexesPerStep)||hexesPerStep<1)throw new RangeError('Invalid range penalty');
+ return Math.ceil(range/hexesPerStep)*penaltyPerStep;
+}
+export function targetFireControlIndex(hullClass){
+ if(['capital','heavy_combat','base'].includes(hullClass))return 0;
+ if(['medium','light_combat'].includes(hullClass))return 1;
+ if(['fighter','shuttle'].includes(hullClass))return 2;
+ throw new RangeError('Unverified target hull class');
+}
+export function vorchanTargetingPreview({shooter,target,mountId,arc,blockingHexes=[],sameHexPrevious=null,defenderDirection=null,attackerOffensiveEW=0,targetDefensiveEW=0,otherModifiers=[],verifiedTerrain=true}){
+ if(!shooter||!target||shooter.id===target.id)throw new RangeError('Distinct ships required');
+ const mount=VORCHAN.weaponMounts.find(m=>m.id===mountId);
+ if(!mount)throw new RangeError('Unknown Vorchan mount');
+ const weapon=VORCHAN.weapons.find(w=>w.id===mount.weaponId);
+ const distance=hexDistance(shooter,target);
+ const attackArc=checkMountArc({shooter,target,arc:arc??mount.arc,sameHexPrevious});
+ const incoming=facingDirections(shooter,target,{sameHexPrevious});
+ const direction=incoming.requiresChoice?(incoming.choices?.includes(defenderDirection)?defenderDirection:null):incoming.direction;
+ const los=verifiedTerrain?lineOfSight({shooter,target,blockingHexes}):{clear:false,reason:'Terrain and LOS not verified'};
+ const defence=direction?VORCHAN.defence[direction]:null;
+ const fireControl=weapon.fireControl[targetFireControlIndex(target.hullClass||'heavy_combat')];
+ const rangePenalty=weaponRangePenalty({range:distance,penaltyPerStep:weapon.rangePenaltyPerHex});
+ const ew=ewAttackModifier({attackerOffensive:attackerOffensiveEW,targetDefensive:targetDefensiveEW,rangePenalty});
+ if(!Array.isArray(otherModifiers)||otherModifiers.some(x=>!x||!int(x.value)||x.verified!==true||typeof x.reason!=='string'))throw new RangeError('Unverified additional modifier');
+ const extra=otherModifiers.reduce((n,m)=>n+m.value,0);
+ const total=defence===null?null:defence+fireControl+ew.total+extra;
+ const blockers=[];
+ if(!attackArc.allowed)blockers.push(attackArc.reason||'Arc decision pending');
+ if(!los.clear)blockers.push(los.reason||'Line of sight blocked');
+ if(!direction)blockers.push('Defender must choose incoming boundary direction');
+ return {readyForHitRoll:blockers.length===0,blockers,mountId,weaponId:weapon.id,distance,attackArc,incoming,chosenDirection:direction,los,breakdown:{baseDefence:defence,offensiveEW:ew.offensiveBonus,defensiveEW:ew.defensivePenalty,fireControl,rangePenalty:ew.adjustedRangePenalty,extra,total},hitOnD20AtOrBelow:total};
+}
+export function resolveToHit(preview,roll){if(!preview?.readyForHitRoll)throw new RangeError('Targeting preview not validated');if(!int(roll)||roll<1||roll>20)throw new RangeError('d20 must be 1–20');return {roll,hit:roll<=preview.hitOnD20AtOrBelow,targetNumber:preview.hitOnD20AtOrBelow,breakdown:preview.breakdown};}
