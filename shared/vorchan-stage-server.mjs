@@ -5,7 +5,7 @@ import {adjustTurnDelay} from './speed-integration.mjs';
 import {newStagedMovement,stagedMove,turnCostAtSpeed} from './staged-movement.mjs';
 import {effectiveThrusterRating,overthrustChecksForTurn} from './thruster-criticals.mjs';
 import {validateManoeuvreThrusters} from './manoeuvre-thrusters.mjs';
-import {createThrusterLedger,allocateThrusterThrust,pendingOverthrustChecks} from './thruster-ledger.mjs';
+import {createThrusterLedger,allocateThrusterThrust} from './thruster-ledger.mjs';
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
 // Ratings refer to channel capacity, not damage boxes or armour.
 // The forward thruster ratings require an SCS verification pass before damaged-thruster automation.
