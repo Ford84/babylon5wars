@@ -30,10 +30,10 @@ export const VORCHAN_LIBRARY_RECORD=Object.freeze({
    firingOptions:[{shots:2,turns:1,damageDice:{count:1,sides:10,bonus:4,perHex:0}}]}
  ],
  weaponMounts:[
-  {id:'plasma_port',weaponId:'plasma-accelerator',section:'forward',armour:3,damageBoxes:6,arc:null},
-  {id:'plasma_starboard',weaponId:'plasma-accelerator',section:'forward',armour:3,damageBoxes:6,arc:null},
-  {id:'twin_forward_port',weaponId:'twin-array',section:'forward',armour:5,damageBoxes:10,arc:null},
-  {id:'twin_forward_starboard',weaponId:'twin-array',section:'forward',armour:5,damageBoxes:10,arc:null}
+  {id:'plasma_port',weaponId:'plasma-accelerator',section:'forward',armour:3,damageBoxes:6,arc:{centre:'forward',degrees:90,blindDegrees:270}},
+  {id:'plasma_starboard',weaponId:'plasma-accelerator',section:'forward',armour:3,damageBoxes:6,arc:{centre:'forward',degrees:90,blindDegrees:270}},
+  {id:'twin_forward_port',weaponId:'twin-array',section:'forward',armour:5,damageBoxes:10,arc:{centre:'forward',degrees:270,blindCentre:'aft',blindDegrees:90}},
+  {id:'twin_forward_starboard',weaponId:'twin-array',section:'forward',armour:5,damageBoxes:10,arc:{centre:'forward',degrees:270,blindCentre:'aft',blindDegrees:90}}
  ],
  hitCharts:CENTAURI_HIT_CHARTS['centauri-vorchan-v3-2e-sf'],
  // The full system diagram remains to be transcribed: do not fabricate boxes.
