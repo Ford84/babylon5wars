@@ -23,7 +23,7 @@ export const VORCHAN_LIBRARY_RECORD=Object.freeze({
     {shots:1,turns:2,damageDice:{count:2,sides:10,bonus:8,perHex:-1}}
    ],
    alternates:[{rateOfFire:'1 per turn',damage:'1d10+4 minus 1 per hex'},{rateOfFire:'1 per 2 turns',damage:'2d10+8 minus 1 per hex'}]},
-  {id:'twin-array',name:'Twin Array',mounts:2,class:'Particle',modes:['Standard'],
+  {id:'twin-array',name:'Twin Array',mounts:4,class:'Particle',modes:['Standard'],
    powerRequired:2,maximumRange:null,rangePenaltyPerHex:-2,damageRangePenaltyPerHex:0,
    damage:'1d10+4',damageDice:{count:1,sides:10,bonus:4,perHex:0},
    rangePenalty:'-2 per hex',fireControl:[4,5,6],intercept:-2,rateOfFire:'2 per turn',
@@ -31,6 +31,8 @@ export const VORCHAN_LIBRARY_RECORD=Object.freeze({
  ],
  weaponMounts:[
   {id:'plasma_forward',weaponId:'plasma-accelerator',section:'forward',armour:4,damageBoxes:8,arc:{centre:'forward',degrees:90,blindDegrees:270}},
+  {id:'twin_nose_port',weaponId:'twin-array',section:'forward',armour:3,damageBoxes:6,arc:null},
+  {id:'twin_nose_starboard',weaponId:'twin-array',section:'forward',armour:3,damageBoxes:6,arc:null},
   {id:'twin_forward_port',weaponId:'twin-array',section:'forward',armour:5,damageBoxes:10,arc:{centre:'forward',degrees:270,blindCentre:'aft',blindDegrees:90}},
   {id:'twin_forward_starboard',weaponId:'twin-array',section:'forward',armour:5,damageBoxes:10,arc:{centre:'forward',degrees:270,blindCentre:'aft',blindDegrees:90}}
  ],
@@ -46,7 +48,7 @@ export function validateVorchanLibraryRecord(record){
  if(record.engineEfficiency?.power!==2||record.engineEfficiency?.thrust!==1)problems.push('engine efficiency mismatch');
  if(record.accelerationCost!==2||record.initiativeBonus!==8)problems.push('movement/initiative mismatch');
  if(record.turnCost?.length!==12||record.turnDelay?.length!==12)problems.push('missing speed tables');
- if(record.weapons?.length!==2||record.weapons[0].mounts!==1||record.weapons[1].mounts!==2)problems.push('weapon inventory mismatch');
+ if(record.weapons?.length!==2||record.weapons[0].mounts!==1||record.weapons[1].mounts!==4)problems.push('weapon inventory mismatch');
  if(!record.hitCharts?.forward||!record.hitCharts?.aft||!record.hitCharts?.primary)problems.push('hit charts missing');
  return {valid:problems.length===0,problems,automaticCombatReady:record.damageDiagram?.verifiedIndividualBoxes===true&&record.damageDiagram?.verifiedArmour===true};
 }
