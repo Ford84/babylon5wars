@@ -34,14 +34,17 @@ export function stagedMove(state,action,limits){
   return {...state,...destination,remaining:state.remaining-1,moved:state.moved+1,thrustSpent:state.thrustSpent+action.cost,turnDelayRemaining:Math.max(0,state.turnDelayRemaining-1),slideDirection:action.direction,normalSinceSlide:false,started:true,version:state.version+1,history:[...state.history,{type:'slide',direction:action.direction,cost:action.cost,path:[destination]}]};
  }
  if(action.type==='turn'){
-  if(state.pivotActive||state.pivotInProgress||state.rollInProgress)throw new RangeError('Turn prohibited during pivot or roll');
+  if(state.pivotInProgress||state.rollInProgress)throw new RangeError('Turn prohibited during active pivot or roll');
+  const facingAfter=(state.facing+action.direction+6)%6;
+  const pivotAligns=state.pivotActive&&facingAfter===(state.motionFacing??state.facing);
+  if(state.pivotActive&&!pivotAligns)throw new RangeError('Pivoted ship may only turn into its direction of motion');
   if(![ -1,1 ].includes(action.direction))throw new RangeError('Turn must be one 60-degree step');
   if(state.turnDelayRemaining>0)throw new RangeError('Turn delay not satisfied');
   if(!integer(action.cost)||action.cost<1||!integer(action.delay)||action.delay<0)throw new RangeError('Verified turn cost and delay required');
   if(!integer(action.shortenBy||0)||action.shortenBy<0||action.shortenBy>Math.max(0,action.delay-(state.speed===0?0:1)))throw new RangeError('Invalid turn shortening');
   const spent=action.cost+(action.shortenBy??0);
   if(state.thrustSpent+spent>limits.availableThrust)throw new RangeError('Insufficient thrust');
-  return {...state,facing:(state.facing+action.direction+6)%6,motionFacing:(state.facing+action.direction+6)%6,turnDelayRemaining:action.delay-(action.shortenBy??0),thrustSpent:state.thrustSpent+spent,started:true,version:state.version+1,history:[...state.history,{type:'turn',direction:action.direction,spent,shortenBy:action.shortenBy??0}]};
+  return {...state,facing:(state.facing+action.direction+6)%6,motionFacing:facingAfter,pivotActive:pivotAligns?false:state.pivotActive,turnDelayRemaining:action.delay-(action.shortenBy??0),thrustSpent:state.thrustSpent+spent,started:true,version:state.version+1,history:[...state.history,{type:'turn',direction:action.direction,spent,shortenBy:action.shortenBy??0}]};
  }
  throw new RangeError('Unknown movement action');
 }
