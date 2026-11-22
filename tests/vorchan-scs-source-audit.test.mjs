@@ -14,7 +14,7 @@ test('visual weapon symbol count: one plasma and two twin arrays',()=>{
  assert.equal(LIB.weapons.find(w=>w.id==='twin-array').mounts,2);
  assert.equal(LIB.weaponMounts.length,3);
  assert.equal(Object.values(VORCHAN_SWITCHABLE_POWER).reduce((a,b)=>a+b,0),9);
- assert.equal(LIB.weaponMounts.every(w=>w.arc===null),true);
+ assert.deepEqual(LIB.weaponMounts.map(w=>w.arc.coverageDegrees),[90,270,270]);
 });
 test('visually transcribed SCS system tracks and icon values',()=>{
  const map=Object.fromEntries(SCS.systems.map(s=>[s.id,s]));
@@ -23,7 +23,7 @@ test('visually transcribed SCS system tracks and icon values',()=>{
  assert.equal(map.reactor.iconValue,4);
  assert.equal(map.hangar.iconValue,2);
 });
-test('automatic combat remains explicitly blocked by unresolved SCS arcs and forward thrusters',()=>{
+test('automatic combat remains blocked by unresolved forward thruster and damage diagram audit',()=>{
  const audit=auditVorchanIdentification();assert.equal(audit.readyForCombat,false);
  assert.equal(SCS.completeness.allWeaponArcsIdentified,false);
  assert.equal(SCS.completeness.allDamageBoxesCounted,false);
