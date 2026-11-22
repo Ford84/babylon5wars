@@ -31,12 +31,13 @@ function boxGeometry(system){
  })));
  return boxes.length===system.boxes?boxes:[];
 }
-export default function SCSViewer({ship,api}){
+export default function SCSViewer({ship,api,gameId,revision,onSaved}){
  const [definition,setDefinition]=useState(null),[error,setError]=useState('');
  const [marked,setMarked]=useState({});
+ const [saving,setSaving]=useState(false);
  const templateId=ship?.template_id;
  const trial=ship?.public_state?.libraryId===VORCHAN_LIBRARY_RECORD.id||ship?.public_state?.trial===true;
- useEffect(()=>{setMarked({});},[ship?.id]);
+ useEffect(()=>{setMarked(ship?.public_state?.scsAnnotations?.marks||{});},[ship?.id,ship?.public_state?.scsAnnotations]);
  useEffect(()=>{
   let active=true;setDefinition(null);setError('');
   if(!templateId||!api)return;
@@ -48,7 +49,17 @@ export default function SCSViewer({ship,api}){
  const systems=library?VORCHAN_SCS_IDENTIFICATION.systems:(definition?.systems||[]);
  const stats=library?{combatPoints:library.combatPoints,initiativeBonus:library.initiativeBonus,extraPower:library.extraPower}:definition?.stats;
  const sections=library?VORCHAN_SCS_IDENTIFICATION.sections:definition?.sections?.map(s=>s.id)||[];
- const toggle=id=>setMarked(old=>({...old,[id]:!old[id]}));
+ const toggle=async id=>{
+  if(saving)return;
+  const next=!marked[id];
+  if(!gameId||!api){setError('No game available for persistent marking');return;}
+  setSaving(true);setError('');
+  try{
+   await api('/games/'+encodeURIComponent(gameId)+'/trial-scs-mark','POST',{shipId:ship.id,boxId:id,marked:next,expectedRevision:revision});
+   setMarked(old=>({...old,[id]:next}));
+   if(onSaved)await onSaved();
+  }catch(e){setError(e.message)}finally{setSaving(false)}
+ };
  return <section className="panel scs-viewer" aria-label="Ship Control Sheet">
   <h2>Ship Control Sheet</h2>
   {error&&<p className="error" role="alert">{error}</p>}
@@ -58,7 +69,7 @@ export default function SCSViewer({ship,api}){
    <p>{library?.source?.revision||definition?.source?.sheetRevision} · {library?.faction||definition?.faction}</p>
    <dl><dt>Combat Points</dt><dd>{stats?.combatPoints??'Unverified'}</dd><dt>Initiative bonus</dt><dd>{stats?.initiativeBonus??'Unverified'}</dd><dt>Extra power</dt><dd>{stats?.extraPower??'Unverified'}</dd></dl>
    {library&&<>
-    <p className="scs-warning" role="status">Vorchan geometry prototype: audited PDF vector origins for the unambiguous component tracks on the original 612×792 sheet coordinate system. Structure tracks and firing arcs remain incomplete. Clicking boxes marks them locally for inspection only; no combat damage is saved.</p>
+    <p className="scs-warning" role="status">Vorchan geometry prototype: audited PDF vector origins for the unambiguous component tracks on the original 612×792 sheet coordinate system. Structure tracks and firing arcs remain incomplete. Clicking a mapped box saves a persistent trial annotation. These marks are not authoritative combat damage.</p>
     <div className="scs-diagram-wrap">
      <svg className="scs-diagram" viewBox="0 0 612 792" role="group" aria-label="Vorchan diagram with individually selectable verified damage boxes">
       <path d={VORCHAN_HALF_SILHOUETTE} fill="#aab7c8" fillOpacity=".3" stroke="#8ca8c7" strokeWidth="1.5"/>
@@ -67,7 +78,7 @@ export default function SCSViewer({ship,api}){
        const active=!!marked[box.id];
        return <rect key={box.id} x={box.x} y={box.y} width={box.width} height={box.width}
         fill={active?'#f17a66':'#eef4fa'} stroke="#192a3a" strokeWidth=".8"
-        role="checkbox" aria-checked={active} aria-label={system.id.replaceAll('_',' ')+' damage box '+(index+1)}
+        role="checkbox" aria-checked={active} aria-disabled={saving} aria-label={system.id.replaceAll('_',' ')+' damage box '+(index+1)}
         tabIndex="0" onClick={()=>toggle(box.id)}
         onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();toggle(box.id)}}}>
         <title>{system.id.replaceAll('_',' ')} — box {index+1} (armour {system.armour})</title>
@@ -75,8 +86,8 @@ export default function SCSViewer({ship,api}){
       }))}
      </svg>
     </div>
-    <button className="secondary" onClick={()=>setMarked({})}>Clear local marks</button>
-    <p className="hint">{Object.values(marked).filter(Boolean).length} locally marked boxes. No server changes.</p>
+
+    <p className="hint">{Object.values(marked).filter(Boolean).length} persistent trial annotations. Combat damage is unchanged.</p>
    </>}
    {sections.map(section=><div key={section} className="scs-section"><h3>{section.replaceAll('_',' ').toUpperCase()}</h3>
     {systems.filter(s=>s.section===section).map(system=>{
