@@ -32,7 +32,7 @@ test('Vorchan three weapon mounts resolve to individually tracked SCS systems',(
   assert.equal(system.boxes,mount.damageBoxes);
   assert.equal(system.armour,mount.armour);
   assert.ok(ship.weapons.some(w=>w.id===mount.weaponId));
-  assert.equal(mount.arc,null,'unverified weapon arc must not be fabricated');
+  assert.equal(mount.arc.verified,true,'player-confirmed firing arc required');
  }
  assert.equal(ship.weaponMounts.filter(m=>m.weaponId==='plasma-accelerator').length,1);
  assert.equal(ship.weaponMounts.filter(m=>m.weaponId==='twin-array').length,2);
