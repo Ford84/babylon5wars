@@ -51,6 +51,7 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
  if(action.type==='extended-start'){
   if(old.extendedTurn||old.turnDelayRemaining>0||old.rollInProgress||old.pivotInProgress||old.pivotActive||![-1,1].includes(action.direction))throw new RangeError('Extended turn prohibited');
   const cost=turnCostAtSpeed(old.speed,LIB.turnCost);
+  if(cost<2)throw new RangeError('Extended turn requires at least two thrust');
   if(!Number.isInteger(action.initialThrust)||action.initialThrust<Math.ceil(cost/4)||action.initialThrust>=cost)throw new RangeError('Extended turn requires at least 25% and less than full turn cost');
   if(old.thrustSpent+action.initialThrust>limits.availableThrust)throw new RangeError('Insufficient thrust');
   next={...old,extendedTurn:{direction:action.direction,totalCost:cost,initialThrust:action.initialThrust,startedTurn:turn},thrustSpent:old.thrustSpent+action.initialThrust,started:true,version:old.version+1,history:[...old.history,{type:'extended-start',direction:action.direction,spent:action.initialThrust}]};
