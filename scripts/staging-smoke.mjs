@@ -61,6 +61,16 @@ for(const token of tokens){await commitShipAction(token,'trial-roll',{});await p
 for(const token of tokens){await commitShipAction(token,'trial-ew',{defensive:2,offensive:{}});await phaseOrder(token,'ew_commit');}
 for(const phase of ['jump','terrain_pre'])for(const token of tokens)await phaseOrder(token,phase);
 let movement=await authed('/api/games/'+id,host);if(movement.game.phase_id!=='movement')throw Error('Movement phase not reached');
+const hostShip=movement.ships.find(s=>s.owner_id===movement.members.find(m=>m.display_name===credentials[0].name)?.user_id);
+if(!hostShip)throw Error('Host Vorchan missing in movement');
+for(const action of [
+ {type:'speed',change:2,purchasedThrust:0,thrusters:{aft_port_thrust:4}},
+ {type:'turn',direction:1,shortenBy:0,thrusters:{aft_port_thrust:1}},
+ {type:'advance',hexes:2}
+]){const currentMove=await authed('/api/games/'+id,host);const moved=await post('/api/games/'+id+'/trial-movement',{shipId:hostShip.id,expectedRevision:currentMove.game.revision,action},host);if(moved.status!==200)throw Error('Live manoeuvre '+action.type+' failed '+JSON.stringify(moved));}
+const movedState=await authed('/api/games/'+id,host);const actual=movedState.ships.find(s=>s.id===hostShip.id);
+if(actual.speed!==2||actual.private_state?.trial?.movement?.state?.remaining!==0||actual.private_state?.trial?.movement?.thrusterLedger?.aft_port_thrust?.used!==5)throw Error('SCS-backed movement and thruster ledger not persisted');
+console.log('PASS speed change, turn, advance and SCS thruster-ledger persistence');
 for(const token of tokens)await phaseOrder(token,'movement');
 const afterMovement=await authed('/api/games/'+id,host);
 if(afterMovement.game.phase_id!=='terrain_post')throw Error('Stationary ship movement could not complete');
