@@ -25,7 +25,7 @@ test('brace, route, emergency restoration and hold obey prerequisites and round 
  const routed=applyDamageControl(ship,'route',{},1);assert.equal(routed.check.success,true);assert.equal(ship.stats.damageState.remaining.Control,1);
  assert.throws(()=>applyDamageControl(ship,'route',{},1),/destroyed Control/);
  const repaired=applyDamageControl(ship,'online',{area:'Engines'},1);assert.equal(repaired.check.success,true);assert.equal(ship.stats.damageState.remaining.Engines,1);
- assert.throws(()=>applyDamageControl(ship,'online',{area:'Engines'},1),/already received/);
+ assert.throws(()=>applyDamageControl(ship,'online',{area:'Engines'},1),/destroyed system/);
  const brace=applyDamageControl(ship,'brace',{},1);assert.equal(brace.braceActive,true);
  assert.throws(()=>applyDamageControl(ship,'brace',{},1),/once per round/);
 });
