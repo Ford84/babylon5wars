@@ -24,7 +24,7 @@ export function facingDirections(shooter,target,options={}){
  if(!int(target?.facing)||target.facing<0||target.facing>5)throw new RangeError('Invalid target facing');
  const bearing=bearingDegrees(target,shooter,options);
  if(bearing.requiresChoice)return bearing;
- const relative=norm(bearing.angle-(-30+target.facing*60));
+ const relative=norm(bearing.angle-(-60+target.facing*60));
  // Forward 60°, port/starboard 120° each, aft 60°.
  const sector=relative<30||relative>330?'forward':relative<150?'starboard':relative<210?'aft':'port';
  const boundary=[30,150,210,330].find(n=>Math.abs(relative-n)<1e-8);
@@ -37,7 +37,7 @@ export function checkMountArc({shooter,target,arc,sameHexPrevious=null}){
  if(!arc||arc.verified!==true||!finite(arc.start)||!finite(arc.end))return {allowed:false,verified:false,reason:'Original SCS mount firing arc has not been verified'};
  const bearing=bearingDegrees(shooter,target,{sameHexPrevious});
  if(bearing.requiresChoice)return {allowed:false,verified:true,...bearing};
- const relative=norm(bearing.angle-(-30+shooter.facing*60));
+ const relative=norm(bearing.angle-(-60+shooter.facing*60));
  const start=norm(arc.start),end=norm(arc.end);
  const allowed=start<=end?relative>=start-1e-8&&relative<=end+1e-8:relative>=start-1e-8||relative<=end+1e-8;
  return {allowed,verified:true,relative,reason:allowed?null:'Target outside physical weapon arc'};
