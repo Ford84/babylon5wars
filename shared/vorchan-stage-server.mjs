@@ -11,7 +11,7 @@ import {createThrusterLedger,allocateThrusterThrust} from './thruster-ledger.mjs
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
 // Ratings refer to channel capacity, not damage boxes or armour.
 // The forward thruster ratings require an SCS verification pass before damaged-thruster automation.
-export const VORCHAN_THRUSTER_RATINGS=Object.freeze({retro:1,forward_port_thrust:3,forward_starboard_thrust:3,port_thrust:5,starboard_thrust:5,aft_port_thrust:5,aft_starboard_thrust:5});
+export const VORCHAN_THRUSTER_RATINGS=Object.freeze({retro:1,forward_port_thrust:2,forward_starboard_thrust:3,port_thrust:5,starboard_thrust:5,aft_port_thrust:5,aft_starboard_thrust:5});
 export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]}){
  if(!Number.isInteger(turn)||turn<1)throw new RangeError('Invalid battle turn');
  const trial=privateState?.trial;
@@ -47,7 +47,7 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
  if(committed&&nextPurchase!==committed.purchasedThrust)throw new RangeError('Thrust purchase must match committed power allocation');
  const power=vorchanPowerBudget({trial,turn,deactivated:committed?.deactivated??[],purchasedThrust:nextPurchase,extraEWPower:committed?.ewPower??0});
  const limits={availableThrust:power.availableThrust,accelCost:LIB.accelerationCost};
- if(power.engineDestroyed&&action.type!=='advance')throw new RangeError('Destroyed engine cannot manoeuvre');
+ if(power.engineDestroyed&&action.type!=='advance'&&action.type!=='extended-cancel')throw new RangeError('Destroyed engine cannot manoeuvre');
  let next;
  if(action.type==='extended-cancel'){
   const ext=old.extendedTurn;
@@ -57,8 +57,10 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
   const dead=new Set(trial.destroyedSystems??[]);
   const eligible=ext.direction===1?['aft_port_thrust','aft_starboard_thrust','port_thrust']:['aft_port_thrust','aft_starboard_thrust','starboard_thrust'];
   const rating=id=>dead.has(id)?0:effectiveThrusterRating(VORCHAN_THRUSTER_RATINGS[id],damage[id]);
-  const physicalMaximum=eligible.reduce((n,id)=>n+rating(id)*2,0);
-  if(needed<=limits.availableThrust&&needed<=physicalMaximum)throw new RangeError('Voluntary extended-turn cancellation prohibited');
+  const side=rating(eligible[2])*2;
+  const main=(rating(eligible[0])+rating(eligible[1]))*2;
+  const physicalMaximum=Math.min(side,Math.ceil(needed/2)) + Math.min(main,Math.ceil(needed/2));
+  if(!power.engineDestroyed&&needed<=limits.availableThrust&&physicalMaximum>=needed)throw new RangeError('Voluntary extended-turn cancellation prohibited');
   next={...old,extendedTurn:null,started:true,version:old.version+1,history:[...old.history,{type:'extended-cancel',reason:'verified physical thrust shortfall',forfeitedThrust:ext.initialThrust}]};
  }else if(action.type==='extended-start'){
   if(old.extendedTurn||old.turnDelayRemaining>0||old.rollInProgress||old.pivotInProgress||old.pivotActive||![-1,1].includes(action.direction))throw new RangeError('Extended turn prohibited');
