@@ -7,7 +7,7 @@ export const VORCHAN_LIBRARY_RECORD=Object.freeze({
  name:'Vorchan Warship',class:'heavy_combat',source:{publication:'Centauri Vorchan Warship SCS',revision:'Version 3: 2E/SF',page:'1'},
  serviceYear:2160,combatPoints:360,rammingFactor:135,jumpDelay:16,
  defence:{forward:12,aft:12,port:14,starboard:14},
- initiativeBonus:8,extraPower:6,engineEfficiency:{power:2,thrust:1},
+ initiativeBonus:8,extraPower:4,engineEfficiency:{power:2,thrust:1},
  accelerationCost:2,pivotCost:[2,2],rollCost:[1,1],
  turnCost:[1,1,2,2,3,3,4,4,5,5,6,6],
  turnDelay:[1,1,1,2,2,2,3,3,3,4,4,4],
@@ -42,7 +42,7 @@ export const VORCHAN_LIBRARY_RECORD=Object.freeze({
 export function validateVorchanLibraryRecord(record){
  const problems=[];
  if(record.id!=='centauri-vorchan-v3-2e-sf')problems.push('wrong ship');
- if(record.extraPower!==6)problems.push('extra reactor power mismatch');
+ if(record.extraPower!==4)problems.push('extra reactor power mismatch');
  if(record.engineEfficiency?.power!==2||record.engineEfficiency?.thrust!==1)problems.push('engine efficiency mismatch');
  if(record.accelerationCost!==2||record.initiativeBonus!==8)problems.push('movement/initiative mismatch');
  if(record.turnCost?.length!==12||record.turnDelay?.length!==12)problems.push('missing speed tables');
