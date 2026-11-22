@@ -1,3 +1,9 @@
+# SUPERSEDING CORRECTION — VECTOR ICON RECOGNITION KEY (22 November 2026)
+
+The previous text below is **superseded wherever it identifies four Twin Arrays, 13 switchable weapon power, wing weapons, or aft thruster damage tracks**. The SCS vector legend is the primary source for component identification. The corrected inventory is **one Plasma Accelerator, two nose Twin Arrays, and five jump-engine-shaped glyphs** (two wing-root units, three aft units). Those aft units are **not proven to be independent conventional thruster tracks**; whether the jump-engine symbols denote combined thrust and jump capability requires manual rulebook verification. The legacy aft manoeuvring channels remain provisional and movement is **not release-certified**. Corrected original SCS + checklist: `Vorchan_SCS_Vector_Key_Corrected_Checklist.pdf` (conversation attachment).
+
+---
+
 # Vorchan Warship SCS source audit — corrected 22 November 2026
 
 ## Source identity and cross-check
