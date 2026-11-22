@@ -19,7 +19,7 @@ export const VORCHAN_SCS_IDENTIFICATION=Object.freeze({
   {id:'engine',kind:'engine',section:'primary',armour:7,boxes:11,rows:[3,5,3],iconValue:10,verified:true},
   {id:'reactor',kind:'reactor',section:'primary',armour:6,boxes:20,rows:[4,4,4,4,4],iconValue:4,verified:true},
   {id:'sensors',kind:'sensor',section:'primary',armour:7,boxes:12,rows:[2,5,5],verified:true},
-  {id:'command',kind:'command',section:'primary',armour:6,boxes:2,rows:[2],iconValue:2,verified:true},
+  {id:'command',kind:'command',section:'primary',armour:6,boxes:12,rows:[1,5,5,1],verified:true},
   {id:'primary_structure',kind:'structure',section:'primary',armour:6,boxes:28,rows:[5,5,5,5,5,3],verified:true},
   {id:'port_thrust',kind:'thruster',section:'port',armour:5,boxes:12,rows:[2,2,2,2,2,2],iconValue:5,verified:true},
   {id:'starboard_thrust',kind:'thruster',section:'starboard',armour:5,boxes:12,rows:[2,2,2,2,2,2],iconValue:5,verified:true},
