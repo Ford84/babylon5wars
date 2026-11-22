@@ -15,8 +15,8 @@ test('built-in catalogue contains one selectable, versioned Vorchan',()=>{
 });
 test('catalogue preserves independently counted structural damage tracks',()=>{
  const ship=getBuiltinShip('centauri-vorchan-v3-2e-sf');
- assert.equal(ship.scs.systems.length,19);
- assert.deepEqual(auditVorchanIdentification().unverifiedTracks,[]);
+ assert.equal(ship.scs.systems.length,21);
+ assert.deepEqual(auditVorchanIdentification().unverifiedTracks,['forward_port_thrust','forward_starboard_thrust']);
  assert.deepEqual(ship.scs.systems.filter(s=>s.kind==='structure').map(s=>s.boxes),[48,28,44]);
  assert.equal(listBuiltinShips().length,1);
 });
@@ -32,7 +32,7 @@ test('Vorchan three weapon mounts resolve to individually tracked SCS systems',(
   assert.equal(system.boxes,mount.damageBoxes);
   assert.equal(system.armour,mount.armour);
   assert.ok(ship.weapons.some(w=>w.id===mount.weaponId));
-  assert.ok(mount.arc.degrees>0);
+  assert.equal(mount.arc,null,'unverified weapon arc must not be fabricated');
  }
  assert.equal(ship.weaponMounts.filter(m=>m.weaponId==='plasma-accelerator').length,1);
  assert.equal(ship.weaponMounts.filter(m=>m.weaponId==='twin-array').length,2);
