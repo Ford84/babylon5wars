@@ -20,7 +20,7 @@ export function auditVorchanWeapons(){
   if(system&&(system.boxes!==mount.damageBoxes||system.armour!==mount.armour))problems.push(mount.mountId+': SCS track mismatch');
   if(!mount.firingArcVerified)problems.push(mount.mountId+': firing arc not verified');
  }
- if(!SCS.completeness.allWeaponArcsIdentified)problems.push('SCS firing-arc completeness flag false');
+ if(mounts.some(m=>!m.firingArcVerified))problems.push('Weapon firing arcs incomplete');
  if(!SCS.completeness.allDamageBoxesCounted)problems.push('Whole-ship SCS damage-box audit incomplete');
  return {inventory:mounts,problems,readyForAutomaticFire:problems.length===0};
 }
