@@ -9,14 +9,31 @@ test('built-in catalogue contains one selectable, versioned Vorchan',()=>{
  assert.ok(ship);assert.equal(ship.faction,'Centauri Republic');
  assert.equal(ship.source.revision,'Version 3: 2E/SF');
  assert.equal(ship.combatPoints,360);assert.equal(ship.initiativeBonus,8);
- assert.equal(ship.weapons.length,2);assert.equal(ship.weapons.reduce((n,w)=>n+w.mounts,0),4);
+ assert.equal(ship.weapons.length,2);assert.equal(ship.weapons.reduce((n,w)=>n+w.mounts,0),3);
  assert.equal(ship.selectable,true);assert.equal(ship.automaticCombatReady,false);
  assert.equal(getBuiltinShip('unknown'),null);
 });
-test('catalogue preserves incomplete structural damage without fabricating boxes',()=>{
+test('catalogue preserves independently counted structural damage tracks',()=>{
  const ship=getBuiltinShip('centauri-vorchan-v3-2e-sf');
- assert.equal(ship.scs.systems.length,18);
+ assert.equal(ship.scs.systems.length,19);
  assert.deepEqual(auditVorchanIdentification().unverifiedTracks,[]);
  assert.deepEqual(ship.scs.systems.filter(s=>s.kind==='structure').map(s=>s.boxes),[48,28,44]);
  assert.equal(listBuiltinShips().length,1);
+});
+
+test('Vorchan three weapon mounts resolve to individually tracked SCS systems',()=>{
+ const ship=getBuiltinShip('centauri-vorchan-v3-2e-sf');
+ assert.equal(ship.weaponMounts.length,3);
+ const systems=new Map(ship.scs.systems.map(s=>[s.id,s]));
+ for(const mount of ship.weaponMounts){
+  const system=systems.get(mount.id);
+  assert.ok(system,'missing mount damage track '+mount.id);
+  assert.equal(system.kind,'weapon');
+  assert.equal(system.boxes,mount.damageBoxes);
+  assert.equal(system.armour,mount.armour);
+  assert.ok(ship.weapons.some(w=>w.id===mount.weaponId));
+  assert.ok(mount.arc.degrees>0);
+ }
+ assert.equal(ship.weaponMounts.filter(m=>m.weaponId==='plasma-accelerator').length,1);
+ assert.equal(ship.weaponMounts.filter(m=>m.weaponId==='twin-array').length,2);
 });
