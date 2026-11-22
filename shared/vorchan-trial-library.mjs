@@ -13,8 +13,27 @@ export const VORCHAN_LIBRARY_RECORD=Object.freeze({
  turnDelay:[1,1,1,2,2,2,3,3,3,4,4,4],
  hangar:{fighters:0,shuttles:2,shuttleThrust:4,shuttleArmour:0,shuttleDefence:[8,10]},
  weapons:[
-  {id:'plasma-accelerator',name:'Plasma Accelerator',mounts:2,class:'Plasma',modes:['Standard'],damage:'4d10+12 minus 1 per hex',rangePenalty:'-1 per hex',fireControl:[3,1,-4],intercept:null,rateOfFire:'1 per 3 turns',alternates:[{rateOfFire:'1 per turn',damage:'1d10+4 minus 1 per hex'},{rateOfFire:'1 per 2 turns',damage:'2d10+8 minus 1 per hex'}]},
-  {id:'twin-array',name:'Twin Array',mounts:2,class:'Particle',modes:['Standard'],damage:'1d10+4',rangePenalty:'-2 per hex',fireControl:[4,5,6],intercept:-2,rateOfFire:'2 per turn'}
+  {id:'plasma-accelerator',name:'Plasma Accelerator',mounts:2,class:'Plasma',modes:['Standard'],
+   powerRequired:5,maximumRange:null,rangePenaltyPerHex:-1,damageRangePenaltyPerHex:-1,
+   damage:'4d10+12 minus 1 per hex',damageDice:{count:4,sides:10,bonus:12,perHex:-1},
+   rangePenalty:'-1 per hex',fireControl:[3,1,-4],intercept:null,rateOfFire:'1 per 3 turns',
+   firingOptions:[
+    {shots:1,turns:3,damageDice:{count:4,sides:10,bonus:12,perHex:-1}},
+    {shots:1,turns:1,damageDice:{count:1,sides:10,bonus:4,perHex:-1}},
+    {shots:1,turns:2,damageDice:{count:2,sides:10,bonus:8,perHex:-1}}
+   ],
+   alternates:[{rateOfFire:'1 per turn',damage:'1d10+4 minus 1 per hex'},{rateOfFire:'1 per 2 turns',damage:'2d10+8 minus 1 per hex'}]},
+  {id:'twin-array',name:'Twin Array',mounts:2,class:'Particle',modes:['Standard'],
+   powerRequired:2,maximumRange:null,rangePenaltyPerHex:-2,damageRangePenaltyPerHex:0,
+   damage:'1d10+4',damageDice:{count:1,sides:10,bonus:4,perHex:0},
+   rangePenalty:'-2 per hex',fireControl:[4,5,6],intercept:-2,rateOfFire:'2 per turn',
+   firingOptions:[{shots:2,turns:1,damageDice:{count:1,sides:10,bonus:4,perHex:0}}]}
+ ],
+ weaponMounts:[
+  {id:'plasma_port',weaponId:'plasma-accelerator',section:'forward',armour:3,damageBoxes:6,arc:null},
+  {id:'plasma_starboard',weaponId:'plasma-accelerator',section:'forward',armour:3,damageBoxes:6,arc:null},
+  {id:'twin_forward_port',weaponId:'twin-array',section:'forward',armour:5,damageBoxes:10,arc:null},
+  {id:'twin_forward_starboard',weaponId:'twin-array',section:'forward',armour:5,damageBoxes:10,arc:null}
  ],
  hitCharts:CENTAURI_HIT_CHARTS['centauri-vorchan-v3-2e-sf'],
  // The full system diagram remains to be transcribed: do not fabricate boxes.
