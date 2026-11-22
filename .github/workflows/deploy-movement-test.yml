@@ -6,6 +6,10 @@ on:
       - '.github/workflows/deploy-movement-test.yml'
       - 'wrangler.staging.jsonc'
       - 'scripts/staging-smoke.mjs'
+      - 'worker/**'
+      - 'src/**'
+      - 'shared/**'
+      - 'migrations/**'
   workflow_dispatch:
 permissions:
   contents: read
