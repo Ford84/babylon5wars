@@ -2,7 +2,7 @@
 // exactly one incoming shot. Additional guns degrade by one point each,
 // never contributing a positive modifier. All decisions precede attack dice.
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
-import {attackId} from './weapon-resolution.mjs';
+const attackId=s=>[s.shipId,s.mountId,s.gun].join(':');
 const mounts=new Map(LIB.weaponMounts.map(m=>[m.id,m]));
 export function interceptModifiers({declarations,defences}){
  if(!Array.isArray(declarations)||!Array.isArray(defences))throw new RangeError('Committed fire and defence required');
