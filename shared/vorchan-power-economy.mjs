@@ -29,7 +29,7 @@ export function vorchanPowerBudget({trial,turn,deactivated=[],purchasedThrust=0,
  const requiredPower=thrustPower+extraEWPower;
  const reactorShutdown=availablePower<0;
  if(reactorShutdown)throw new RangeError('Reactor power shortage exceeds verified deactivations');
- if(engineDestroyed&&(purchasedThrust>0||engineLoss>0))throw new RangeError('Destroyed engine cannot purchase thrust');
+ if(engineDestroyed&&purchasedThrust>0)throw new RangeError('Destroyed engine cannot purchase thrust');
  if(requiredPower>availablePower)throw new RangeError('Insufficient reactor power');
  const freeThrust=engineDestroyed?0:Math.max(0,(engine?.iconValue??10)-engineLoss);
  return {turn,deactivated:[...deactivated],freedPower,reactorLoss,availablePower,requiredPower,unusedPower:availablePower-requiredPower,purchasedThrust,thrustPower,extraEWPower,freeThrust,availableThrust:engineDestroyed?0:freeThrust+purchasedThrust,engineDestroyed};
