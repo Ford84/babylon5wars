@@ -326,6 +326,7 @@ export default {async fetch(req,env){try{
  if(route==='orders'&&req.method==='POST'){if(game.status!=='active')return fail('Start the battle before issuing orders',409);
   const b=await readBody(req),payload=b.payload??{pass:true};if(!phase||phase.mode==='automatic')return fail('No player order needed');if(b.expectedRevision!==game.revision)return fail('Game state changed; reload',409);
   if(payload.acknowledgedPhase!==game.phase_id||payload.acknowledgedProcedures!==true)return fail('Review and acknowledge the current phase procedures before locking an order',400);
+  if(payload.procedureOutcomes!==undefined&&(!Array.isArray(payload.procedureOutcomes)||payload.procedureOutcomes.length!==phase.procedures.length||payload.procedureOutcomes.some(s=>!['completed','not_required','unavailable'].includes(s))))return fail('Select a valid outcome for every procedure in this phase',400);
   const serialized=JSON.stringify(payload);if(serialized.length>10000||!payload||typeof payload!=='object'||Array.isArray(payload))return fail('Invalid order payload');
   if(game.phase_id==='power'||game.phase_id==='ew_commit'){
    const owned=(await db.prepare('SELECT id,private_state_json,public_state_json FROM ships WHERE game_id=? AND owner_id=?').bind(gameId,user.id).all()).results.filter(s=>JSON.parse(s.public_state_json||'{}').trial);
