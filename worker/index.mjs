@@ -96,7 +96,7 @@ export default {async fetch(req,env){try{
     nextState.scs.ew.committedTurn=game.turn;
     details={shipId:ship.id,action:'allocate-ew',sealed:true};
    }else{
-    const random=crypto.getRandomValues(new Uint32Array(1))[0];
+    let random;const max=4294967296-(4294967296%20);do{random=crypto.getRandomValues(new Uint32Array(1))[0];}while(random>=max);
     const roll=random%20+1;
     const result=rollShipInitiative({template,privateState:oldState,ship,roll});
     nextState=result.privateState;
