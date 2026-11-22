@@ -7,6 +7,7 @@ import {VORCHAN_LIBRARY_RECORD,newVorchanTrialState,vorchanThrustPreview} from '
 import {PHASES,phaseById,validateFacing} from '../shared/phases.mjs';
 import {validateFireDeclaration,validateDefensiveAssignment,publicFireView} from '../shared/fire-orders.mjs';
 import {initialWeaponHistory,resolveVorchanShipFire} from '../shared/weapon-resolution.mjs';
+import {combatAdvancementGuard} from '../shared/combat-advancement.mjs';
 import {validateSCS,initialSCSState} from '../shared/scs.mjs';
 import {allocateShipEW,rollShipInitiative,verifiedUndamagedThrust} from '../shared/server-rules.mjs';
 import {powerBudget,ewAllocation,initiative,initiativeOrder} from '../shared/preturn.mjs';
@@ -370,6 +371,13 @@ export default {async fetch(req,env){try{
      payload.defence=validateDefensiveAssignment({playerId:user.id,ships,declarations,assignments:payload.defence.assignments});
     }
    }catch(e){if(e instanceof RangeError||e instanceof TypeError)return fail(e.message);throw e;}
+  }
+  // Acknowledging procedures must not silently discard actual weapon attacks.
+  // Empty-fire games retain their existing two-player phase progression.
+  if(game.phase_id==='fire_resolution'){
+   const committed=(await db.prepare('SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id=?').bind(gameId,game.turn,'fire_commit').all()).results.map(r=>({playerId:r.player_id,fire:JSON.parse(r.payload_json).fire}));
+   const guard=combatAdvancementGuard({declarations:committed});
+   if(!guard.allowed)return fail(guard.reason,409);
   }
   const serialized=JSON.stringify(payload);if(serialized.length>10000||!payload||typeof payload!=='object'||Array.isArray(payload))return fail('Invalid order payload');
   if(game.phase_id==='power'||game.phase_id==='ew_commit'){
