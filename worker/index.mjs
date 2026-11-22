@@ -1,3 +1,4 @@
+import {commitVorchanPower,commitVorchanEW} from '../shared/vorchan-preturn.mjs';
 import {applyVorchanStage} from '../shared/vorchan-stage-server.mjs';
 import {VORCHAN_SCS_IDENTIFICATION,auditVorchanIdentification} from '../shared/vorchan-scs-identification.mjs';
 import {VORCHAN_LIBRARY_RECORD,newVorchanTrialState,vorchanThrustPreview} from '../shared/vorchan-trial-library.mjs';
@@ -150,6 +151,31 @@ export default {async fetch(req,env){try{
   if(!ship||JSON.parse(ship.public_state_json||'{}').libraryId!==VORCHAN_LIBRARY_RECORD.id)return fail('Trial ship not found',404);
   const state=JSON.parse(ship.private_state_json||'{}').trial;
   return json({library:VORCHAN_LIBRARY_RECORD,scsIdentification:VORCHAN_SCS_IDENTIFICATION,scsAudit:auditVorchanIdentification(),ship:{id:ship.id,ownerId:ship.owner_id,q:ship.q,r:ship.r,facing:ship.facing,speed:ship.speed,initiative:state?.initiative??null,ew:ship.owner_id===user.id||user.id===game.host_id?state?.ew:undefined},capabilities:{initiative:true,thrustPreview:true,automaticCombat:false,verifiedDamageDiagram:false}});
+ }
+ if((route==='trial-power'||route==='trial-ew')&&req.method==='POST'){
+  const targetPhase=route==='trial-power'?'power':'ew_commit';
+  if(game.phase_id!==targetPhase)return fail('Required phase: '+targetPhase,409);
+  const b=await readBody(req);
+  if(b.expectedRevision!==game.revision)return fail('Game changed; reload',409);
+  const ship=await db.prepare('SELECT * FROM ships WHERE id=? AND game_id=?').bind(b.shipId,gameId).first();
+  if(!ship||ship.owner_id!==user.id||JSON.parse(ship.public_state_json||'{}').libraryId!==VORCHAN_LIBRARY_RECORD.id)return fail('Not your Vorchan',403);
+  const old=JSON.parse(ship.private_state_json||'{}');
+  let trial;
+  try{
+   if(route==='trial-power')trial=commitVorchanPower({trial:old.trial,turn:game.turn,purchasedThrust:b.purchasedThrust,extraEW:b.extraEW});
+   else{
+    const enemies=(await db.prepare('SELECT id FROM ships WHERE game_id=? AND owner_id<>?').bind(gameId,user.id).all()).results.map(x=>x.id);
+    trial=commitVorchanEW({trial:old.trial,turn:game.turn,defensive:b.defensive,offensive:b.offensive,enemyIds:enemies});
+   }
+  }catch(e){if(e instanceof RangeError||e instanceof TypeError)return fail(e.message);throw e;}
+  const next=JSON.stringify({...old,trial});
+  const batch=await db.batch([
+   db.prepare('UPDATE ships SET private_state_json=? WHERE id=? AND game_id=? AND private_state_json=? AND EXISTS(SELECT 1 FROM games WHERE id=? AND revision=? AND phase_id=?)').bind(next,ship.id,gameId,ship.private_state_json,gameId,game.revision,targetPhase),
+   db.prepare('UPDATE games SET revision=revision+1 WHERE id=? AND revision=? AND EXISTS(SELECT 1 FROM ships WHERE id=? AND private_state_json=?)').bind(gameId,game.revision,ship.id,next),
+   db.prepare('INSERT INTO events(id,game_id,turn,phase_id,actor_id,event_type,public_json) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(uuid(),gameId,game.turn,targetPhase,user.id,route==='trial-power'?'trial_power_committed':'trial_ew_committed',JSON.stringify({shipId:ship.id,committed:true}),gameId,game.revision+1)
+  ]);
+  if(batch.some(x=>x.meta.changes!==1))return fail('Concurrent update; reload',409);
+  return json({ok:true,shipId:ship.id,revision:game.revision+1,allocation:route==='trial-power'?trial.powerAllocation:{committed:true}});
  }
  if(route==='trial-roll'&&req.method==='POST'){
   if(game.phase_id!=='initiative')return fail('Initiative phase required',409);
