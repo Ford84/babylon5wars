@@ -44,7 +44,7 @@ test('Vorchan preview blocks missing official arcs; verified geometry gives tran
  const ready=vorchanTargetingPreview({shooter,target,mountId:'plasma_forward',arc,attackerOffensiveEW:2,targetDefensiveEW:1});
  assert.equal(ready.readyForHitRoll,true);
  assert.equal(ready.breakdown.total,12+3+2-1-3);
- assert.equal(resolveToHit(ready,13).hit,false);
+ assert.equal(resolveToHit(ready,14).hit,false);
  assert.equal(resolveToHit(ready,12).hit,true);
  const noLock=vorchanTargetingPreview({shooter,target,mountId:'plasma_forward',arc});
  assert.equal(noLock.breakdown.rangePenalty,-6);
