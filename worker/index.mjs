@@ -306,6 +306,11 @@ export default {async fetch(req,env){try{
  if(route==='orders'&&req.method==='POST'){
   const b=await readBody(req),payload=b.payload??{pass:true};if(!phase||phase.mode==='automatic')return fail('No player order needed');if(b.expectedRevision!==game.revision)return fail('Game state changed; reload',409);
   const serialized=JSON.stringify(payload);if(serialized.length>10000||!payload||typeof payload!=='object'||Array.isArray(payload))return fail('Invalid order payload');
+  if(game.phase_id==='power'||game.phase_id==='ew_commit'){
+   const owned=(await db.prepare('SELECT id,private_state_json,public_state_json FROM ships WHERE game_id=? AND owner_id=?').bind(gameId,user.id).all()).results.filter(s=>JSON.parse(s.public_state_json||'{}').trial);
+   const missing=owned.filter(s=>{const trial=JSON.parse(s.private_state_json||'{}').trial;return (game.phase_id==='power'?trial?.powerAllocation?.turn:trial?.ewAllocation?.turn)!==game.turn;});
+   if(missing.length)return fail('Commit each trial ship allocation before advancing: '+missing.map(s=>s.id).join(', '),409);
+  }
   if(game.phase_id==='movement'){
    const ships=(await db.prepare('SELECT owner_id,public_state_json,private_state_json FROM ships WHERE game_id=?').bind(gameId).all()).results.filter(s=>s.owner_id===user.id&&JSON.parse(s.public_state_json||'{}').trial);
    if(ships.some(s=>{const m=JSON.parse(s.private_state_json||'{}').trial?.movement;return !m||m.turn!==game.turn||m.state.remaining!==0;}))return fail('Complete each trial ship\'s required movement before locking your order',409);
