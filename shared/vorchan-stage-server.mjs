@@ -29,6 +29,7 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
  let nextPurchase=purchased,moveAction=action;
  if(action.type==='speed'){
   if(!Number.isInteger(action.purchasedThrust)||action.purchasedThrust<0)throw new RangeError('Invalid purchased thrust');
+  if(action.purchasedThrust>0&&trial.powerAllocation?.turn!==turn)throw new RangeError('Additional thrust must be purchased in the pre-turn power phase');
   if(trial.powerAllocation?.turn===turn&&action.purchasedThrust!==trial.powerAllocation.purchasedThrust)throw new RangeError('Thrust purchase must match committed power allocation');
   nextPurchase=action.purchasedThrust;
   moveAction={type:'speed',change:action.change};
@@ -44,6 +45,7 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
   if(action.type==='turn')moveAction={type:'turn',direction:action.direction,cost:turnCostAtSpeed(old.speed,LIB.turnCost),delay,shortenBy:action.shortenBy??0};
  }
  const committed=trial.powerAllocation?.turn===turn?trial.powerAllocation:null;
+ if(!committed&&nextPurchase>0)throw new RangeError('Uncommitted thrust purchase prohibited');
  if(committed&&nextPurchase!==committed.purchasedThrust)throw new RangeError('Thrust purchase must match committed power allocation');
  const power=vorchanPowerBudget({trial,turn,deactivated:committed?.deactivated??[],purchasedThrust:nextPurchase,extraEWPower:committed?.ewPower??0});
  const limits={availableThrust:power.availableThrust,accelCost:LIB.accelerationCost};
