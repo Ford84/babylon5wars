@@ -265,11 +265,11 @@ export default {async fetch(req,env){try{
   const split=b.boxId.lastIndexOf(':');
   const systemId=b.boxId.slice(0,split),index=Number(b.boxId.slice(split+1));
   const coords=VORCHAN_VECTOR_BOXES[systemId];
-  if(!coords||systemId==='hangar_reference'||!Number.isInteger(index)||index<1||index>coords.length||b.boxId!==systemId+':'+index)return fail('Box is not present in the audited Vorchan ship diagram',400);
+  if(!coords||systemId==='hangar_reference'||systemId.startsWith('unassigned_')||!Number.isInteger(index)||index<1||index>coords.length||b.boxId!==systemId+':'+index)return fail('Box is not present in the audited Vorchan ship diagram',400);
   const marks={...(state.scsAnnotations?.marks||{})};
   if(b.marked)marks[b.boxId]=true;else delete marks[b.boxId];
   if(Object.keys(marks).length>250)return fail('Too many annotations',400);
-  const damageBySystem=Object.fromEntries(Object.entries(VORCHAN_VECTOR_BOXES).filter(([id])=>id!=='hangar_reference').map(([id])=>[id,Object.keys(marks).filter(key=>key.startsWith(id+':')&&marks[key]).length]));
+  const damageBySystem=Object.fromEntries(Object.entries(VORCHAN_VECTOR_BOXES).filter(([id])=>id!=='hangar_reference'&&!id.startsWith('unassigned_')).map(([id])=>[id,Object.keys(marks).filter(key=>key.startsWith(id+':')&&marks[key]).length]));
   const updated=JSON.stringify({...state,scsAnnotations:{version:1,marks,damageBySystem,mode:'manual-unverified'}});
   const privateState=JSON.parse(ship.private_state_json||'{}');
   if(!privateState.trial)return fail('Trial state missing',409);
