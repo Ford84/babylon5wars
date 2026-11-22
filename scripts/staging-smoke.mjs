@@ -105,6 +105,15 @@ const second=await post('/api/games/'+id+'/orders',{expectedRevision:fire.game.r
 if(second.status!==200)throw Error('Second fire lock failed '+JSON.stringify(second));
 fire=await authed('/api/games/'+id,host);
 if(fire.game.phase_id!=='fire_resolution')throw Error('Fire did not advance to reactive defence');
+const preflightHost=await authed('/api/games/'+id+'/fire-resolution',host);
+const preflightGuest=await authed('/api/games/'+id+'/fire-resolution',guest);
+if(preflightHost.phase!=='fire_resolution'||preflightHost.authoritative!==true||preflightHost.damageApplied!==false||preflightHost.rollsCommitted!==false)throw Error('W7: W4/W5 fire preflight falsely claims resolution');
+if(JSON.stringify(preflightHost)!==JSON.stringify(preflightGuest))throw Error('W7: two clients disagree on revealed authoritative preflight');
+const noAuth=await fetch(base+'/api/games/'+id+'/fire-resolution');
+if(noAuth.status!==401)throw Error('W7: unauthenticated combat preflight was accessible');
+const postRevealEdit=await post('/api/games/'+id+'/orders',{expectedRevision:fire.game.revision,payload:{acknowledgedPhase:'fire_commit',fire:{shots:[]}}},host);
+if(postRevealEdit.status===200)throw Error('W7: secret declaration could be edited after reveal');
+console.log('PASS W7 two-client preflight consistency, authentication and immutable post-reveal orders');
 const reveal=await authed('/api/games/'+id+'/fire-orders',guest);
 if(!reveal.revealed||reveal.declarations.length!==2)throw Error('Simultaneous fire reveal failed');
 const invalid=await post('/api/games/'+id+'/orders',{expectedRevision:fire.game.revision,payload:{acknowledgedPhase:'fire_resolution',acknowledgedProcedures:true,procedureOutcomes:fire.phase.procedures.map(()=> 'completed'),defence:{assignments:[{shipId:hostShip.id,mountId:'twin_nose_port',gun:1,attackId:'unknown'}]}}},host);
