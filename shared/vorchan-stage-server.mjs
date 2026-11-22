@@ -3,6 +3,7 @@
 import {pivotStart,pivotHalt,rollStart,rollHalt,orientationAtMovementStart} from './orientation-stage.mjs';
 import {adjustTurnDelay} from './speed-integration.mjs';
 import {newStagedMovement,stagedMove,turnCostAtSpeed} from './staged-movement.mjs';
+import {validateManoeuvreThrusters} from './manoeuvre-thrusters.mjs';
 import {createThrusterLedger,allocateThrusterThrust,pendingOverthrustChecks} from './thruster-ledger.mjs';
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
 // Ratings refer to channel capacity, not damage boxes or armour.
@@ -71,6 +72,7 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
  if(manoeuvreCost<0)throw new RangeError('Movement thrust cannot decrease');
  const allocation=action.thrusters??{};
  if(Object.values(allocation).some(v=>!Number.isInteger(v)||v<0)||Object.values(allocation).reduce((a,b)=>a+b,0)!==manoeuvreCost)throw new RangeError('Thruster allocation must exactly equal manoeuvre cost');
+ validateManoeuvreThrusters({action,oldState:old,cost:manoeuvreCost,allocation});
  const previousLedger=(trial.movement?.turn===turn?trial.movement.thrusterLedger:null);
  const ledger=previousLedger??createThrusterLedger(VORCHAN_THRUSTER_RATINGS);
  // Existing damage and critical effects must be adjudicated before trusting undamaged ratings.
