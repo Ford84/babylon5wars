@@ -15,7 +15,7 @@ export function pivotHalt(state,{cost,thrusterPair}){
  return {...state,pivotInProgress:false,pivotActive:true,pivotThrustSpent:(state.pivotThrustSpent||0)+cost};
 }
 export function rollStart(state,cost){
- if(!valid(cost)||cost<1||state.rollInProgress||state.pivotInProgress||state.pivotActive)throw new RangeError('Cannot start roll');
+ if(!valid(cost)||cost<1||state.rollInProgress||state.pivotInProgress)throw new RangeError('Cannot start roll');
  return {...state,rollInProgress:true,rollStartedTurn:state.turn,rollThrustSpent:(state.rollThrustSpent||0)+cost};
 }
 export function rollHalt(state,cost){
