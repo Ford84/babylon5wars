@@ -63,15 +63,25 @@ for(const phase of ['jump','terrain_pre'])for(const token of tokens)await phaseO
 let movement=await authed('/api/games/'+id,host);if(movement.game.phase_id!=='movement')throw Error('Movement phase not reached');
 const hostShip=movement.ships.find(s=>s.owner_id===movement.members.find(m=>m.display_name===credentials[0].name)?.user_id);
 if(!hostShip)throw Error('Host Vorchan missing in movement');
-for(const action of [
- {type:'speed',change:2,purchasedThrust:0,thrusters:{aft_port_thrust:4}},
- {type:'turn',direction:1,shortenBy:0,thrusters:{aft_port_thrust:1}},
- {type:'advance',hexes:2}
-]){const currentMove=await authed('/api/games/'+id,host);const moved=await post('/api/games/'+id+'/trial-movement',{shipId:hostShip.id,expectedRevision:currentMove.game.revision,action},host);if(moved.status!==200)throw Error('Live manoeuvre '+action.type+' failed '+JSON.stringify(moved));}
-const movedState=await authed('/api/games/'+id,host);const actual=movedState.ships.find(s=>s.id===hostShip.id);
-if(actual.speed!==2||actual.private_state?.trial?.movement?.state?.remaining!==0||actual.private_state?.trial?.movement?.thrusterLedger?.aft_port_thrust?.used!==5)throw Error('SCS-backed movement and thruster ledger not persisted');
-console.log('PASS speed change, turn, advance and SCS thruster-ledger persistence');
-for(let step=0;step<2;step++){const snapshot=await authed('/api/games/'+id,host);const next=snapshot.readiness.find(x=>x.required);if(!next)throw Error('No player eligible to move');const who=snapshot.members.find(m=>m.user_id===next.id);const index=credentials.findIndex(c=>c.name===who?.display_name);if(index<0)throw Error('Cannot match movement player');await phaseOrder(tokens[index],'movement');}
+for(let step=0;step<2;step++){
+ const snapshot=await authed('/api/games/'+id,host);
+ const next=snapshot.readiness.find(x=>x.required);
+ if(!next)throw Error('No player eligible to move');
+ const who=snapshot.members.find(m=>m.user_id===next.id);
+ const index=credentials.findIndex(c=>c.name===who?.display_name);
+ if(index<0)throw Error('Cannot match movement player');
+ if(index===0){
+  for(const action of [
+   {type:'speed',change:2,purchasedThrust:0,thrusters:{aft_port_thrust:4}},
+   {type:'turn',direction:1,shortenBy:0,thrusters:{aft_port_thrust:1}},
+   {type:'advance',hexes:2}
+  ]){const currentMove=await authed('/api/games/'+id,host);const moved=await post('/api/games/'+id+'/trial-movement',{shipId:hostShip.id,expectedRevision:currentMove.game.revision,action},host);if(moved.status!==200)throw Error('Live manoeuvre '+action.type+' failed '+JSON.stringify(moved));}
+  const movedState=await authed('/api/games/'+id,host);const actual=movedState.ships.find(s=>s.id===hostShip.id);
+  if(actual.speed!==2||actual.private_state?.trial?.movement?.state?.remaining!==0||actual.private_state?.trial?.movement?.thrusterLedger?.aft_port_thrust?.used!==5)throw Error('SCS-backed movement and thruster ledger not persisted');
+  console.log('PASS speed change, turn, advance and SCS thruster-ledger persistence');
+ }
+ await phaseOrder(tokens[index],'movement');
+}
 const afterMovement=await authed('/api/games/'+id,host);
 if(afterMovement.game.phase_id!=='terrain_post')throw Error('Stationary ship movement could not complete');
 console.log('PASS two-player authoritative SCS power, initiative, EW and stationary movement phase advancement');
