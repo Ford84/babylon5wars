@@ -1,5 +1,6 @@
 import {PHASES,phaseById,validateFacing} from '../shared/phases.mjs';
 import {validateSCS,initialSCSState} from '../shared/scs.mjs';
+import {allocateShipEW,rollShipInitiative,verifiedUndamagedThrust} from '../shared/server-rules.mjs';
 import {powerBudget,ewAllocation,initiative,initiativeOrder} from '../shared/preturn.mjs';
 import {requiredPlayers,followingPhase,canSubmit,safeShip} from '../shared/coordinator.mjs';
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'}});
@@ -74,6 +75,45 @@ export default {async fetch(req,env){try{
  if(!route&&req.method==='GET'){
   const ships=(await db.prepare('SELECT * FROM ships WHERE game_id=?').bind(gameId).all()).results.map(s=>safeShip(s,user.id));const orders=await completedOrders(db,game),completed=orders.map(o=>o.player_id),required=requiredPlayers(phase,members,completed);
   return json({game,phase,members,ships,readiness:members.map(m=>({id:m.user_id,name:m.display_name,submitted:completed.includes(m.user_id),required:required.includes(m.user_id)})),needsAction:required.includes(user.id),myOrder:orders.find(o=>o.player_id===user.id)?JSON.parse(orders.find(o=>o.player_id===user.id).payload_json):null});
+ }
+ if(route==='ship-rules'&&req.method==='POST'){
+  if(!['initiative','ew_commit'].includes(game.phase_id))return fail('Ship rules action unavailable in this phase',409);
+  const b=await readBody(req);
+  if(b.expectedRevision!==game.revision||!['roll-initiative','allocate-ew'].includes(b.action)||typeof b.shipId!=='string')return fail('Invalid or stale rules action',409);
+  if(b.action==='roll-initiative'&&game.phase_id!=='initiative'||b.action==='allocate-ew'&&game.phase_id!=='ew_commit')return fail('Wrong phase',409);
+  const ship=await db.prepare('SELECT * FROM ships WHERE id=? AND game_id=?').bind(b.shipId,gameId).first();
+  if(!ship||!ship.template_id)return fail('Ship has no SCS template',409);
+  if(ship.owner_id!==user.id&&game.host_id!==user.id)return fail('Not permitted to modify this ship',403);
+  const record=await db.prepare('SELECT definition_json FROM scs_templates WHERE id=?').bind(ship.template_id).first();
+  if(!record)return fail('SCS template missing',409);
+  const template=JSON.parse(record.definition_json),oldState=JSON.parse(ship.private_state_json||'{}');
+  let nextState,details;
+  try{
+   if(b.action==='allocate-ew'){
+    if(!b.order||typeof b.order!=='object'||Array.isArray(b.order))return fail('EW allocation required');
+    if(oldState.scs?.ew?.committedTurn===game.turn)return fail('EW already committed this turn',409);
+    nextState=allocateShipEW({template,privateState:oldState,order:b.order});
+    nextState.scs.ew.committedTurn=game.turn;
+    details={shipId:ship.id,action:'allocate-ew',sealed:true};
+   }else{
+    const random=crypto.getRandomValues(new Uint32Array(1))[0];
+    const roll=random%20+1;
+    const result=rollShipInitiative({template,privateState:oldState,ship,roll});
+    nextState=result.privateState;
+    details={shipId:ship.id,action:'roll-initiative',roll:result.result.roll,total:result.result.total};
+   }
+  }catch(e){if(e instanceof RangeError||e instanceof TypeError)return fail(e.message,409);throw e;}
+  const oldJson=ship.private_state_json,newJson=JSON.stringify(nextState);
+  // One conditional UPDATE is the concurrency gate. A SQLite trigger aborts
+  // the entire batch if this update changes zero rows.
+  try{
+   await db.batch([
+    db.prepare('UPDATE ships SET private_state_json=? WHERE id=? AND game_id=? AND private_state_json=? AND EXISTS(SELECT 1 FROM games WHERE id=? AND revision=? AND phase_id=?)').bind(newJson,ship.id,gameId,oldJson,gameId,game.revision,game.phase_id),
+    db.prepare('UPDATE games SET revision=revision+1 WHERE id=? AND revision=?').bind(gameId,game.revision),
+    event(db,game,user.id,'ship_rules_applied',details)
+   ]);
+  }catch(e){if(/constraint|abort|stale|conflict/i.test(String(e)))return fail('Concurrent game change; reload',409);throw e;}
+  return json({ok:true,action:b.action,shipId:ship.id,revision:game.revision+1,...(b.action==='roll-initiative'?{initiative:details}:{sealed:true})});
  }
  if(route==='invite'&&req.method==='POST'){if(user.id!==game.host_id)return fail('Host only',403);const token=hex(bytes(24));await db.prepare("INSERT INTO invitations(token_hash,game_id,created_by,expires_at) VALUES(?,?,?,datetime('now','+7 days'))").bind(await sha(token),gameId,user.id).run();return json({token,expiresInDays:7});}
  if(route==='initiative'&&req.method==='POST'){if(user.id!==game.host_id)return fail('Host only',403);const b=await readBody(req);if(!members.some(m=>m.user_id===b.playerId)||!Number.isInteger(b.rank)||b.rank<0||b.rank>999)return fail('Invalid player or rank');if(game.phase_id==='movement')return fail('Cannot change initiative during movement',409);await db.prepare('UPDATE memberships SET initiative_rank=? WHERE game_id=? AND user_id=?').bind(b.rank,gameId,b.playerId).run();return json({ok:true});}
