@@ -5,6 +5,7 @@ import {getBuiltinShip,listBuiltinShips} from '../shared/ship-catalog.mjs';
 import {VORCHAN_SCS_IDENTIFICATION,auditVorchanIdentification} from '../shared/vorchan-scs-identification.mjs';
 import {VORCHAN_LIBRARY_RECORD,newVorchanTrialState,vorchanThrustPreview} from '../shared/vorchan-trial-library.mjs';
 import {PHASES,phaseById,validateFacing} from '../shared/phases.mjs';
+import {validateFireDeclaration,validateDefensiveAssignment,publicFireView} from '../shared/fire-orders.mjs';
 import {validateSCS,initialSCSState} from '../shared/scs.mjs';
 import {allocateShipEW,rollShipInitiative,verifiedUndamagedThrust} from '../shared/server-rules.mjs';
 import {powerBudget,ewAllocation,initiative,initiativeOrder} from '../shared/preturn.mjs';
@@ -83,6 +84,17 @@ export default {async fetch(req,env){try{
  if(!route&&req.method==='GET'){
   const shipRows=(await db.prepare('SELECT * FROM ships WHERE game_id=?').bind(gameId).all()).results;const templateRows=(await db.prepare('SELECT id,definition_json FROM scs_templates WHERE id IN (SELECT template_id FROM ships WHERE game_id=? AND template_id IS NOT NULL)').bind(gameId).all()).results;const templateById=new Map(templateRows.map(t=>[t.id,JSON.parse(t.definition_json)]));const ships=shipRows.map(s=>{const visible=safeShip(s,user.id);if(s.owner_id===user.id||game.host_id===user.id){if(JSON.parse(s.public_state_json||'{}').libraryId===VORCHAN_LIBRARY_RECORD.id)visible.library_stats={engineEfficiency:VORCHAN_LIBRARY_RECORD.engineEfficiency.power,accelerationCost:VORCHAN_LIBRARY_RECORD.accelerationCost,initiativeBonus:VORCHAN_LIBRARY_RECORD.initiativeBonus,source:VORCHAN_LIBRARY_RECORD.source};const definition=templateById.get(s.template_id);if(definition){visible.library_stats={engineEfficiency:definition.stats.engineEfficiency,accelerationCost:definition.stats.accelerationCost??null,initiativeBonus:definition.stats.initiativeBonus};}}return visible;});const orders=await completedOrders(db,game),completed=orders.map(o=>o.player_id),required=requiredPlayers(phase,members,completed);
   return json({game,phase,members,ships,readiness:members.map(m=>({id:m.user_id,name:m.display_name,submitted:completed.includes(m.user_id),required:required.includes(m.user_id)})),needsAction:required.includes(user.id),myOrder:orders.find(o=>o.player_id===user.id)?JSON.parse(orders.find(o=>o.player_id===user.id).payload_json):null});
+ }
+ if(route==='fire-orders'&&req.method==='GET'){
+  if(game.status!=='active')return fail('Battle has not started',409);
+  if(!['fire_commit','fire_resolution'].includes(game.phase_id))return fail('Fire orders are available during the fire segments',409);
+  const phaseId=game.phase_id==='fire_commit'?'fire_commit':'fire_commit';
+  const rows=(await db.prepare('SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id=? ORDER BY player_id').bind(gameId,game.turn,phaseId).all()).results;
+  const declarations=rows.map(row=>({playerId:row.player_id,fire:JSON.parse(row.payload_json).fire}));
+  if(game.phase_id==='fire_commit')return json(publicFireView({phase:game.phase_id,playerId:user.id,declarations}));
+  if(declarations.length!==members.length)return fail('Fire declarations not fully committed',409);
+  const defensiveRows=(await db.prepare('SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id=? ORDER BY player_id').bind(gameId,game.turn,'fire_resolution').all()).results;
+  return json(publicFireView({phase:game.phase_id,playerId:user.id,declarations,assignments:defensiveRows.map(row=>({playerId:row.player_id,defence:JSON.parse(row.payload_json).defence??{assignments:[]}}))}));
  }
  if(route==='ship-rules'&&req.method==='POST'){
   if(!['initiative','ew_commit'].includes(game.phase_id))return fail('Ship rules action unavailable in this phase',409);
@@ -327,6 +339,26 @@ export default {async fetch(req,env){try{
   const b=await readBody(req),payload=b.payload??{pass:true};if(!phase||phase.mode==='automatic')return fail('No player order needed');if(b.expectedRevision!==game.revision)return fail('Game state changed; reload',409);
   if(payload.acknowledgedPhase!==game.phase_id||payload.acknowledgedProcedures!==true)return fail('Review and acknowledge the current phase procedures before locking an order',400);
   if(payload.procedureOutcomes!==undefined&&(!Array.isArray(payload.procedureOutcomes)||payload.procedureOutcomes.length!==phase.procedures.length||payload.procedureOutcomes.some(s=>!['completed','not_required','unavailable'].includes(s))))return fail('Select a valid outcome for every procedure in this phase',400);
+  if(game.phase_id==='fire_commit'||game.phase_id==='fire_resolution'){
+   const shipRows=(await db.prepare('SELECT id,owner_id,q,r,facing,public_state_json,private_state_json FROM ships WHERE game_id=?').bind(gameId).all()).results;
+   const ships=shipRows.map(row=>({...row,public_state:JSON.parse(row.public_state_json||'{}')}));
+   try{
+    if(game.phase_id==='fire_commit'){
+     if(!payload.fire)return fail('Explicit weapon declaration required, including an empty shots array');
+     payload.fire=validateFireDeclaration({playerId:user.id,ships,fire:payload.fire,turn:game.turn});
+     for(const shot of payload.fire.shots){
+      const own=shipRows.find(s=>s.id===shot.shipId),trial=JSON.parse(own.private_state_json||'{}').trial;
+      if(trial?.powerAllocation?.turn===game.turn&&trial.powerAllocation.deactivated?.includes(shot.mountId))return fail('Cannot declare a deactivated weapon');
+      if(trial?.destroyedSystems?.includes(shot.mountId))return fail('Cannot declare a destroyed weapon');
+     }
+    }else{
+     if(!payload.defence)return fail('Explicit defensive assignments required, including an empty assignments array');
+     const declarations=(await db.prepare('SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id=?').bind(gameId,game.turn,'fire_commit').all()).results.map(row=>({playerId:row.player_id,fire:JSON.parse(row.payload_json).fire}));
+     if(declarations.length!==members.length)return fail('Awaiting all fire declarations',409);
+     payload.defence=validateDefensiveAssignment({playerId:user.id,ships,declarations,assignments:payload.defence.assignments});
+    }
+   }catch(e){if(e instanceof RangeError||e instanceof TypeError)return fail(e.message);throw e;}
+  }
   const serialized=JSON.stringify(payload);if(serialized.length>10000||!payload||typeof payload!=='object'||Array.isArray(payload))return fail('Invalid order payload');
   if(game.phase_id==='power'||game.phase_id==='ew_commit'){
    const owned=(await db.prepare('SELECT id,private_state_json,public_state_json FROM ships WHERE game_id=? AND owner_id=?').bind(gameId,user.id).all()).results.filter(s=>JSON.parse(s.public_state_json||'{}').trial);
@@ -347,7 +379,7 @@ export default {async fetch(req,env){try{
   const next=isFinal?followingPhase(game.phase_id,game.turn):null;
   const inserts=[db.prepare('INSERT INTO orders(id,game_id,turn,phase_id,player_id,payload_json) VALUES(?,?,?,?,?,?)').bind(uuid(),gameId,game.turn,game.phase_id,user.id,serialized),event(db,game,user.id,'order_committed',{playerId:user.id,phaseId:game.phase_id,turn:game.turn})];
   if(isFinal){
-   if(phase.secret)inserts.push(event(db,game,null,'orders_revealed',{phaseId:game.phase_id,turn:game.turn,orders:[...previous.map(o=>({playerId:o.player_id,payload:JSON.parse(o.payload_json)})),{playerId:user.id,payload}]}));
+   if(phase.secret&&game.phase_id!=='fire_commit')inserts.push(event(db,game,null,'orders_revealed',{phaseId:game.phase_id,turn:game.turn,orders:[...previous.map(o=>({playerId:o.player_id,payload:JSON.parse(o.payload_json)})),{playerId:user.id,payload}]}));
    if(game.phase_id==='criticals'){
     const shipRows=(await db.prepare('SELECT id,private_state_json FROM ships WHERE game_id=?').bind(gameId).all()).results;
     for(const shipRow of shipRows){
