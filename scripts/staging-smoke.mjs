@@ -76,7 +76,7 @@ for(let step=0;step<2;step++){
    {type:'speed',change:2,purchasedThrust:0,thrusters:{aft_port_thrust:4}},
    {type:'turn',direction:1,shortenBy:0,thrusters:{aft_port_thrust:1}},
    {type:'advance',hexes:2}
-  ]){const currentMove=await authed('/api/games/'+id,host);const moved=await post('/api/games/'+id+'/trial-movement',{shipId:hostShip.id,expectedRevision:currentMove.game.revision,action},host);if(moved.status!==200)throw Error('Live manoeuvre '+action.type+' failed '+JSON.stringify(moved));}
+  ]){const currentMove=await authed('/api/games/'+id,host);const moved=await post('/api/games/'+id+'/trial-movement',{shipId:hostShip.id,expectedRevision:currentMove.game.revision,action},host);if(moved.status!==200)throw Error('Live manoeuvre '+action.type+' failed '+JSON.stringify(moved));if(action.type==='turn'){const interim=await authed('/api/games/'+id,host);const premature=await post('/api/games/'+id+'/orders',{expectedRevision:interim.game.revision,payload:{notes:'Premature movement lock must fail',acknowledgedPhase:'movement',acknowledgedProcedures:true,procedureOutcomes:interim.phase.procedures.map(()=> 'completed')}},host);if(premature.status!==409)throw Error('Incomplete movement was improperly lockable: '+JSON.stringify(premature));}}
   const movedState=await authed('/api/games/'+id,host);const actual=movedState.ships.find(s=>s.id===hostShip.id);
   if(actual.speed!==2||actual.private_state?.trial?.movement?.state?.remaining!==0||actual.private_state?.trial?.movement?.thrusterLedger?.aft_port_thrust?.used!==5)throw Error('SCS-backed movement and thruster ledger not persisted');
   console.log('PASS speed change, turn, advance and SCS thruster-ledger persistence');
