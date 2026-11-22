@@ -21,9 +21,11 @@ export function validateManoeuvreThrusters({action,oldState,cost,allocation}){
   // Slide to starboard uses port thrust; reverse travel swaps side requirements.
   const side=oldState.speed<0?same(action.direction):opposite(action.direction);
   groups=[side];
- }else if(action.type==='turn'){
+ }else if(action.type==='turn'||action.type==='extended-start'||action.type==='extended-complete'){
   const reverse=oldState.speed<0;
-  groups=[reverse?forward:aft,reverse?same(action.direction):opposite(action.direction)];
+  const direction=action.type==='extended-complete'?oldState.extendedTurn?.direction:action.direction;
+  if(![-1,1].includes(direction))throw new RangeError('Invalid extended turn direction');
+  groups=[reverse?forward:aft,reverse?same(direction):opposite(direction)];
  }else if(action.type==='pivot-start'||action.type==='pivot-halt'){
   groups=groupForPair[action.thrusterPair];
   if(!groups)throw new RangeError('Invalid pivot thruster pair');
