@@ -1,0 +1,21 @@
+name: SCS importer validation
+on:
+  pull_request:
+    paths:
+      - 'shared/scs*.mjs'
+      - 'tests/**'
+      - '.github/workflows/scs-validation.yml'
+  push:
+    branches:
+      - feature/scs-extraction-integration-plan
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-package-lock
+      - run: npm test
+      - run: npm run build
