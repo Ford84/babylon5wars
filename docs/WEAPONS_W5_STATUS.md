@@ -35,3 +35,9 @@ Added `shared/vorchan-criticals.mjs` and `tests/vorchan-criticals.test.mjs`: sin
 The separately supplied `Vorchan_SCS_Full_Audit.md` states the original SCS contains **four Twin Array mounts** (two nose, two wing), whereas the current development library and W1–W5 implementation contain **two**. That audit also notes unresolved forward external thruster tracks. The two sources are not reconciled, so it would be unsafe to claim full W5 damage integration or force a destructive database migration. Confirm the physical mount count and wing armour/box counts against the rendered original SCS and reconcile weapon inventory, power budget, arcs, firing declarations and damage routing as one atomic change. Do not invent wing arcs.
 
 **The remaining user-requested requirements are not complete**: authoritative W4 rolls and journal, persisted defender choices, system critical tables and full SCS verification still block end-to-end automatic damage.
+
+## Authoritative player clarification — Vorchan sections and weapon mounts
+
+The player confirms that the Vorchan has exactly **two Twin Arrays**, both in the **forward hull section**, identified as **port** and **starboard** for mount distinction only. The forward section also carries the **one Plasma Accelerator**. The **primary** and **aft** hull sections have **no weapons**. There are **three weapon mounts total**, and no wing-mounted additional Twin Arrays. Previously stated four-mount claims are superseded and must not be used to change the ship library, firing orders, damage tracks or power budget. The confirmed arcs remain plasma forward 90°, both Twin Arrays forward 270°.
+
+This resolves the **weapon-count discrepancy only**. Forward external thruster damage boxes, complete non-weapon system criticals, authoritative rolls/journal and defender-choice persistence remain separate integration gates.
