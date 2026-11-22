@@ -3,7 +3,13 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['.github/workflows/deploy.yml']
+    paths:
+      - '.github/workflows/deploy.yml'
+      - 'shared/**'
+      - 'src/**'
+      - 'worker/**'
+      - 'migrations/**'
+      - 'tests/**'
 permissions:
   contents: read
 jobs:
