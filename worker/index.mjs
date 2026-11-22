@@ -74,8 +74,8 @@ export default {async fetch(req,env){try{
  if(path==='/api/logout'&&req.method==='POST'){const token=req.headers.get('authorization').slice(7);await db.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await sha(token)).run();return json({ok:true});}
  if(path==='/api/me')return json(user);
  if(path==='/api/games'&&req.method==='GET'){const rows=await db.prepare('SELECT g.* FROM games g JOIN memberships m ON m.game_id=g.id WHERE m.user_id=? ORDER BY g.created_at DESC').bind(user.id).all();return json(rows.results);}
- if(path==='/api/games'&&req.method==='POST'){const b=await readBody(req),id=uuid(),title=String(b.title||'New battle').trim().slice(0,100);await db.batch([db.prepare('INSERT INTO games(id,title,host_id) VALUES(?,?,?)').bind(id,title,user.id),db.prepare('INSERT INTO memberships(game_id,user_id,role) VALUES(?,?,?)').bind(id,user.id,'host')]);return json({id},201);}
- if(path==='/api/invitations/redeem'&&req.method==='POST'){const b=await readBody(req);if(typeof b.token!=='string'||b.token.length>200)return fail('Invalid invitation');const key=await sha(b.token);const invite=await db.prepare("SELECT * FROM invitations WHERE token_hash=? AND used_by IS NULL AND expires_at>datetime('now')").bind(key).first();if(!invite)return fail('Invitation expired or already used',404);const result=await db.batch([db.prepare('UPDATE invitations SET used_by=? WHERE token_hash=? AND used_by IS NULL').bind(user.id,key),db.prepare('INSERT OR IGNORE INTO memberships(game_id,user_id) VALUES(?,?)').bind(invite.game_id,user.id)]);if(result[0].meta.changes!==1)return fail('Invitation already used',409);return json({gameId:invite.game_id});}
+ if(path==='/api/games'&&req.method==='POST'){const b=await readBody(req),id=uuid(),title=String(b.title||'New battle').trim().slice(0,100);await db.batch([db.prepare("INSERT INTO games(id,title,host_id,status) VALUES(?,?,?,'setup')").bind(id,title,user.id),db.prepare('INSERT INTO memberships(game_id,user_id,role) VALUES(?,?,?)').bind(id,user.id,'host')]);return json({id},201);}
+ if(path==='/api/invitations/redeem'&&req.method==='POST'){const b=await readBody(req);if(typeof b.token!=='string'||b.token.length>200)return fail('Invalid invitation');const key=await sha(b.token);const invite=await db.prepare("SELECT * FROM invitations WHERE token_hash=? AND used_by IS NULL AND expires_at>datetime('now')").bind(key).first();if(!invite)return fail('Invitation expired or already used',404);const invitedGame=await db.prepare('SELECT status FROM games WHERE id=?').bind(invite.game_id).first();if(invitedGame?.status!=='setup')return fail('This battle has already started',409);const result=await db.batch([db.prepare('UPDATE invitations SET used_by=? WHERE token_hash=? AND used_by IS NULL').bind(user.id,key),db.prepare('INSERT OR IGNORE INTO memberships(game_id,user_id) VALUES(?,?)').bind(invite.game_id,user.id)]);if(result[0].meta.changes!==1)return fail('Invitation already used',409);return json({gameId:invite.game_id});}
  const match=path.match(/^\/api\/games\/([^/]+)(?:\/([a-z-]+))?$/);if(!match)return fail('Not found',404);
  const [,gameId,route]=match;if(!await member(db,gameId,user.id))return fail('Not a game member',403);
  const game=await db.prepare('SELECT * FROM games WHERE id=?').bind(gameId).first();if(!game)return fail('Not found',404);
@@ -125,9 +125,23 @@ export default {async fetch(req,env){try{
   }catch(e){if(/constraint|abort|stale|conflict/i.test(String(e)))return fail('Concurrent game change; reload',409);throw e;}
   return json({ok:true,action:b.action,shipId:ship.id,revision:game.revision+1,...(b.action==='roll-initiative'?{initiative:details}:{sealed:true})});
  }
+ if(route==='start'&&req.method==='POST'){
+  if(user.id!==game.host_id)return fail('Only the host can start the battle',403);
+  if(game.status!=='setup')return fail('Battle already started',409);
+  const b=await readBody(req);if(b.expectedRevision!==game.revision)return fail('Game changed; reload',409);
+  if(members.length!==2)return fail('Exactly two players are required for the Vorchan movement trial',409);
+  const ready=(await db.prepare('SELECT owner_id,public_state_json FROM ships WHERE game_id=?').bind(gameId).all()).results;
+  if(ready.length!==2||members.some(m=>ready.filter(s=>s.owner_id===m.user_id).length!==1)||ready.some(s=>JSON.parse(s.public_state_json||'{}').libraryId!==VORCHAN_LIBRARY_RECORD.id))return fail('Assign one database-backed Vorchan to each player before starting',409);
+  const result=await db.batch([
+   db.prepare("UPDATE games SET status='active',revision=revision+1 WHERE id=? AND status='setup' AND revision=?").bind(gameId,game.revision),
+   event(db,game,user.id,'battle_started',{players:members.length,ships:ready.length})
+  ]);
+  if(result[0].meta.changes!==1)return fail('Concurrent start; reload',409);
+  return json({started:true,revision:game.revision+1});
+ }
  if(route==='trial-vorchan'&&req.method==='POST'){
   if(user.id!==game.host_id)return fail('Host only',403);
-  if(game.turn!==1||game.phase_id!=='power'||game.status!=='active')return fail('Trial setup must occur before turn one',409);
+  if(game.turn!==1||game.phase_id!=='power'||game.status!=='setup')return fail('Trial setup is available only in the battle staging room',409);
   if(members.length!==2)return fail('Two distinct battle members are required before trial setup',409);
   const existing=await db.prepare('SELECT COUNT(*) AS n FROM ships WHERE game_id=?').bind(gameId).first();
   if(existing.n!==0)return fail('Trial requires an empty battlefield',409);
@@ -157,7 +171,7 @@ export default {async fetch(req,env){try{
   const state=JSON.parse(ship.private_state_json||'{}').trial;
   return json({library:VORCHAN_LIBRARY_RECORD,scsIdentification:VORCHAN_SCS_IDENTIFICATION,scsAudit:auditVorchanIdentification(),ship:{id:ship.id,ownerId:ship.owner_id,q:ship.q,r:ship.r,facing:ship.facing,speed:ship.speed,initiative:state?.initiative??null,ew:ship.owner_id===user.id||user.id===game.host_id?state?.ew:undefined},capabilities:{initiative:true,thrustPreview:true,automaticCombat:false,verifiedDamageDiagram:false}});
  }
- if((route==='trial-power'||route==='trial-ew')&&req.method==='POST'){
+ if((route==='trial-power'||route==='trial-ew')&&req.method==='POST'){if(game.status!=='active')return fail('Battle has not started',409);
   const targetPhase=route==='trial-power'?'power':'ew_commit';
   if(game.phase_id!==targetPhase)return fail('Required phase: '+targetPhase,409);
   const b=await readBody(req);
@@ -182,7 +196,7 @@ export default {async fetch(req,env){try{
   if(batch.some(x=>x.meta.changes!==1))return fail('Concurrent update; reload',409);
   return json({ok:true,shipId:ship.id,revision:game.revision+1,allocation:route==='trial-power'?trial.powerAllocation:{committed:true}});
  }
- if(route==='trial-roll'&&req.method==='POST'){
+ if(route==='trial-roll'&&req.method==='POST'){if(game.status!=='active')return fail('Battle has not started',409);
   if(game.phase_id!=='initiative')return fail('Initiative phase required',409);
   const b=await readBody(req);
   if(b.expectedRevision!==game.revision)return fail('Game changed; reload',409);
@@ -204,7 +218,7 @@ export default {async fetch(req,env){try{
   if(batch.some(x=>x.meta.changes!==1))return fail('Concurrent change; reload',409);
   return json({shipId:ship.id,initiative:result,revision:game.revision+1});
  }
- if(route==='trial-movement'&&req.method==='POST'){
+ if(route==='trial-movement'&&req.method==='POST'){if(game.status!=='active')return fail('Battle has not started',409);
   if(game.phase_id!=='movement')return fail('Movement phase required',409);
   const b=await readBody(req);
   if(b.expectedRevision!==game.revision)return fail('Game changed; reload',409);
@@ -231,10 +245,11 @@ export default {async fetch(req,env){try{
   if(ship.owner_id!==user.id&&game.host_id!==user.id)return fail('Not your ship',403);
   try{return json({libraryId:VORCHAN_LIBRARY_RECORD.id,...vorchanThrustPreview(b.purchasedThrust),authoritative:true,committed:false});}catch(e){if(e instanceof RangeError)return fail(e.message);throw e;}
  }
- if(route==='invite'&&req.method==='POST'){if(user.id!==game.host_id)return fail('Host only',403);const token=hex(bytes(24));await db.prepare("INSERT INTO invitations(token_hash,game_id,created_by,expires_at) VALUES(?,?,?,datetime('now','+7 days'))").bind(await sha(token),gameId,user.id).run();return json({token,expiresInDays:7});}
+ if(route==='invite'&&req.method==='POST'){if(game.status!=='setup')return fail('Invitations are closed after battle start',409);if(user.id!==game.host_id)return fail('Host only',403);const token=hex(bytes(24));await db.prepare("INSERT INTO invitations(token_hash,game_id,created_by,expires_at) VALUES(?,?,?,datetime('now','+7 days'))").bind(await sha(token),gameId,user.id).run();return json({token,expiresInDays:7});}
  if(route==='initiative'&&req.method==='POST'){if(user.id!==game.host_id)return fail('Host only',403);const b=await readBody(req);if(!members.some(m=>m.user_id===b.playerId)||!Number.isInteger(b.rank)||b.rank<0||b.rank>999)return fail('Invalid player or rank');if(game.phase_id==='movement')return fail('Cannot change initiative during movement',409);await db.prepare('UPDATE memberships SET initiative_rank=? WHERE game_id=? AND user_id=?').bind(b.rank,gameId,b.playerId).run();return json({ok:true});}
- if(route==='ships'&&req.method==='POST'){const b=await readBody(req);if(!validateFacing(b.facing)||!Number.isInteger(b.q)||!Number.isInteger(b.r)||Math.abs(b.q)>10000||Math.abs(b.r)>10000)return fail('Invalid hex/facing');const owner=b.ownerId||user.id;if(owner!==user.id&&user.id!==game.host_id)return fail('Cannot create another player\'s ship',403);if(!members.some(m=>m.user_id===owner))return fail('Owner is not a member');const id=uuid(),label=String(b.label||'Ship').slice(0,80);await db.batch([db.prepare('INSERT INTO ships(id,game_id,owner_id,label,q,r,facing) VALUES(?,?,?,?,?,?,?)').bind(id,gameId,owner,label,b.q,b.r,b.facing),event(db,game,user.id,'ship_created',{shipId:id,label,ownerId:owner,q:b.q,r:b.r,facing:b.facing})]);return json({id},201);}
+ if(route==='ships'&&req.method==='POST'){if(game.status!=='setup')return fail('Ships can only be added in the staging room',409);const b=await readBody(req);if(!validateFacing(b.facing)||!Number.isInteger(b.q)||!Number.isInteger(b.r)||Math.abs(b.q)>10000||Math.abs(b.r)>10000)return fail('Invalid hex/facing');const owner=b.ownerId||user.id;if(owner!==user.id&&user.id!==game.host_id)return fail('Cannot create another player\'s ship',403);if(!members.some(m=>m.user_id===owner))return fail('Owner is not a member');const id=uuid(),label=String(b.label||'Ship').slice(0,80);await db.batch([db.prepare('INSERT INTO ships(id,game_id,owner_id,label,q,r,facing) VALUES(?,?,?,?,?,?,?)').bind(id,gameId,owner,label,b.q,b.r,b.facing),event(db,game,user.id,'ship_created',{shipId:id,label,ownerId:owner,q:b.q,r:b.r,facing:b.facing})]);return json({id},201);}
  if(route==='attach-scs'&&req.method==='POST'){
+  if(game.status!=='setup')return fail('Attach SCS before starting the battle',409);
   if(user.id!==game.host_id)return fail('Host only',403);
   const b=await readBody(req);
   if(!/^[a-f0-9-]{36}$/i.test(String(b.shipId||''))||!/^[a-f0-9-]{36}$/i.test(String(b.templateId||'')))return fail('Invalid ship or template ID');
@@ -308,7 +323,7 @@ export default {async fetch(req,env){try{
  }
  if(route==='events'&&req.method==='GET'){const rows=await db.prepare('SELECT turn,phase_id,actor_id,event_type,public_json,created_at FROM events WHERE game_id=? ORDER BY rowid DESC LIMIT 100').bind(gameId).all();return json(rows.results.map(e=>({...e,public:JSON.parse(e.public_json),public_json:undefined})));}
  if(route==='export'&&req.method==='GET'){if(user.id!==game.host_id)return fail('Host only',403);const ships=(await db.prepare('SELECT * FROM ships WHERE game_id=?').bind(gameId).all()).results;const orders=(await db.prepare('SELECT * FROM orders WHERE game_id=?').bind(gameId).all()).results;const events=(await db.prepare('SELECT * FROM events WHERE game_id=?').bind(gameId).all()).results;return json({format:'b5w-stage1-v1',exportedAt:new Date().toISOString(),game,members,ships,orders,events});}
- if(route==='orders'&&req.method==='POST'){
+ if(route==='orders'&&req.method==='POST'){if(game.status!=='active')return fail('Start the battle before issuing orders',409);
   const b=await readBody(req),payload=b.payload??{pass:true};if(!phase||phase.mode==='automatic')return fail('No player order needed');if(b.expectedRevision!==game.revision)return fail('Game state changed; reload',409);
   if(payload.acknowledgedPhase!==game.phase_id||payload.acknowledgedProcedures!==true)return fail('Review and acknowledge the current phase procedures before locking an order',400);
   const serialized=JSON.stringify(payload);if(serialized.length>10000||!payload||typeof payload!=='object'||Array.isArray(payload))return fail('Invalid order payload');
