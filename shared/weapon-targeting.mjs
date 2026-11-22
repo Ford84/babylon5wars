@@ -10,7 +10,8 @@ const xy=p=>({x:Math.sqrt(3)*(p.q+p.r/2),y:1.5*p.r});
 const directionAngle=(a,b)=>{const p=xy(a),t=xy(b);return Math.atan2(t.y-p.y,t.x-p.x)*180/Math.PI};
 const norm=a=>((a%360)+360)%360;
 const delta=(a,b)=>((a-b+540)%360)-180;
-// Facing follows movement-rules.mjs: 0 NE (+q,-r), 1 E (+q),\n// 2 SE (+r), 3 SW (-q,+r), 4 W (-q), 5 NW (-r).
+// Facing follows movement-rules.mjs: 0 NE (+q,-r), 1 E (+q), 
+// 2 SE (+r), 3 SW (-q,+r), 4 W (-q), 5 NW (-r).
 export function bearingDegrees(shooter,target,{sameHexPrevious=null}={}){
  if(![shooter?.q,shooter?.r,target?.q,target?.r].every(int))throw new RangeError('Invalid hex coordinates');
  if(shooter.q===target.q&&shooter.r===target.r){
@@ -74,7 +75,8 @@ export function vorchanTargetingPreview({shooter,target,mountId,arc,blockingHexe
  const incoming=facingDirections(shooter,target,{sameHexPrevious});
  const direction=incoming.requiresChoice?(incoming.choices?.includes(defenderDirection)?defenderDirection:null):incoming.direction;
  const los=verifiedTerrain?lineOfSight({shooter,target,blockingHexes}):{clear:false,reason:'Terrain and LOS not verified'};
- if(target.libraryId&&target.libraryId!==VORCHAN.id)throw new RangeError('Target SCS defence not verified for this class');\n const defence=direction?VORCHAN.defence[direction]:null;
+ if(target.libraryId&&target.libraryId!==VORCHAN.id)throw new RangeError('Target SCS defence not verified for this class'); 
+ const defence=direction?VORCHAN.defence[direction]:null;
  const fireControl=weapon.fireControl[targetFireControlIndex(target.hullClass||'heavy_combat')];
  const rangePenalty=weaponRangePenalty({range:distance,penaltyPerStep:weapon.rangePenaltyPerHex});
  const ew=ewAttackModifier({attackerOffensive:attackerOffensiveEW,targetDefensive:targetDefensiveEW,rangePenalty});
