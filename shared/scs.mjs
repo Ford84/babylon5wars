@@ -1,3 +1,4 @@
+import {verifyDiagramSystem} from './scs-diagram.mjs';
 // Canonical SCS data model, v1. Values are transcribed from an identified
 // printed control sheet; never inferred from faction or ship name.
 const obj=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
@@ -29,6 +30,7 @@ export function validateSCS(s){
    if(!kinds.has(sys.kind))errors.push(sys.id+': invalid kind');
    if(!s.sections?.some(section=>section.id===sys.section))errors.push(sys.id+': undefined section');
    if(!int(sys.armour)||!int(sys.boxes)||sys.boxes===0)errors.push(sys.id+': invalid armour/boxes');
+   const diagram=verifyDiagramSystem(sys);if(!diagram.valid)errors.push(...diagram.errors.map(e=>sys.id+': '+e));
    if(sys.power!==null&&sys.power!==undefined&&!int(sys.power))errors.push(sys.id+': invalid power');
    if(sys.kind==='sensor'&&!int(sys.sensorStrength))errors.push(sys.id+': sensor strength required');
    if(sys.kind==='engine'&&!int(sys.freeThrust))errors.push(sys.id+': free thrust required');
