@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {STLLoader} from 'three/addons/loaders/STLLoader.js';
 const MODEL='/models/vorchan.glb';
 const hexPoint=(q,r)=>({x:Math.sqrt(3)*12*(q+r/2),z:18*r});
 function makeVorchan(){
@@ -12,7 +13,7 @@ function makeVorchan(){
  g.scale.setScalar(.72);return g;
 }
 export default function Map3D({ships,selected,setSelected,preset='standard'}){
- const mount=useRef(null),engine=useRef(null),[zoom,setZoom]=useState(1),[modelStatus,setModelStatus]=useState('Loading model');
+ const mount=useRef(null),engine=useRef(null),[zoom,setZoom]=useState(1),[localModel,setLocalModel]=useState(null),[modelStatus,setModelStatus]=useState('Loading model');
  const dims={standard:[20,32],outer:[40,64],inner:[80,128]}[preset]||[20,32];
  useEffect(()=>{
   const host=mount.current;if(!host)return;
@@ -28,13 +29,17 @@ export default function Map3D({ships,selected,setSelected,preset='standard'}){
   const updateCamera=()=>{const aspect=host.clientWidth/Math.max(360,host.clientHeight),scale=base/zoom;camera.left=-scale*aspect/2;camera.right=scale*aspect/2;camera.top=scale/2;camera.bottom=-scale/2;camera.position.set(centre.x+scale*.12,scale*.8,centre.z+scale*.9);camera.lookAt(centre.x,0,centre.z);camera.updateProjectionMatrix();renderer.setSize(host.clientWidth,Math.max(360,host.clientHeight));renderer.render(scene,camera);};
   const redraw=(modelFactory)=>{for(const item of models)scene.remove(item);models.length=0;pick.length=0;ships.forEach((s,i)=>{if(!Number.isInteger(s.q)||!Number.isInteger(s.r)||s.q<0||s.r<0||s.q>=cols||s.r>=rows)return;const p=hexPoint(s.q,s.r),model=modelFactory();model.position.set(p.x,1,p.z);model.rotation.y=(s.facing||0)*Math.PI/3;scene.add(model);models.push(model);model.traverse(o=>{if(o.isMesh){o.userData.shipId=s.id??i;pick.push(o);}});const ring=new THREE.Mesh(new THREE.RingGeometry(8,9,32),new THREE.MeshBasicMaterial({color:selected===(s.id??i)?0x8bdcff:0x446c9c,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.set(p.x,.1,p.z);scene.add(ring);models.push(ring);});updateCamera();};
   let factory=()=>makeVorchan(),alive=true;redraw(factory);
-  new GLTFLoader().load(MODEL,gltf=>{if(!alive)return;const source=gltf.scene;source.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(source),sz=box.getSize(new THREE.Vector3());const factor=14/Math.max(sz.x,sz.y,sz.z,1);factory=()=>{const obj=source.clone(true);obj.scale.setScalar(factor);return obj;};setModelStatus('Vorchan GLB');redraw(factory);},undefined,()=>{if(alive)setModelStatus('Coloured 3D Vorchan preview · GLB not yet licensed');});
+  const useGeometry=(geometry)=>{geometry.computeVertexNormals();geometry.computeBoundingBox();const size=geometry.boundingBox.getSize(new THREE.Vector3());const centre=geometry.boundingBox.getCenter(new THREE.Vector3());geometry.translate(-centre.x,-centre.y,-centre.z);const scale=14/Math.max(size.x,size.y,size.z,1);factory=()=>{const group=new THREE.Group();const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:0x77346f,metalness:.48,roughness:.38,side:THREE.DoubleSide}));mesh.scale.setScalar(scale);mesh.rotation.x=-Math.PI/2;group.add(mesh);return group;};setModelStatus('Tyrel Lohr Vorchan STL · locally loaded · purple material preview');redraw(factory);};
+  if(localModel){try{useGeometry(new STLLoader().parse(localModel));}catch(e){setModelStatus('Unable to read STL: '+e.message);}}
+  else {
+  new GLTFLoader().load(MODEL,gltf=>{if(!alive)return;const source=gltf.scene;source.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(source),sz=box.getSize(new THREE.Vector3());const factor=14/Math.max(sz.x,sz.y,sz.z,1);factory=()=>{const obj=source.clone(true);obj.scale.setScalar(factor);return obj;};setModelStatus('Vorchan GLB');redraw(factory);},undefined,()=>{if(alive)setModelStatus('Coloured 3D Vorchan preview · load Tyrel Lohr STL below');});}
+
   const onClick=e=>{const rect=renderer.domElement.getBoundingClientRect();mouse.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(mouse,camera);const hits=ray.intersectObjects(pick,false);if(hits.length)setSelected(hits[0].object.userData.shipId);};
   const onWheel=e=>{e.preventDefault();setZoom(z=>Math.min(12,Math.max(.4,z*(e.deltaY<0?1.15:1/1.15))));};
   renderer.domElement.addEventListener('click',onClick);renderer.domElement.addEventListener('wheel',onWheel,{passive:false});engine.current={updateCamera};
   const resize=new ResizeObserver(updateCamera);resize.observe(host);updateCamera();
   return()=>{alive=false;resize.disconnect();renderer.domElement.removeEventListener('click',onClick);renderer.domElement.removeEventListener('wheel',onWheel);renderer.dispose();host.removeChild(renderer.domElement);engine.current=null;};
- },[preset,ships,selected,setSelected]);
+ },[preset,ships,selected,setSelected,localModel]);
  useEffect(()=>engine.current?.updateCamera(),[zoom]);
- return <div><div className="map3d-controls"><button type="button" onClick={()=>setZoom(z=>Math.max(.4,z/1.3))}>− Zoom out</button><button type="button" onClick={()=>setZoom(z=>Math.min(12,z*1.3))}>+ Zoom in</button><button type="button" onClick={()=>setZoom(1)}>Reset camera</button><span>{modelStatus}</span></div><div ref={mount} className="map3d-viewport" aria-label="Interactive 3D tactical hex battlefield"/></div>;
+ return <div><div className="map3d-controls"><button type="button" onClick={()=>setZoom(z=>Math.max(.4,z/1.3))}>− Zoom out</button><button type="button" onClick={()=>setZoom(z=>Math.min(12,z*1.3))}>+ Zoom in</button><button type="button" onClick={()=>setZoom(1)}>Reset camera</button><span>{modelStatus}</span></div><div className="map3d-import"><label>Tyrel Lohr Vorchan STL (local preview) <input type="file" accept=".stl" onChange={async e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>30*1024*1024){setModelStatus('STL exceeds 30 MB local preview limit');return;}setLocalModel(await file.arrayBuffer());}}/></label><a href="https://cults3d.com/en/3d-model/game/centauri-vorchan-attack-cruiser" target="_blank" rel="noopener noreferrer">Get Tyrel Lohr's Vorchan model</a><button type="button" onClick={()=>setLocalModel(null)}>Use built-in model</button><small>STL remains in your browser; not uploaded to the server. Colour is a preview material, not the author's texture.</small></div><div ref={mount} className="map3d-viewport" aria-label="Interactive 3D tactical hex battlefield"/></div>;
 }
