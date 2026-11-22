@@ -21,9 +21,9 @@ test('W4 fails closed without verified terrain or per-gun history',()=>{
  const result=resolveVorchanShipFire({...args,ships:noHistory});
  assert.equal(result.complete,false);assert.match(result.results[0].blockers.join(' '),/arming history/);
 });
-test('W4 defensive interception remains blocked rather than silently skipped',()=>{
- const blocked=resolveVorchanShipFire({...args,defences:[{playerId:'p2',defence:{assignments:[{shipId:'b',mountId:'twin_nose_port',gun:1,attackId:'a:twin_nose_port:1'}]}}]});
- assert.equal(blocked.complete,false);assert.match(blocked.results[0].blockers.join(' '),/interception/);
+test('W4 defensive interception applies a -2 penalty to the hit threshold',()=>{
+ const blocked=resolveVorchanShipFire({...args,declarations:[...fire,{playerId:'p2',fire:{shots:[{shipId:'b',mountId:'twin_nose_port',gun:1,role:'defensive'}]}}],defences:[{playerId:'p2',defence:{assignments:[{shipId:'b',mountId:'twin_nose_port',gun:1,attackId:'a:twin_nose_port:1'}]}}]});
+ assert.equal(blocked.complete,true);assert.equal(blocked.results[0].intercept.total,-2);assert.equal(blocked.results[0].targetNumber,args.terrainVerified?resolveVorchanShipFire(args).results[0].targetNumber-2:null);
 });
 test('W4 plasma charge requires full interval and same-turn double firing is impossible',()=>{
  const plasma={...fire[0].fire.shots[0],mountId:'plasma_forward',chargeTurns:3};
