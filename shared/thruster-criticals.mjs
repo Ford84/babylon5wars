@@ -15,13 +15,13 @@ export function resolveOverthrustCritical({id,used,rating,markedDamage=0,roll,ef
  const outlet=modifiedRoll>=15&&modifiedRoll<=19||modifiedRoll>=25;
  const efficiency=modifiedRoll>=20;
  const updated={outletFailures:(effects.outletFailures??0)+(outlet?1:0),efficiencyLosses:(effects.efficiencyLosses??0)+(efficiency?1:0)};
- const newRating=effectiveThrusterRating(rating, {outletFailures:outlet?1:0});
+ const newRating=effectiveThrusterRating(rating+(effects.outletFailures??0), updated);
  return {id,roll,markedDamage,overthrust,modifiedRoll,result:modifiedRoll<15?'none':outlet&&efficiency?'both':outlet?'outlet-failure':'efficiency-reduced',effects:updated,ratingAfterCritical:newRating,destroyedByOutlet:newRating===0&&outlet};
 }
 export function thrusterCostForOutput(output,effects={}){
  if(!integer(output)||!integer(effects.outletFailures??0)||!integer(effects.efficiencyLosses??0))throw new RangeError('Invalid thruster output');
- // Each outlet failure loses the first point sent through the thruster.
- // Efficiency losses increase the input points required for each output point.
+ // Outlet failure consumes one additional input per failed outlet, but does not
+ // count against the thruster rating. Efficiency loss increases input per output.
  return output===0?0:output*(1+(effects.efficiencyLosses??0))+(effects.outletFailures??0);
 }
 export function overthrustChecksForTurn(ledger,damageById={}){
@@ -30,4 +30,15 @@ export function overthrustChecksForTurn(ledger,damageById={}){
   if(!integer(markedDamage))throw new RangeError('Invalid marked damage');
   return {id,used:s.used,rating:s.rating,markedDamage,modifier:markedDamage+s.used-s.rating,phase:'end-of-turn-actions'};
  });
+}
+
+// Ledger usage measures delivered thrust (the amount counted against thruster
+// ratings). Engine spending includes efficiency and outlet losses separately.
+export function manoeuvreEngineCost(allocation,effectsById={}){
+ let cost=0;
+ for(const [id,output] of Object.entries(allocation)){
+  if(!integer(output))throw new RangeError('Invalid thruster output');
+  cost+=thrusterCostForOutput(output,effectsById[id]??{});
+ }
+ return cost;
 }
