@@ -6,11 +6,11 @@ import {VORCHAN_SCS_IDENTIFICATION} from '../shared/vorchan-scs-identification.m
 // is from vorchan-scs-identification; incomplete structure tracks are excluded.
 // The backdrop is a schematic outline, NOT a copied official SCS illustration.
 const placements={
- retro:[294,251],plasma_port:[274,291],plasma_starboard:[326,291],
- twin_forward_port:[219,410],twin_forward_starboard:[368,410],
- hangar:[297,455],engine:[232,492],reactor:[294,505],sensors:[353,495],
- command:[364,543],port_thrust:[121,548],starboard_thrust:[475,551],
- aft_port_thrust:[210,645],aft_starboard_thrust:[383,645],jump_drive:[297,635]
+ retro:[294.2,250.7],plasma_port:[274.5,291.2],plasma_starboard:[326.2,291.2],
+ twin_forward_port:[219.2,410.5],twin_forward_starboard:[367.8,410.5],
+ hangar:[297,455.5],engine:[231.8,492.2],reactor:[293.5,505],sensors:[353.2,494.9],
+ command:[364.5,543.2],port_thrust:[121.5,547.9],starboard_thrust:[474.8,550.7],
+ aft_port_thrust:[209.8,644.5],aft_starboard_thrust:[383,644.5],jump_drive:[297.1,635.5]
 };
 function boxGeometry(system){
  const anchor=placements[system.id];
