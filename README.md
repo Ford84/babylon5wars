@@ -23,3 +23,10 @@ This is a zero-dependency Worker; `npx wrangler deploy` with `wrangler.jsonc` pu
 
 ## Repository creation
 The connected GitHub integration lacks a create-repository action; this source is temporarily held as a CLEAN, separate `rpg/space-combat` branch of the original GitHub repo. It does not alter the source repo's main or existing staging branches. Transfer this branch to a new repository when that action becomes available.
+
+## Ship presets (Core Rules + Tri-Star)
+The battle-setup screen now includes a **Preloaded ship** drop-down with **29 spacecraft** from the *Babylon 5 RPG, Second Edition Core Rules* (printed pp. 216–230), and the **Tri-Star Superiority Fighter** from Clark's Second Edition character sheet. The catalogue endpoint is `GET /api/ship-presets`; ships are grouped by faction in the selector. Selecting a ship fills the ship name and the editable stats JSON field. Manual custom ships are still supported.
+
+The source catalogue preserves structural areas, individual weapon mounts, special traits and the page or character-sheet reference. The Quick Space Combat implementation currently resolves only basic weapon damage and ignores many special weapon modes, shields, defensive interceptors, fire restrictions, and specialised orders. Special-effect-only guns are deliberately **not fired automatically**. Clark's Tri-Star uses published **Defence 40**, **Armour 27 with shields** (14 otherwise), **Sensors +7** crew-capped (+21 installed), **Stealth 48 with equipment** (38 otherwise), **52 current structural spaces** (60 maximum), and the sheet's listed front weapons and turret shield systems. The optional rear Photonic Mine Layer is mentioned but not enabled.
+
+**Source issue:** The Core Rules appear to print Minbari warrior-caste crew values for the Narn Frazi fighter. This discrepancy is annotated rather than silently changed.
