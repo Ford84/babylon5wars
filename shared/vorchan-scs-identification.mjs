@@ -24,8 +24,8 @@ export const VORCHAN_SCS_IDENTIFICATION=Object.freeze({
   {id:'port_thrust',kind:'thruster',section:'port',armour:5,boxes:12,rows:[2,2,2,2,2,2],iconValue:5,verified:true},
   {id:'starboard_thrust',kind:'thruster',section:'starboard',armour:5,boxes:12,rows:[2,2,2,2,2,2],iconValue:5,verified:true},
   {id:'aft_structure',kind:'structure',section:'aft',armour:4,boxes:44,rows:[44],verified:true},
-  {id:'jump_aft_port',kind:'jump-engine',section:'aft',armour:4,boxes:8,rows:[4,4],verified:true},
-  {id:'jump_aft_starboard',kind:'jump-engine',section:'aft',armour:4,boxes:8,rows:[4,4],verified:true},
+  {id:'aft_port_thrust',kind:'thruster',section:'aft',armour:4,boxes:8,rows:[4,4],iconValue:5,verified:true},
+  {id:'aft_starboard_thrust',kind:'thruster',section:'aft',armour:4,boxes:8,rows:[4,4],iconValue:5,verified:true},
   {id:'jump_aft_centre',kind:'jump-engine',section:'aft',armour:6,boxes:16,rows:[4,4,4,4],verified:true}
  ],
  weapons:[{id:'plasma-accelerator',printedMounts:1},{id:'twin-array',printedMounts:2}],
