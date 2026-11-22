@@ -3,6 +3,10 @@ import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {STLLoader} from 'three/addons/loaders/STLLoader.js';
 const MODEL='/models/vorchan.glb';
+const TYREL_CACHE='b5w-tyrel-vorchan-model';
+function modelStore(){return new Promise((resolve,reject)=>{const request=indexedDB.open(TYREL_CACHE,1);request.onupgradeneeded=()=>request.result.createObjectStore('models');request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});}
+async function storedTyrelModel(value){const db=await modelStore();return new Promise((resolve,reject)=>{const tx=db.transaction('models',value===undefined?'readonly':'readwrite');const request=value===undefined?tx.objectStore('models').get('default'):value===null?tx.objectStore('models').delete('default'):tx.objectStore('models').put(value,'default');request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);tx.oncomplete=()=>db.close();});}
+
 const hexPoint=(q,r)=>({x:Math.sqrt(3)*12*(q+r/2),z:18*r});
 function makeVorchan(){
  const g=new THREE.Group(),purple=new THREE.MeshStandardMaterial({color:0x69316f,metalness:.45,roughness:.42}),gold=new THREE.MeshStandardMaterial({color:0xc6a66c,metalness:.6,roughness:.3}),dark=new THREE.MeshStandardMaterial({color:0x292039,metalness:.5}),engine=new THREE.MeshBasicMaterial({color:0x69c7ff});
@@ -14,6 +18,7 @@ function makeVorchan(){
 }
 export default function Map3D({ships,selected,setSelected,preset='standard'}){
  const mount=useRef(null),engine=useRef(null),[zoom,setZoom]=useState(1),[localModel,setLocalModel]=useState(null),[modelStatus,setModelStatus]=useState('Loading model');
+ useEffect(()=>{let alive=true;storedTyrelModel().then(data=>{if(alive&&data){setLocalModel(data);setModelStatus('Tyrel Lohr Vorchan — saved default model');}}).catch(()=>{});return()=>{alive=false}},[]);
  const dims={standard:[20,32],outer:[40,64],inner:[80,128]}[preset]||[20,32];
  useEffect(()=>{
   const host=mount.current;if(!host)return;
@@ -41,5 +46,5 @@ export default function Map3D({ships,selected,setSelected,preset='standard'}){
   return()=>{alive=false;resize.disconnect();renderer.domElement.removeEventListener('click',onClick);renderer.domElement.removeEventListener('wheel',onWheel);renderer.dispose();host.removeChild(renderer.domElement);engine.current=null;};
  },[preset,ships,selected,setSelected,localModel]);
  useEffect(()=>engine.current?.updateCamera(),[zoom]);
- return <div><div className="map3d-controls"><button type="button" onClick={()=>setZoom(z=>Math.max(.4,z/1.3))}>− Zoom out</button><button type="button" onClick={()=>setZoom(z=>Math.min(12,z*1.3))}>+ Zoom in</button><button type="button" onClick={()=>setZoom(1)}>Reset camera</button><span>{modelStatus}</span></div><div className="map3d-import"><label>Tyrel Lohr Vorchan STL (local preview) <input type="file" accept=".stl" onChange={async e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>30*1024*1024){setModelStatus('STL exceeds 30 MB local preview limit');return;}setLocalModel(await file.arrayBuffer());}}/></label><a href="https://cults3d.com/en/3d-model/game/centauri-vorchan-attack-cruiser" target="_blank" rel="noopener noreferrer">Get Tyrel Lohr's Vorchan model</a><button type="button" onClick={()=>setLocalModel(null)}>Use built-in model</button><small>STL remains in your browser; not uploaded to the server. Colour is a preview material, not the author's texture.</small></div><div ref={mount} className="map3d-viewport" aria-label="Interactive 3D tactical hex battlefield"/></div>;
+ return <div><div className="map3d-controls"><button type="button" onClick={()=>setZoom(z=>Math.max(.4,z/1.3))}>− Zoom out</button><button type="button" onClick={()=>setZoom(z=>Math.min(12,z*1.3))}>+ Zoom in</button><button type="button" onClick={()=>setZoom(1)}>Reset camera</button><span>{modelStatus}</span></div><div className="map3d-import"><label>Tyrel Lohr Vorchan STL (save as default on this browser) <input type="file" accept=".stl" onChange={async e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>30*1024*1024){setModelStatus('STL exceeds 30 MB local preview limit');return;}const data=await file.arrayBuffer();setLocalModel(data);storedTyrelModel(data).catch(()=>setModelStatus('Model loaded for this session; browser storage unavailable'));}}/></label><a href="https://cults3d.com/en/3d-model/game/centauri-vorchan-attack-cruiser" target="_blank" rel="noopener noreferrer">Get Tyrel Lohr's Vorchan model</a><button type="button" onClick={()=>{setLocalModel(null);storedTyrelModel(null).catch(()=>{});}}>Use built-in model</button><small>After one import, this browser automatically uses the Tyrel Lohr model by default on subsequent visits. The STL stays on this device; it is not uploaded or redistributed. Colour is a preview material, not the author's texture.</small></div><div ref={mount} className="map3d-viewport" aria-label="Interactive 3D tactical hex battlefield"/></div>;
 }
