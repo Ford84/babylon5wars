@@ -1,6 +1,0 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {speedChangeCost,adjustTurnDelay,thrusterOverthrust,turnThrustSplit} from '../shared/speed-integration.mjs';
-test('free thrust and purchased thrust finance speed change',()=>{assert.equal(speedChangeCost({speed:5,change:4,accelCost:2,freeThrust:10}).remaining,2);assert.equal(speedChangeCost({speed:5,change:6,accelCost:2,freeThrust:10,purchasedThrust:2}).speed,11);});
-test('engine destruction freezes speed',()=>{assert.throws(()=>speedChangeCost({speed:4,change:1,accelCost:2,freeThrust:10,engineDestroyed:true}));});
-test('unsatisfied delay adjusts with new speed; satisfied delay stays satisfied',()=>{assert.equal(adjustTurnDelay({oldRequired:6,hexesSinceTurn:5,newRequired:8}).remaining,3);assert.equal(adjustTurnDelay({oldRequired:6,hexesSinceTurn:6,newRequired:8}).remaining,0);});
-test('overthrust triggers extra critical and hard double-rating cap',()=>{assert.equal(thrusterOverthrust({rating:4,used:5,damage:2}).criticalModifier,3);assert.throws(()=>thrusterOverthrust({rating:4,used:9}));});
-test('odd point is allocated to chosen thruster',()=>{assert.deepEqual(turnThrustSplit({cost:5,oddTo:'side'}),{main:2,side:3,reverse:false});});

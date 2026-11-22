@@ -1,7 +1,0 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {executeStraightMovement,validateMovementOrder} from '../shared/movement-executor.mjs';
-const ship={q:0,r:0,facing:0,speed:3,version:2};const limits={accelCost:2,availableThrust:8};
-test('acceleration happens before required movement',()=>{const r=executeStraightMovement({ship,order:{speedChange:2},limits});assert.equal(r.next.speed,5);assert.deepEqual([r.next.q,r.next.r],[5,-5]);assert.equal(r.thrustSpent,4);assert.equal(r.path.length,5);});
-test('reverse uses opposite direction and full absolute distance',()=>{const r=executeStraightMovement({ship,order:{speedChange:-5},limits:{...limits,availableThrust:10}});assert.deepEqual([r.next.q,r.next.r],[-2,2]);assert.equal(r.next.speed,-2);});
-test('zero speed remains in place',()=>{const r=executeStraightMovement({ship,order:{speedChange:-3},limits});assert.equal(r.path.length,0);assert.deepEqual([r.next.q,r.next.r],[0,0]);});
-test('reject insufficient thrust and unimplemented manoeuvres',()=>{assert.throws(()=>executeStraightMovement({ship,order:{speedChange:5},limits}));assert.throws(()=>executeStraightMovement({ship,order:{speedChange:0,manoeuvres:[{type:'pivot'}]},limits}));});
-test('stale versions rejected',()=>{assert.throws(()=>validateMovementOrder({ship,order:{speedChange:0},limits,expectedShipVersion:1}));assert.equal(validateMovementOrder({ship,order:{speedChange:0},limits,expectedShipVersion:2}).hexesMoved,3);});

@@ -1,5 +1,0 @@
-import test from 'node:test';import assert from 'node:assert/strict';
-import {thrusterExpenditure,criticalCheckEligibility} from '../shared/compendium-rules.mjs';
-test('overthrust is capped at twice thruster rating and triggers separate critical',()=>{assert.deepEqual(thrusterExpenditure({rating:4,spent:5,damage:2}),{rating:4,spent:5,overthrust:1,requiresAdditionalCritical:true,overthrustCriticalModifier:3});assert.throws(()=>thrusterExpenditure({rating:4,spent:9}));});
-test('normal critical is once per newly damaged non-structure system, after fire',()=>{const a=criticalCheckEligibility({kind:'engine',boxes:8,damageBefore:0,damageAfter:3});assert.deepEqual(a.checks,[{cause:'damage',modifier:3}]);assert.equal(criticalCheckEligibility({kind:'engine',boxes:8,damageBefore:3,damageAfter:3}).checks.length,0);assert.equal(criticalCheckEligibility({kind:'engine',boxes:8,damageBefore:0,damageAfter:8}).checks.length,0);});
-test('thruster overthrust causes an additional check',()=>{const a=criticalCheckEligibility({kind:'thruster',boxes:8,damageBefore:0,damageAfter:1,overthrust:2});assert.deepEqual(a.checks.map(x=>x.cause),['damage','overthrust']);});

@@ -1,4 +1,0 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {verifyDiagramSystem,damageBoxState} from '../shared/scs-diagram.mjs';
-const system={armour:4,armourSource:'legend',boxes:3,damageBoxes:['a','b','c'],sourceReference:'page 1, lower-left legend + system diagram'};
-test('explicitly counted boxes determine damage capacity',()=>{assert.equal(verifyDiagramSystem(system).valid,true);assert.deepEqual(damageBoxState(system,2).map(x=>x.marked),[true,true,false]);});
-test('reject inferred box totals and ambiguous armour provenance',()=>{assert.equal(verifyDiagramSystem({...system,boxes:4}).valid,false);assert.equal(verifyDiagramSystem({...system,armourSource:'nearby number'}).valid,false);assert.equal(verifyDiagramSystem({...system,damageBoxes:['a','a','c']}).valid,false);});

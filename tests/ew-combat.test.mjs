@@ -1,4 +1,0 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {validateEWAllocation,ewAttackModifier} from '../shared/ew-combat.mjs';
-test('EW can be split between defensive and individual enemy targets',()=>{assert.equal(validateEWAllocation({available:8,defensive:3,offensive:{enemyA:4,enemyB:1}}).unspent,0);assert.throws(()=>validateEWAllocation({available:8,defensive:3,offensive:{enemyA:6}}));});
-test('defensive EW subtracts from attack and offensive EW adds',()=>{assert.equal(ewAttackModifier({attackerOffensive:4,targetDefensive:3,rangePenalty:-2}).total,-1);});
-test('lack of lock-on doubles range penalty, not range',()=>{assert.deepEqual(ewAttackModifier({targetDefensive:3,rangePenalty:-2}),{lockedOn:false,offensiveBonus:0,defensivePenalty:-3,adjustedRangePenalty:-4,total:-7});});

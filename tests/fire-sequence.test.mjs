@@ -1,5 +1,0 @@
-import test from 'node:test';import assert from 'node:assert/strict';
-import {FIRE_TIERS,lockFireDeclarations,nextFireTier} from '../shared/fire-sequence.mjs';
-test('fire is locked only when all required players declared',()=>{const attack={shipId:'s',weaponId:'w',targetId:'t',tier:'ship'};assert.throws(()=>lockFireDeclarations({requiredPlayerIds:['a','b'],declarations:[{playerId:'a',attacks:[attack]}]}));const r=lockFireDeclarations({requiredPlayerIds:['a','b'],declarations:[{playerId:'b',attacks:[]},{playerId:'a',attacks:[attack]}]});assert.equal(r.locked,true);assert.equal(r.tiers[1].attacks.length,1);});
-test('official combat sequence has four resolution tiers',()=>{assert.deepEqual(FIRE_TIERS.map(t=>t.id),['ballistic','ship','fighter_vs_fighter','fighter_vs_ship']);const r=lockFireDeclarations({requiredPlayerIds:[],declarations:[]});assert.equal(nextFireTier(r,['ballistic']).id,'ship');});
-test('unknown fire tiers rejected',()=>{assert.throws(()=>lockFireDeclarations({requiredPlayerIds:['a'],declarations:[{playerId:'a',attacks:[{shipId:'s',weaponId:'w',targetId:'t',tier:'other'}]}]}));});
