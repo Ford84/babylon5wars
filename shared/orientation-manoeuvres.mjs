@@ -38,7 +38,7 @@ export function haltPivot(pivot){
 }
 export function beginRoll({rolled=false,startCost,stopCost,agile=false}){
  whole(startCost,'startCost');whole(stopCost,'stopCost');
- return {rolled,active:!agile,agile,thrustCost:startCost,
+ return {rolled:agile?!rolled:rolled,active:!agile,agile,thrustCost:startCost,
   stopCost:agile?0:stopCost,weaponPenalty:-3,hangarOperationsForbidden:!agile,
   maneuverRestrictions:!agile,flipsAtNextMovement:!agile};
 }
