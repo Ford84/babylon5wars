@@ -60,7 +60,7 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
   const physicalMaximum=eligible.reduce((n,id)=>n+rating(id)*2,0);
   if(needed<=limits.availableThrust&&needed<=physicalMaximum)throw new RangeError('Voluntary extended-turn cancellation prohibited');
   next={...old,extendedTurn:null,started:true,version:old.version+1,history:[...old.history,{type:'extended-cancel',reason:'verified physical thrust shortfall',forfeitedThrust:ext.initialThrust}]};
- }elseif(action.type==='extended-start'){
+ }else if(action.type==='extended-start'){
   if(old.extendedTurn||old.turnDelayRemaining>0||old.rollInProgress||old.pivotInProgress||old.pivotActive||![-1,1].includes(action.direction))throw new RangeError('Extended turn prohibited');
   const cost=turnCostAtSpeed(old.speed,LIB.turnCost);
   if(cost<2)throw new RangeError('Extended turn requires at least two thrust');
