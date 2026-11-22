@@ -20,11 +20,11 @@ export function adjudicateVorchanShipTier({ships,attacks,rollJournal,defenderCho
   const choice=defenderChoices[shot.id]||{};
   const incoming=direction.requiresChoice?choice.incoming:direction.direction;
   if(!incoming||direction.requiresChoice&&!direction.choices?.includes(incoming)){
-   pending.push({attackId:shot.id,type:'incoming',choices:direction.choices||[]});continue;
+   pending.push({attackId:shot.id,type:'incoming',choices:direction.choices||[]});break;
   }
   const rolledDamage=rollVorchanDamage({mountId:shot.mountId,chargeTurns:shot.chargeTurns??3,dice:rolled.damageDice,range:hexDistance(shooter,target)});
   const result=applyVorchanStandardVolley({state:states[target.id],damage:rolledDamage.damage,plasma:rolledDamage.plasma,incoming,locationRoll:rolled.locationRoll,primaryRoll:rolled.primaryRoll,sideChoice:choice.sideChoice??null,systemChoice:choice.systemChoice??null});
-  if(result.requiresChoice){pending.push({attackId:shot.id,type:result.choiceType,choices:result.choices||[]});continue}
+  if(result.requiresChoice){pending.push({attackId:shot.id,type:result.choiceType,choices:result.choices||[]});break}
   states[target.id]=result.state;
   outcomes.push({attackId:shot.id,targetId:target.id,damage:rolledDamage.damage,hit:result.hit,trace:result.trace,shipDestroyed:result.state.shipDestroyed});
  }
