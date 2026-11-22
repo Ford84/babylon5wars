@@ -25,3 +25,13 @@ Primary references inspected directly: **2nd Edition Rules Compendium**, Damage 
 6. **Same-tier simultaneous fire**: W4 needs frozen fire snapshots and journal replay so a weapon destroyed during its own tier still fires.
 
 No main/production merge. A passing test for the pure module is not equivalent to end-to-end combat acceptance.
+
+## Follow-up: criticals implemented for verified weapons only
+
+Added `shared/vorchan-criticals.mjs` and `tests/vorchan-criticals.test.mjs`: single end-of-fire check for each surviving non-structure system damaged this turn, d20 + total marked boxes, printed Basic Weapon Critical ranges, cumulative range degradation and per-die damage reduction (minimum 1). The Compendium's printed Basic Weapon Critical chart jumps from **1–12** to **14–18**, omitting **13**. Result 13 is explicitly marked for rule clarification; no invented effect is applied. Other system-specific critical tables remain to be encoded and tested.
+
+### Source discrepancy requiring reconciliation
+
+The separately supplied `Vorchan_SCS_Full_Audit.md` states the original SCS contains **four Twin Array mounts** (two nose, two wing), whereas the current development library and W1–W5 implementation contain **two**. That audit also notes unresolved forward external thruster tracks. The two sources are not reconciled, so it would be unsafe to claim full W5 damage integration or force a destructive database migration. Confirm the physical mount count and wing armour/box counts against the rendered original SCS and reconcile weapon inventory, power budget, arcs, firing declarations and damage routing as one atomic change. Do not invent wing arcs.
+
+**The remaining user-requested requirements are not complete**: authoritative W4 rolls and journal, persisted defender choices, system critical tables and full SCS verification still block end-to-end automatic damage.
