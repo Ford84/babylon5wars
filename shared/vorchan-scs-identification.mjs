@@ -1,14 +1,15 @@
 // Verified from the original Vorchan Version 3: 2E/SF control-sheet diagram.
 // One printed small square equals one damage box. Circled numbers give armour;
 // numbers INSIDE the device icon give weapon/hangar/special values, not armour.
-// Complex structure tracks are retained as uncounted until verified box-by-box.
+// Weapon mounts are counted from individual ship diagram symbols, not weapon datacards or power diamonds.
 export const VORCHAN_SCS_IDENTIFICATION=Object.freeze({
  source:{publication:'Centauri Vorchan Warship',revision:'Version 3: 2E/SF',page:'1',basis:'original printed diagram'},
  sections:['forward','primary','aft','port','starboard'],
  systems:[
   {id:'retro',kind:'thruster',section:'forward',armour:4,boxes:10,rows:[5,5],iconValue:null,verified:true},
-  {id:'plasma_port',kind:'weapon',section:'forward',armour:3,boxes:6,rows:[3,3],weaponCardId:'plasma_accelerator',verified:true},
-  {id:'plasma_starboard',kind:'weapon',section:'forward',armour:3,boxes:6,rows:[3,3],weaponCardId:'plasma_accelerator',verified:true},
+  {id:'forward_port_thrust',kind:'thruster',section:'forward',armour:3,boxes:6,rows:[3,3],verified:true},
+  {id:'forward_starboard_thrust',kind:'thruster',section:'forward',armour:3,boxes:6,rows:[3,3],verified:true},
+  {id:'plasma_forward',kind:'weapon',section:'forward',armour:4,boxes:8,rows:[4,4],weaponCardId:'plasma_accelerator',verified:true},
   {id:'forward_structure',kind:'structure',section:'forward',armour:5,boxes:48,rows:[2,2,2,4,4,6,6,8,8,4,2],verified:true},
   {id:'twin_forward_port',kind:'weapon',section:'forward',armour:5,boxes:10,rows:[5,5],weaponCardId:'twin_array',iconValue:3,verified:true},
   {id:'twin_forward_starboard',kind:'weapon',section:'forward',armour:5,boxes:10,rows:[5,5],weaponCardId:'twin_array',iconValue:3,verified:true},
@@ -25,7 +26,7 @@ export const VORCHAN_SCS_IDENTIFICATION=Object.freeze({
   {id:'aft_starboard_thrust',kind:'thruster',section:'aft',armour:4,boxes:8,rows:[4,4],iconValue:5,verified:true},
   {id:'jump_drive',kind:'other',section:'aft',armour:6,boxes:16,rows:[4,4,4,4],verified:true}
  ],
- weapons:[{id:'plasma_accelerator',printedMounts:2},{id:'twin_array',printedMounts:2}],
+ weapons:[{id:'plasma_accelerator',printedMounts:1},{id:'twin_array',printedMounts:2}],
  completeness:{allSystemsLocated:true,allArmourIdentified:true,allDamageBoxesCounted:true,allWeaponArcsIdentified:true,sensorStrengthVerified:false,freeThrustVerified:false}
 });
 export function auditVorchanIdentification(){
