@@ -257,6 +257,11 @@ export default {async fetch(req,env){try{
  if(route==='orders'&&req.method==='POST'){
   const b=await readBody(req),payload=b.payload??{pass:true};if(!phase||phase.mode==='automatic')return fail('No player order needed');if(b.expectedRevision!==game.revision)return fail('Game state changed; reload',409);
   const serialized=JSON.stringify(payload);if(serialized.length>10000||!payload||typeof payload!=='object'||Array.isArray(payload))return fail('Invalid order payload');
+  if(game.phase_id==='initiative'){
+   const shipStates=(await db.prepare('SELECT id,private_state_json,public_state_json FROM ships WHERE game_id=?').bind(gameId).all()).results;
+   const missing=shipStates.filter(s=>{const p=JSON.parse(s.public_state_json||'{}'),v=JSON.parse(s.private_state_json||'{}');return p.trial&&v.trial?.initiative?.turn!==game.turn||s.template_id&&v.scs?.initiative?.turn!==game.turn;});
+   if(missing.length)return fail('Roll initiative individually for every ship before advancing: '+missing.map(s=>s.id).join(', '),409);
+  }
   const previous=await completedOrders(db,game),completed=previous.map(o=>o.player_id);if(!canSubmit(phase,members,completed,user.id))return fail('No action required from this player',409);
   const newCompleted=[...completed,user.id],isFinal=newCompleted.length===members.length;
   const next=isFinal?followingPhase(game.phase_id,game.turn):null;
