@@ -5,22 +5,31 @@ import {VORCHAN_SCS_IDENTIFICATION} from '../shared/vorchan-scs-identification.m
 // Coordinates are in original PDF points (612 x 792). Verified track topology
 // is from vorchan-scs-identification; incomplete structure tracks are excluded.
 // The backdrop is a schematic outline, NOT a copied official SCS illustration.
-const placements={
- retro:[294.2,250.7],plasma_port:[274.5,291.2],plasma_starboard:[326.2,291.2],
- twin_forward_port:[219.2,410.5],twin_forward_starboard:[367.8,410.5],
- hangar:[297,455.5],engine:[231.8,492.2],reactor:[293.5,505],sensors:[353.2,494.9],
- command:[364.5,543.2],port_thrust:[121.5,547.9],starboard_thrust:[474.8,550.7],
- aft_port_thrust:[209.8,644.5],aft_starboard_thrust:[383,644.5],jump_drive:[297.1,635.5]
+// Audited rectangle origins from original Vorchan SCS PDF, page 1.
+// Only spatially unambiguous components are included; no inferred hull tracks.
+const grids={
+ retro:{x:294.25,y:250.75,rows:[[0,5],[0,5]]},
+ plasma_port:{x:274.5,y:291.25,rows:[[0,3],[0,3]]},
+ plasma_starboard:{x:326.25,y:291.25,rows:[[0,3],[0,3]]},
+ twin_forward_port:{x:219.25,y:410.5,rows:[[0,5],[0,5]]},
+ twin_forward_starboard:{x:367.75,y:410.5,rows:[[0,5],[0,5]]},
+ engine:{x:231.75,y:492.25,rows:[[1,3],[0,5],[1,3]]},
+ sensors:{x:353.25,y:494.9,rows:[[1.5,2],[0,5],[0,5]]},
+ command:{x:364.5,y:543.25,rows:[[0,2]]},
+ aft_port_thrust:{x:209.75,y:644.5,rows:[[0,4],[0,4]]},
+ aft_starboard_thrust:{x:383,y:644.5,rows:[[0,4],[0,4]]},
+ jump_drive:{x:297.1,y:635.5,rows:[[0,4],[0,4],[0,4],[0,4]]}
 };
+const VORCHAN_HALF_SILHOUETTE='M310.5,212.5 C310.5,212.5 256.5,279.2 258.8,301.8 C261.0,324.3 283.5,336.3 283.5,336.3 L254.2,473.5 L216,473.5 L195.8,530.5 C195.8,530.5 151.1,531.2 125.5,519.2 C73.5,495 51.8,455.5 51.8,455.5 C51.8,455.5 58.9,587.8 134.3,641.5 C207.8,693.9 254.3,691.7 254.3,691.7 L267.8,653.5 L272.3,662.5 L285.8,662.5 L285.8,676 L292.5,676 L292.5,662.5 L301.5,662.5 L303.8,651.2 L310.5,739 Z';
 function boxGeometry(system){
- const anchor=placements[system.id];
- if(!anchor||!system.verified||!Array.isArray(system.rows))return [];
- const width=6.75, step=6.75, max=Math.max(...system.rows);
- return system.rows.flatMap((count,row)=>Array.from({length:count},(_,column)=>({
-  id:system.id+':'+(system.rows.slice(0,row).reduce((a,b)=>a+b,0)+column+1),
-  x:anchor[0]+(max-count)*step/2+column*step,
-  y:anchor[1]+row*step,width
+ const g=grids[system.id];
+ if(!g||!system.verified)return [];
+ const boxes=g.rows.flatMap(([offset,count],row)=>Array.from({length:count},(_,column)=>({
+  id:system.id+':'+(g.rows.slice(0,row).reduce((n,r)=>n+r[1],0)+column+1),
+  x:Math.round((g.x+offset*6.75+column*6.75)*100)/100,
+  y:Math.round((g.y+row*6.75)*100)/100,width:6.75
  })));
+ return boxes.length===system.boxes?boxes:[];
 }
 export default function SCSViewer({ship,api}){
  const [definition,setDefinition]=useState(null),[error,setError]=useState('');
@@ -49,12 +58,11 @@ export default function SCSViewer({ship,api}){
    <p>{library?.source?.revision||definition?.source?.sheetRevision} · {library?.faction||definition?.faction}</p>
    <dl><dt>Combat Points</dt><dd>{stats?.combatPoints??'Unverified'}</dd><dt>Initiative bonus</dt><dd>{stats?.initiativeBonus??'Unverified'}</dd><dt>Extra power</dt><dd>{stats?.extraPower??'Unverified'}</dd></dl>
    {library&&<>
-    <p className="scs-warning" role="status">Vorchan geometry prototype: verified component box counts with approximate positions on the original 612×792 sheet coordinate system. Structure tracks and firing arcs remain incomplete. Clicking boxes marks them locally for inspection only; no combat damage is saved.</p>
+    <p className="scs-warning" role="status">Vorchan geometry prototype: audited PDF vector origins for the unambiguous component tracks on the original 612×792 sheet coordinate system. Structure tracks and firing arcs remain incomplete. Clicking boxes marks them locally for inspection only; no combat damage is saved.</p>
     <div className="scs-diagram-wrap">
      <svg className="scs-diagram" viewBox="0 0 612 792" role="group" aria-label="Vorchan diagram with individually selectable verified damage boxes">
-      <path d="M310 196 L360 280 L360 410 L404 473 L570 455 Q560 640 366 690 L353 650 L327 676 L310 737 L293 676 L267 650 L254 690 Q60 640 52 455 L208 473 L250 410 L260 280 Z" fill="#aab7c8" fillOpacity=".2" stroke="#8ca8c7" strokeWidth="2"/>
-      <path d="M310 196 L310 737 M270 429 L350 429 M265 583 L355 583" stroke="#56728c" strokeDasharray="3 4" fill="none"/>
-      {['FORWARD','PRIMARY','AFT','PORT','STARBOARD'].map((label,i)=><text key={label} x={[310,310,310,115,485][i]} y={[397,559,601,539,539][i]} textAnchor="middle" fontSize="11" fill="#d3e3f6" letterSpacing="2">{label}</text>)}
+      <path d={VORCHAN_HALF_SILHOUETTE} fill="#aab7c8" fillOpacity=".3" stroke="#8ca8c7" strokeWidth="1.5"/>
+      <path d={VORCHAN_HALF_SILHOUETTE} transform="translate(621 0) scale(-1 1)" fill="#aab7c8" fillOpacity=".3" stroke="#8ca8c7" strokeWidth="1.5"/>
       {systems.filter(s=>s.verified).flatMap(system=>boxGeometry(system).map((box,index)=>{
        const active=!!marked[box.id];
        return <rect key={box.id} x={box.x} y={box.y} width={box.width} height={box.width}
@@ -79,7 +87,7 @@ export default function SCSViewer({ship,api}){
      </div>;
     })}
    </div>)}
-   <p className="hint">Component placement is provisional; it must be reconciled against exact source vector coordinates before claiming a faithful reproduction.</p>
+   <p className="hint">Only independently mapped tracks are selectable. Other tracks remain pending source reconciliation.</p>
   </>}
  </section>;
 }
