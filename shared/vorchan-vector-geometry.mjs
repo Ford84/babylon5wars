@@ -12,10 +12,10 @@ export const VORCHAN_VECTOR_BOXES=Object.freeze({
  forward_structure:rows([[313.75,[303.75,2]],[320.5,[303.75,2]],[327.25,[303.75,2]],[334,[297,4]],[340.75,[297,4]],[347.5,[290.25,6]],[354.25,[290.25,6]],[361,[283.5,8]],[367.75,[283.5,8]],[374.5,[283.5,2],[324,2]],[381.25,[283.5,1],[330.75,1]]]),
  twin_forward_port:rows([[410.5,[219.25,5]],[417.25,[219.25,5]]]),
  twin_forward_starboard:rows([[410.5,[367.75,5]],[417.25,[367.75,5]]]),
- hangar:rows([[455.5,[297,4]],[462.25,[297,4]],[469,[297,4]],[475.75,[297,4]],[482.5,[297,4]]]),
+ unassigned_hangar_region:rows([[455.5,[297,4]],[462.25,[297,4]],[469,[297,4]],[475.75,[297,4]],[482.5,[297,4]]]),
  engine:rows([[492.25,[238.5,3]],[499,[231.75,5]],[505.75,[238.5,3]]]),
  sensors:rows([[494.87,[363.25,2]],[501.37,[353.25,5]],[508.12,[353.25,5]]]),
- reactor:rows([[505,[293.5,5]],[511.75,[293.5,5]],[518.5,[293.5,5]],[525.25,[293.5,5]],[532,[293.5,5]],[538.75,[300.25,3]]]),
+ unassigned_reactor_region:rows([[505,[293.5,5]],[511.75,[293.5,5]],[518.5,[293.5,5]],[525.25,[293.5,5]],[532,[293.5,5]],[538.75,[300.25,3]]]),
  primary_structure_port:rows([[536.5,[246.5,1]],[543.25,[233,5]],[550,[233,5]],[556.75,[246.5,1]]]),
  command:rows([[543.25,[364.5,2]]]),
  port_thrust:rows([[547.91,[121.5,3]],[554.66,[121.5,3]],[561.41,[121.5,3]],[568.16,[121.5,3]],[574.91,[121.5,3]]]),
@@ -31,7 +31,7 @@ export const VORCHAN_VECTOR_AUDIT=Object.freeze({
  excludedReferenceRectangles:20,
  // Some tracks differ from earlier hand-transcribed counts. Never silently
  // replace the rules library until verified against the printed diagram.
- status:'geometry transcribed; semantic cross-check pending'
+ status:'geometry transcribed; hangar and reactor region boxes quarantined pending correct individual mapping'
 });
 export function auditVorchanVectorBoxes(){
  const all=Object.values(VORCHAN_VECTOR_BOXES).flat();
