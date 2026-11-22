@@ -3,13 +3,17 @@
 import {pivotStart,pivotHalt,rollStart,rollHalt,orientationAtMovementStart} from './orientation-stage.mjs';
 import {adjustTurnDelay} from './speed-integration.mjs';
 import {newStagedMovement,stagedMove,turnCostAtSpeed} from './staged-movement.mjs';
+import {createThrusterLedger,allocateThrusterThrust,pendingOverthrustChecks} from './thruster-ledger.mjs';
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
+// Ratings refer to channel capacity, not damage boxes or armour.
+// The forward thruster ratings require an SCS verification pass before damaged-thruster automation.
+export const VORCHAN_THRUSTER_RATINGS=Object.freeze({retro:1,forward_port_thrust:3,forward_starboard_thrust:3,port_thrust:5,starboard_thrust:5,aft_port_thrust:5,aft_starboard_thrust:5});
 export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]}){
  if(!Number.isInteger(turn)||turn<1)throw new RangeError('Invalid battle turn');
  const trial=privateState?.trial;
  if(!trial||trial.libraryId!==LIB.id)throw new RangeError('Not a Vorchan trial ship');
  if(!action||typeof action!=='object'||Array.isArray(action)||!['speed','advance','turn','slide','pivot-start','pivot-halt','roll-start','roll-halt'].includes(action.type))throw new RangeError('Invalid staged action');
- if(Object.keys(action).some(k=>!({speed:['type','change','purchasedThrust'],advance:['type','hexes'],turn:['type','direction'],slide:['type','direction'], 'pivot-start':['type','direction','thrusterPair','oddTo'], 'pivot-halt':['type','thrusterPair','oddTo'], 'roll-start':['type'], 'roll-halt':['type']}[action.type].includes(k))))throw new RangeError('Client cannot supply movement costs or limits');
+ if(Object.keys(action).some(k=>!({speed:['type','change','purchasedThrust','thrusters'],advance:['type','hexes'],turn:['type','direction','thrusters'],slide:['type','direction','thrusters'], 'pivot-start':['type','direction','thrusterPair','oddTo','thrusters'], 'pivot-halt':['type','thrusterPair','oddTo','thrusters'], 'roll-start':['type','thrusters'], 'roll-halt':['type','thrusters']}[action.type].includes(k))))throw new RangeError('Client cannot supply movement costs or limits');
  const previous=trial.movement?.turn===turn-1?trial.movement.state:null;
  const base=newStagedMovement({q:ship.q,r:ship.r,facing:ship.facing,speed:ship.speed,version:0});
  const carried=previous?orientationAtMovementStart({...previous,turn:turn-1},turn):null;
@@ -62,6 +66,17 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
   if(point.q<0||point.q>=20||point.r<0||point.r>=32)throw new RangeError('Outside trial map bounds');
   // Ordinary ships may share a hex. Ramming is a separate declared action.
  }
- const updatedTrial={...trial,movement:{turn,purchasedThrust:nextPurchase,powerSpent:trial.powerAllocation?.turn===turn?trial.powerAllocation.thrustPower:nextPurchase*LIB.engineEfficiency.power,state:next}};
+ // The player chooses a physical thruster allocation; the server calculates cost and validates it.
+ const manoeuvreCost=next.thrustSpent-old.thrustSpent;
+ if(manoeuvreCost<0)throw new RangeError('Movement thrust cannot decrease');
+ const allocation=action.thrusters??{};
+ if(Object.values(allocation).some(v=>!Number.isInteger(v)||v<0)||Object.values(allocation).reduce((a,b)=>a+b,0)!==manoeuvreCost)throw new RangeError('Thruster allocation must exactly equal manoeuvre cost');
+ const previousLedger=(trial.movement?.turn===turn?trial.movement.thrusterLedger:null);
+ const ledger=previousLedger??createThrusterLedger(VORCHAN_THRUSTER_RATINGS);
+ // Existing damage and critical effects must be adjudicated before trusting undamaged ratings.
+ if(manoeuvreCost&&Object.keys(trial.systemDamage||{}).length)throw new RangeError('Damaged thruster allocation requires adjudication');
+ const accounted=allocateThrusterThrust(ledger,allocation,{availableThrust:limits.availableThrust,alreadySpent:old.thrustSpent});
+ const checks=pendingOverthrustChecks(accounted.ledger);
+ const updatedTrial={...trial,movement:{turn,purchasedThrust:nextPurchase,powerSpent:trial.powerAllocation?.turn===turn?trial.powerAllocation.thrustPower:nextPurchase*LIB.engineEfficiency.power,state:next,thrusterLedger:accounted.ledger,pendingOverthrustChecks:checks}};
  return {nextShip:{q:next.q,r:next.r,facing:next.facing,speed:next.speed},nextPrivateState:{...privateState,trial:updatedTrial},movement:next,spent:next.thrustSpent,powerSpent:updatedTrial.movement.powerSpent};
 }
