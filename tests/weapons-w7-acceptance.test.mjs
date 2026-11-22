@@ -52,7 +52,7 @@ test('W7: deterministic simultaneous fire snapshot is blocked pending terrain an
  assert.equal(first.complete,false);assert.equal(first.damageApplied,false);
  assert.equal(first.results[0].roll,null);
  const defended=resolveVorchanShipFire({...input,defences:[{playerId:'p2',defence:{assignments:[{shipId:'b',mountId:'twin_nose_starboard',gun:2,attackId:'a:twin_nose_port:1'}]}}]});
- assert.match(defended.results[0].blockers.join(' '),/interception/);
+ assert.equal(defended.results[0].intercept.total,-2);assert.match(defended.results[0].blockers.join(' '),/terrain|line of sight/i);
 });
 test('W7: three plasma charge levels, repeated armour, overkill and critical timing',()=>{
  assert.deepEqual([1,2,3].map((n)=>rollVorchanDamage({mountId:'plasma_forward',chargeTurns:n,dice:Array(n===3?4:n).fill(5),range:2}).damage),[7,16,30]);
