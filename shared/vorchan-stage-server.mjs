@@ -3,6 +3,7 @@
 import {pivotStart,pivotHalt,rollStart,rollHalt,orientationAtMovementStart} from './orientation-stage.mjs';
 import {adjustTurnDelay} from './speed-integration.mjs';
 import {newStagedMovement,stagedMove,turnCostAtSpeed} from './staged-movement.mjs';
+import {effectiveThrusterRating,overthrustChecksForTurn} from './thruster-criticals.mjs';
 import {validateManoeuvreThrusters} from './manoeuvre-thrusters.mjs';
 import {createThrusterLedger,allocateThrusterThrust,pendingOverthrustChecks} from './thruster-ledger.mjs';
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
@@ -74,11 +75,14 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
  if(Object.values(allocation).some(v=>!Number.isInteger(v)||v<0)||Object.values(allocation).reduce((a,b)=>a+b,0)!==manoeuvreCost)throw new RangeError('Thruster allocation must exactly equal manoeuvre cost');
  validateManoeuvreThrusters({action,oldState:old,cost:manoeuvreCost,allocation});
  const previousLedger=(trial.movement?.turn===turn?trial.movement.thrusterLedger:null);
- const ledger=previousLedger??createThrusterLedger(VORCHAN_THRUSTER_RATINGS);
+ const criticalEffects=trial.thrusterCriticalEffects??{};
+ const effectiveRatings=Object.fromEntries(Object.entries(VORCHAN_THRUSTER_RATINGS).map(([id,rating])=>[id,effectiveThrusterRating(rating,criticalEffects[id])]));
+ const ledger=previousLedger??createThrusterLedger(effectiveRatings);
+ for(const [id,entry] of Object.entries(ledger))if(entry.rating!==effectiveRatings[id])throw new RangeError('Thruster rating changed during turn; requires adjudication');
  // Existing damage and critical effects must be adjudicated before trusting undamaged ratings.
  if(manoeuvreCost&&Object.keys(trial.systemDamage||{}).length)throw new RangeError('Damaged thruster allocation requires adjudication');
  const accounted=allocateThrusterThrust(ledger,allocation,{availableThrust:limits.availableThrust,alreadySpent:old.thrustSpent});
- const checks=pendingOverthrustChecks(accounted.ledger);
+ const checks=overthrustChecksForTurn(accounted.ledger,trial.thrusterDamageBoxes??{});
  const updatedTrial={...trial,movement:{turn,purchasedThrust:nextPurchase,powerSpent:trial.powerAllocation?.turn===turn?trial.powerAllocation.thrustPower:nextPurchase*LIB.engineEfficiency.power,state:next,thrusterLedger:accounted.ledger,pendingOverthrustChecks:checks}};
  return {nextShip:{q:next.q,r:next.r,facing:next.facing,speed:next.speed},nextPrivateState:{...privateState,trial:updatedTrial},movement:next,spent:next.thrustSpent,powerSpent:updatedTrial.movement.powerSpent};
 }
