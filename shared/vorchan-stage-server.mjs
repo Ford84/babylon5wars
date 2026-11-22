@@ -10,7 +10,7 @@ import {validateManoeuvreThrusters} from './manoeuvre-thrusters.mjs';
 import {createThrusterLedger,allocateThrusterThrust} from './thruster-ledger.mjs';
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
 // Ratings refer to channel capacity, not damage boxes or armour.
-// WARNING: aft-port/aft-starboard entries below are legacy provisional movement channels.\n// The vector legend identifies the corresponding aft damage-track glyphs as jump engines.\n// Their relation to ordinary main thrust MUST be adjudicated before release; see SCS checklist.
+// The two aft flanking nozzle symbols are main thrusters (rating 5).\n// The centre aft striped symbol is the separate jump engine.
 export const VORCHAN_THRUSTER_RATINGS=Object.freeze({retro:1,forward_port_thrust:2,forward_starboard_thrust:3,port_thrust:5,starboard_thrust:5,aft_port_thrust:5,aft_starboard_thrust:5});
 export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]}){
  if(!Number.isInteger(turn)||turn<1)throw new RangeError('Invalid battle turn');
@@ -63,7 +63,7 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
   if(!power.engineDestroyed&&needed<=limits.availableThrust&&physicalMaximum>=needed)throw new RangeError('Voluntary extended-turn cancellation prohibited');
   next={...old,extendedTurn:null,started:true,version:old.version+1,history:[...old.history,{type:'extended-cancel',reason:'verified physical thrust shortfall',forfeitedThrust:ext.initialThrust}]};
  }else if(action.type==='extended-start'){
-  if(old.extendedTurn||old.turnDelayRemaining>0||old.rollInProgress||old.pivotInProgress||old.pivotActive||![-1,1].includes(action.direction))throw new RangeError('Extended turn prohibited');
+  if(old.started||old.extendedTurn||old.turnDelayRemaining>0||old.rollInProgress||old.pivotInProgress||old.pivotActive||![-1,1].includes(action.direction))throw new RangeError('Extended turn prohibited');
   const cost=turnCostAtSpeed(old.speed,LIB.turnCost);
   if(cost<2)throw new RangeError('Extended turn requires at least two thrust');
   if(!Number.isInteger(action.initialThrust)||action.initialThrust<Math.ceil(cost/4)||action.initialThrust>=cost)throw new RangeError('Extended turn requires at least 25% and less than full turn cost');
@@ -84,10 +84,10 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
   if(old.thrustSpent+cost>limits.availableThrust)throw new RangeError('Insufficient thrust for orientation manoeuvre');
   const orient={...old,turn};
   if(action.type==='pivot-start'){
-   if(!['main','side'].includes(action.oddTo))throw new RangeError('Odd thrust allocation required');
+   if(cost%2===1&&!['main','side'].includes(action.oddTo))throw new RangeError('Odd thrust allocation required');
    next=pivotStart(orient,{direction:action.direction,cost,thrusterPair:action.thrusterPair});
   }else if(action.type==='pivot-halt'){
-   if(!['main','side'].includes(action.oddTo))throw new RangeError('Odd thrust allocation required');
+   if(cost%2===1&&!['main','side'].includes(action.oddTo))throw new RangeError('Odd thrust allocation required');
    next=pivotHalt(orient,{cost,thrusterPair:action.thrusterPair});
   }else if(action.type==='roll-start')next=rollStart(orient,cost);
   else next=rollHalt(orient,cost);
