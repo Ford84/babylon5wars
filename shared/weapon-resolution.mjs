@@ -3,6 +3,7 @@
 // This module never changes ship damage or invents defensive interception dice.
 import {vorchanTargetingPreview,resolveToHit} from './weapon-targeting.mjs';
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
+import {interceptModifiers} from './weapon-interception.mjs';
 const mountById=new Map(LIB.weaponMounts.map(x=>[x.id,x]));
 export const attackId=s=>[s.shipId,s.mountId,s.gun].join(':');
 export function initialWeaponHistory(turn=1){
@@ -14,6 +15,7 @@ export function resolveVorchanShipFire({turn,ships,declarations,defences,rolls,b
  const byId=new Map(ships.map(s=>[s.id,s]));
  const defenceMap=new Map(defences.flatMap(d=>(d.defence?.assignments||[]).map(a=>[a.attackId,a])));
  const rollMap=new Map(rolls.map(r=>[r.attackId,r.roll]));
+ const intercepts=interceptModifiers({declarations,defences});
  const seen=new Set(),results=[];
  const shots=declarations.flatMap(d=>d.fire.shots.filter(s=>s.role==='offensive').map(s=>({...s,playerId:d.playerId})));
  for(const shot of shots){
@@ -36,12 +38,13 @@ export function resolveVorchanShipFire({turn,ships,declarations,defences,rolls,b
   let preview=null;
   try{preview=vorchanTargetingPreview({shooter:source,target:{...target,libraryId:LIB.id,hullClass:LIB.class},mountId:shot.mountId,blockingHexes,verifiedTerrain:terrainVerified,defenderDirection,attackerOffensiveEW:attackerEW??0,targetDefensiveEW:defenderEW??0});blockers.push(...preview.blockers)}catch(e){blockers.push('Targeting unavailable: '+e.message)}
   const defensive=defenceMap.get(id)??null;
-  if(defensive)blockers.push('Defensive interception awaits verified intercept procedure');
+  const intercept=intercepts[id]??{total:0,contributions:[]};
   const roll=rollMap.get(id);
   if(!Number.isInteger(roll)||roll<1||roll>20)blockers.push('Server d20 roll missing');
   const uniqueBlockers=[...new Set(blockers)];
-  const result=uniqueBlockers.length?null:resolveToHit(preview,roll);
-  results.push({id,tier:'ship',shipId:source.id,targetId:target.id,mountId:shot.mountId,gun:shot.gun,order:shot.order,chargeTurns:shot.chargeTurns??null,defensive,roll:result?.roll??null,targetNumber:preview?.hitOnD20AtOrBelow??null,hit:result?.hit??null,blockers:uniqueBlockers,breakdown:preview?.breakdown??null,damageApplied:false});
+  const effectivePreview=preview?.readyForHitRoll?{...preview,hitOnD20AtOrBelow:preview.hitOnD20AtOrBelow+intercept.total}:preview;
+  const result=uniqueBlockers.length?null:resolveToHit(effectivePreview,roll);
+  results.push({id,tier:'ship',shipId:source.id,targetId:target.id,mountId:shot.mountId,gun:shot.gun,order:shot.order,chargeTurns:shot.chargeTurns??null,defensive,intercept,roll:result?.roll??null,targetNumber:effectivePreview?.hitOnD20AtOrBelow??null,hit:result?.hit??null,blockers:uniqueBlockers,breakdown:preview?.breakdown??null,damageApplied:false});
  }
  results.sort((a,b)=>a.order-b.order||a.id.localeCompare(b.id));
  return {turn,tier:'ship',simultaneous:true,results,complete:results.every(r=>r.blockers.length===0),damageApplied:false,requiresDamageResolution:true};
