@@ -29,6 +29,7 @@ export default function WeaponFirePanel({phase,ships=[],userId,fireView,prefligh
  const [role,setRole]=useState('offensive');
  const [gun,setGun]=useState(1);
  const [chargeTurns,setChargeTurns]=useState(3);
+ const [firingOrder,setFiringOrder]=useState(1);
  const [choiceError,setChoiceError]=useState('');
  const ship=own.find(s=>s.id===shipId)||own[0];
  const target=enemy.find(s=>s.id===targetId)||enemy[0];
@@ -42,8 +43,9 @@ export default function WeaponFirePanel({phase,ships=[],userId,fireView,prefligh
   if(role==='offensive'&&!target){setChoiceError('Select an enemy target');return}
   if(role==='offensive'&&!checkMountArc({shooter:ship,target,arc:mount.arc}).allowed){setChoiceError('Enemy outside the selected weapon arc');return}
   const next={shipId:ship.id,mountId,gun,role};
-  if(role==='offensive'){next.targetId=target.id;next.order=1+Math.max(0,...fire.filter(s=>s.role==='offensive'&&s.shipId===ship.id&&s.targetId===target.id).map(s=>s.order||0));if(mountId==='plasma_forward')next.chargeTurns=chargeTurns}
+  if(role==='offensive'){next.targetId=target.id;next.order=firingOrder;if(mountId==='plasma_forward')next.chargeTurns=chargeTurns}
   const shots=fire.filter(s=>!(s.shipId===ship.id&&s.mountId===mountId&&s.gun===gun));
+  if(next.role==='offensive'&&shots.some(s=>s.role==='offensive'&&s.shipId===ship.id&&s.targetId===target.id&&s.order===next.order)){setChoiceError('This ship already uses that firing priority against this target');return}
   setShots([...shots,next]);
  }
  const declarations=fireView?.declarations||[];
@@ -59,6 +61,7 @@ export default function WeaponFirePanel({phase,ships=[],userId,fireView,prefligh
    <label>Gun <select aria-label="Gun number" value={gun} onChange={e=>setGun(Number(e.target.value))}>{Array.from({length:mount?.weaponId==='twin-array'?2:1},(_,i)=><option key={i} value={i+1}>{i+1}</option>)}</select></label>
    <label>Assignment <select aria-label="Fire role" value={role} onChange={e=>setRole(e.target.value)}><option value="offensive">Offensive fire</option>{mountId!=='plasma_forward'&&<option value="defensive">Reserve for defence</option>}</select></label>
    {role==='offensive'&&<><label>Target <select aria-label="Fire target" value={target?.id||''} onChange={e=>setTargetId(e.target.value)}>{enemy.map(s=><option key={s.id} value={s.id}>{s.label||s.id}</option>)}</select></label>{mountId==='plasma_forward'&&<label>Plasma charging <select aria-label="Plasma charging turns" value={chargeTurns} onChange={e=>setChargeTurns(Number(e.target.value))}><option value={1}>1 turn — 1d10+4</option><option value={2}>2 turns — 2d10+8</option><option value={3}>3 turns — 4d10+12</option></select></label>}</>}
+   {role==='offensive'&&<label>Firing priority (1–100) <input aria-label="Firing order" type="number" min="1" max="100" value={firingOrder} onChange={e=>setFiringOrder(Math.max(1,Math.min(100,Math.floor(Number(e.target.value)||1))))}/></label>}
    <button type="button" disabled={!ship} onClick={addShot}>Add / update gun order</button>{choiceError&&<p className="error" role="alert">{choiceError}</p>}
    {preview&&<p className="hint">Arc: {preview.attackArc?.allowed?'in arc':'outside arc'}. Distance: {preview.distance??'unknown'} hexes. {preview.blockers?.length?'Final hit preview pending: '+preview.blockers.join('; '):'Ready for calculation'}.</p>}
   </div><div>{ship&&<ArcPlot ship={ship} ships={ships} selectedMount={mountId} selectedTarget={target?.id} onTarget={setTargetId}/>}<p className="hint">Highlighted sector shows the selected mount's firing coverage. Click an enemy marker to select it. This is a geometric preview, not a verified line-of-sight or hit roll.</p></div></div>
