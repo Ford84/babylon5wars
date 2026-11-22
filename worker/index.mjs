@@ -26,7 +26,7 @@ return {crewBAB:s.crewBAB,training:s.training,sensors:s.sensors,stealth:s.stealt
  ...(Number.isInteger(s.armourBase)?{armourBase:s.armourBase}:{}),...(Number.isInteger(s.armourShielded)?{armourShielded:s.armourShielded}:{}),
  ...(Number.isInteger(s.stealthBase)?{stealthBase:s.stealthBase}:{}),...(Number.isInteger(s.sensorsInstalled)?{sensorsInstalled:s.sensorsInstalled}:{}),
  ...(Number.isInteger(s.structureMaximum)?{structureMaximum:s.structureMaximum}:{}),
- weapons:s.weapons.map(w=>({name:w.name.trim(),arc:w.arc,range:w.range,offence:w.offence,special:typeof w.special==='string'?w.special.slice(0,160):'',automatic:w.automatic!==false&&w.offence>0}))}
+ weapons:s.weapons.map(w=>({name:w.name.trim(),arc:w.arc,range:w.range,offence:w.offence,special:typeof w.special==='string'?w.special.slice(0,160):'',automatic:w.automatic!==false&&w.offence>0}))}}
 function rangeBetween(a,b){return Math.max(a,b)}
 function activeShipOrder(list){return list.filter(s=>s.status==='active'&&s.actions_left>0).sort((a,b)=>b.initiative-a.initiative||a.id.localeCompare(b.id))}
 function sqlShip(db,s,gameId,op){return db.prepare('UPDATE ships SET range_band=?,remaining=?,actions_left=?,handling_lost=?,attack_penalty=?,dodge_bonus=?,status=? WHERE id=? AND game_id=? AND EXISTS(SELECT 1 FROM games WHERE id=? AND last_op_id=?)').bind(s.range_band,s.remaining,s.actions_left,s.handling_lost,s.attack_penalty,s.dodge_bonus,s.status,s.id,gameId,gameId,op)}
