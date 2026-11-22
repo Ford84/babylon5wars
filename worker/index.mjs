@@ -250,6 +250,33 @@ export default {async fetch(req,env){try{
   if(result[0].meta.changes!==1)return fail('Ship changed; reload',409);
   return json({attached:true,shipId:b.shipId,templateId:b.templateId});
  }
+ if(route==='trial-scs-mark'&&req.method==='POST'){
+  // Persistent annotations only. A partially transcribed Vorchan cannot
+  // participate in authoritative automatic combat damage calculations.
+  const b=await readBody(req);
+  if(b.expectedRevision!==game.revision)return fail('Game state changed; reload',409);
+  if(!/^[a-f0-9-]{36}$/i.test(String(b.shipId||''))||typeof b.boxId!=='string'||b.boxId.length>90||typeof b.marked!=='boolean')return fail('Invalid box selection');
+  const ship=await db.prepare('SELECT id,owner_id,public_state_json FROM ships WHERE id=? AND game_id=?').bind(b.shipId,gameId).first();
+  if(!ship)return fail('Ship not found',404);
+  if(ship.owner_id!==user.id&&game.host_id!==user.id)return fail('Not permitted to mark this ship',403);
+  const state=JSON.parse(ship.public_state_json||'{}');
+  if(state.libraryId!==VORCHAN_LIBRARY_RECORD.id||ship.template_id)return fail('Only trial Vorchan annotations are supported',409);
+  const known=VORCHAN_SCS_IDENTIFICATION.systems.find(x=>x.verified&&b.boxId.startsWith(x.id+':'));
+  const index=known?Number(b.boxId.slice(known.id.length+1)):NaN;
+  const supported=new Set(['retro','plasma_port','plasma_starboard','twin_forward_port','twin_forward_starboard','engine','sensors','command','aft_port_thrust','aft_starboard_thrust','jump_drive']);
+  if(!known||!supported.has(known.id)||!Number.isInteger(index)||index<1||index>known.boxes||b.boxId!==known.id+':'+index)return fail('Box has not been spatially verified',400);
+  const marks={...(state.scsAnnotations?.marks||{})};
+  if(b.marked)marks[b.boxId]=true;else delete marks[b.boxId];
+  if(Object.keys(marks).length>250)return fail('Too many annotations',400);
+  const updated=JSON.stringify({...state,scsAnnotations:{version:1,marks}});
+  const result=await db.batch([
+   db.prepare('UPDATE ships SET public_state_json=? WHERE id=? AND game_id=? AND public_state_json=? AND EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(updated,ship.id,gameId,ship.public_state_json,gameId,game.revision),
+   event(db,game,user.id,'trial_scs_mark',{shipId:ship.id,boxId:b.boxId,marked:b.marked})
+  ]);
+  if(result[0].meta.changes!==1)return fail('Concurrent change; reload',409);
+  // Annotation edits do not advance game phases or invalidate submitted orders.
+  return json({ok:true,shipId:ship.id,boxId:b.boxId,marked:b.marked});
+ }
  if(route==='host-damage-override'&&req.method==='POST'){
   if(user.id!==game.host_id)return fail('Host only',403);
   const b=await readBody(req);
