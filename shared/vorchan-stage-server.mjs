@@ -14,7 +14,7 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
  const base=newStagedMovement({q:ship.q,r:ship.r,facing:ship.facing,speed:ship.speed,version:0});
  const carried=previous?orientationAtMovementStart({...previous,turn:turn-1},turn):null;
  const old=trial.movement?.turn===turn?trial.movement.state:carried?{...base,...carried,remaining:Math.abs(ship.speed),moved:0,thrustSpent:0,started:false,normalSinceSlide:true,slideDirection:null,history:[],version:0}:base;
- if(old.q!==ship.q||old.r!==ship.r||old.facing!==ship.facing||old.speed!==ship.speed)throw new RangeError('Movement state out of sync');
+ if(old.q!==ship.q||old.r!==ship.r||(trial.movement?.turn===turn&&old.facing!==ship.facing)||old.speed!==ship.speed)throw new RangeError('Movement state out of sync');
  const purchased=trial.movement?.turn===turn?trial.movement.purchasedThrust:0;
  let nextPurchase=purchased,moveAction=action;
  if(action.type==='speed'){
