@@ -11,4 +11,4 @@ export const BUILTIN_SHIP_CATALOG=Object.freeze([Object.freeze({
  automaticCombatReady:false,
 })]);
 export function getBuiltinShip(id){return BUILTIN_SHIP_CATALOG.find(s=>s.id===id)||null;}
-export function listBuiltinShips(){return BUILTIN_SHIP_CATALOG.map(({id,name,faction,source,combatPoints,defence,initiativeBonus,weapons,scs,verification,selectable,automaticCombatReady})=>({id,name,faction,source,combatPoints,defence,initiativeBonus,weapons,systems:scs.systems.map(({id,kind,section,armour,boxes,rows,verified})=>({id,kind,section,armour,boxes,rows,verified})),verification,selectable,automaticCombatReady}));}
+export function listBuiltinShips(){return BUILTIN_SHIP_CATALOG.map(({id,name,faction,source,combatPoints,defence,initiativeBonus,weapons,weaponMounts,scs,verification,selectable,automaticCombatReady})=>({id,name,faction,source,combatPoints,defence,initiativeBonus,weapons,weaponMounts,systems:scs.systems.map(({id,kind,section,armour,boxes,rows,verified})=>({id,kind,section,armour,boxes,rows,verified})),verification,selectable,automaticCombatReady}));}
