@@ -167,7 +167,7 @@ export default {async fetch(req,env){try{
   const old=JSON.parse(ship.private_state_json||'{}');
   let trial;
   try{
-   if(route==='trial-power')trial=commitVorchanPower({trial:old.trial,turn:game.turn,purchasedThrust:b.purchasedThrust,extraEW:b.extraEW});
+   if(route==='trial-power')trial=commitVorchanPower({trial:old.trial,turn:game.turn,purchasedThrust:b.purchasedThrust,extraEW:b.extraEW,deactivated:b.deactivated??[]});
    else{
     const enemies=(await db.prepare('SELECT id FROM ships WHERE game_id=? AND owner_id<>?').bind(gameId,user.id).all()).results.map(x=>x.id);
     trial=commitVorchanEW({trial:old.trial,turn:game.turn,defensive:b.defensive,offensive:b.offensive,enemyIds:enemies});
