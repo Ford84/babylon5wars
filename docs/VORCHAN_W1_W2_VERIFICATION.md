@@ -28,3 +28,6 @@
 5. Extend W2 geometry test coverage with half-hex edge contact and actual map blocker fixtures; confirm UI hex orientation and arc visualisation in-browser.
 
 **Gate status:** W1 inventory and printed weapon data verified; W1 arc verification **blocked by missing authoritative arc evidence**. W2 pure targeting/readiness implementation complete for test use, but intentionally not enabled as automatic combat.
+
+## 22 November 2026 — player-confirmed firing arcs
+The user explicitly confirmed Plasma Accelerator **forward 90°**, port Twin Array **forward 270°**, and starboard Twin Array **forward 270°**. Canonical mount arcs in `shared/vorchan-trial-library.mjs` now use forward-centred angular intervals [315°,45°] and [225°,135°], respectively, inclusive of boundaries. This confirmation supersedes the earlier unresolved arc status; it is a user-provided ship-specific rule, not a claim that the original SCS diagram was independently legible. `shared/weapon-targeting.mjs` now consumes these arcs by default. The remaining full-ship damage diagram and per-gun arming history are separate blockers to automatic fire.
