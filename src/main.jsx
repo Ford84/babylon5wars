@@ -23,14 +23,17 @@ function ThrustLedger({storageKey,ship,turn,revision,onExecute,busy,makeCost}){
   if(action.type==='speed')action.purchasedThrust=purchased;
   const errors=[];
   let projected=null;
+  let verifiedCost=null;
+  const previousSpent=simulatedPrivate?.trial?.movement?.turn===turn?(simulatedPrivate.trial.movement.state?.thrustSpent??0):0;
   if(blocked)errors.push('Earlier planned manoeuvre must be corrected first');
   else try{
    const result=applyVorchanStage({ship:simulatedShip,privateState:simulatedPrivate,action,turn});
+   verifiedCost=result.spent-previousSpent;
    simulatedShip={...simulatedShip,...result.nextShip};
    simulatedPrivate=result.nextPrivateState;
    projected={ship:result.nextShip,movement:result.movement,ledger:result.nextPrivateState.trial.movement.thrusterLedger,engine:result.engineThrustSpent,overthrust:result.nextPrivateState.trial.movement.pendingOverthrustChecks||[]};
   }catch(error){errors.push(error.message);blocked=true;}
-  return {...entry,index,cost:makeCost(entry.action,ship),output:totalOutput(entry.thrusters),projected,errors};
+  return {...entry,index,cost:verifiedCost??makeCost(entry.action,simulatedShip),output:totalOutput(entry.thrusters),projected,errors};
  });
  const projectedLedger=simulatedPrivate?.trial?.movement?.thrusterLedger||ledger;
  const projectedEngine=simulatedPrivate?.trial?.movement?.engineThrustSpent??spent;
