@@ -1,3 +1,4 @@
+import {VORCHAN_VECTOR_BOXES} from '../shared/vorchan-vector-geometry.mjs';
 import {commitVorchanPower,commitVorchanEW} from '../shared/vorchan-preturn.mjs';
 import {applyVorchanStage} from '../shared/vorchan-stage-server.mjs';
 import {VORCHAN_SCS_IDENTIFICATION,auditVorchanIdentification} from '../shared/vorchan-scs-identification.mjs';
@@ -256,21 +257,25 @@ export default {async fetch(req,env){try{
   const b=await readBody(req);
   if(b.expectedRevision!==game.revision)return fail('Game state changed; reload',409);
   if(!/^[a-f0-9-]{36}$/i.test(String(b.shipId||''))||typeof b.boxId!=='string'||b.boxId.length>90||typeof b.marked!=='boolean')return fail('Invalid box selection');
-  const ship=await db.prepare('SELECT id,owner_id,public_state_json FROM ships WHERE id=? AND game_id=?').bind(b.shipId,gameId).first();
+  const ship=await db.prepare('SELECT id,owner_id,template_id,public_state_json,private_state_json FROM ships WHERE id=? AND game_id=?').bind(b.shipId,gameId).first();
   if(!ship)return fail('Ship not found',404);
   if(ship.owner_id!==user.id&&game.host_id!==user.id)return fail('Not permitted to mark this ship',403);
   const state=JSON.parse(ship.public_state_json||'{}');
   if(state.libraryId!==VORCHAN_LIBRARY_RECORD.id||ship.template_id)return fail('Only trial Vorchan annotations are supported',409);
-  const known=VORCHAN_SCS_IDENTIFICATION.systems.find(x=>x.verified&&b.boxId.startsWith(x.id+':'));
-  const index=known?Number(b.boxId.slice(known.id.length+1)):NaN;
-  const supported=new Set(['retro','plasma_port','plasma_starboard','twin_forward_port','twin_forward_starboard','engine','sensors','command','aft_port_thrust','aft_starboard_thrust','jump_drive']);
-  if(!known||!supported.has(known.id)||!Number.isInteger(index)||index<1||index>known.boxes||b.boxId!==known.id+':'+index)return fail('Box has not been spatially verified',400);
+  const split=b.boxId.lastIndexOf(':');
+  const systemId=b.boxId.slice(0,split),index=Number(b.boxId.slice(split+1));
+  const coords=VORCHAN_VECTOR_BOXES[systemId];
+  if(!coords||systemId==='hangar_reference'||!Number.isInteger(index)||index<1||index>coords.length||b.boxId!==systemId+':'+index)return fail('Box is not present in the audited Vorchan ship diagram',400);
   const marks={...(state.scsAnnotations?.marks||{})};
   if(b.marked)marks[b.boxId]=true;else delete marks[b.boxId];
   if(Object.keys(marks).length>250)return fail('Too many annotations',400);
-  const updated=JSON.stringify({...state,scsAnnotations:{version:1,marks}});
+  const damageBySystem=Object.fromEntries(Object.entries(VORCHAN_VECTOR_BOXES).filter(([id])=>id!=='hangar_reference').map(([id])=>[id,Object.keys(marks).filter(key=>key.startsWith(id+':')&&marks[key]).length]));
+  const updated=JSON.stringify({...state,scsAnnotations:{version:1,marks,damageBySystem,mode:'manual-unverified'}});
+  const privateState=JSON.parse(ship.private_state_json||'{}');
+  if(!privateState.trial)return fail('Trial state missing',409);
+  privateState.trial.systemDamage=damageBySystem;
   const result=await db.batch([
-   db.prepare('UPDATE ships SET public_state_json=? WHERE id=? AND game_id=? AND public_state_json=? AND EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(updated,ship.id,gameId,ship.public_state_json,gameId,game.revision),
+   db.prepare('UPDATE ships SET public_state_json=?,private_state_json=? WHERE id=? AND game_id=? AND public_state_json=? AND private_state_json=? AND EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(updated,JSON.stringify(privateState),ship.id,gameId,ship.public_state_json,ship.private_state_json,gameId,game.revision),
    event(db,game,user.id,'trial_scs_mark',{shipId:ship.id,boxId:b.boxId,marked:b.marked})
   ]);
   if(result[0].meta.changes!==1)return fail('Concurrent change; reload',409);
