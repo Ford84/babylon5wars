@@ -26,3 +26,14 @@ test('destroyed engine cannot change speed but inertia movement remains legal',(
  const r=applyVorchanStage({ship:{q:4,r:10,facing:0,speed:2},privateState:{trial:t},turn:1,action:{type:'advance',hexes:1}});
  assert.equal(r.movement.remaining,1);
 });
+
+test('engine destruction can force cancellation of a carried extended turn',()=>{
+ const ship={q:4,r:10,facing:0,speed:6};
+ const t=trial();
+ const a=applyVorchanStage({ship,privateState:{trial:t},turn:1,action:{type:'extended-start',direction:1,initialThrust:1,thrusters:{aft_port_thrust:1}}});
+ const b=applyVorchanStage({ship,privateState:a.nextPrivateState,turn:1,action:{type:'advance',hexes:6}});
+ const damaged={...b.nextPrivateState,trial:{...b.nextPrivateState.trial,destroyedSystems:['engine']}};
+ const result=applyVorchanStage({ship:{...ship,...b.nextShip},privateState:damaged,turn:2,action:{type:'extended-cancel'}});
+ assert.equal(result.movement.extendedTurn,null);
+ assert.equal(result.movement.history.at(-1).type,'extended-cancel');
+});
