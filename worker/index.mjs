@@ -149,6 +149,28 @@ export default {async fetch(req,env){try{
   const state=JSON.parse(ship.private_state_json||'{}').trial;
   return json({library:VORCHAN_LIBRARY_RECORD,ship:{id:ship.id,ownerId:ship.owner_id,q:ship.q,r:ship.r,facing:ship.facing,speed:ship.speed,initiative:state?.initiative??null,ew:ship.owner_id===user.id||user.id===game.host_id?state?.ew:undefined},capabilities:{initiative:true,thrustPreview:true,automaticCombat:false,verifiedDamageDiagram:false}});
  }
+ if(route==='trial-roll'&&req.method==='POST'){
+  if(game.phase_id!=='initiative')return fail('Initiative phase required',409);
+  const b=await readBody(req);
+  if(b.expectedRevision!==game.revision)return fail('Game changed; reload',409);
+  const ship=await db.prepare('SELECT * FROM ships WHERE id=? AND game_id=?').bind(b.shipId,gameId).first();
+  if(!ship||JSON.parse(ship.public_state_json||'{}').libraryId!==VORCHAN_LIBRARY_RECORD.id)return fail('Trial ship not found',404);
+  if(ship.owner_id!==user.id)return fail('Only the ship owner can roll initiative',403);
+  const privateState=JSON.parse(ship.private_state_json||'{}'),trial=privateState.trial;
+  if(!trial||trial.initiative?.turn===game.turn)return fail('Already rolled this turn or missing trial state',409);
+  let number;const max=4294967296-(4294967296%20);do{number=crypto.getRandomValues(new Uint32Array(1))[0];}while(number>=max);
+  const roll=number%20+1;
+  const speedPenalty=-2*Math.max(0,5-Math.abs(ship.speed));
+  const result={turn:game.turn,roll,printedBonus:VORCHAN_LIBRARY_RECORD.initiativeBonus,speedPenalty,total:roll+VORCHAN_LIBRARY_RECORD.initiativeBonus+speedPenalty};
+  const next=JSON.stringify({...privateState,trial:{...trial,initiative:result}});
+  const batch=await db.batch([
+   db.prepare('UPDATE ships SET private_state_json=? WHERE id=? AND game_id=? AND private_state_json=? AND EXISTS(SELECT 1 FROM games WHERE id=? AND revision=? AND phase_id=?)').bind(next,ship.id,gameId,ship.private_state_json,gameId,game.revision,'initiative'),
+   db.prepare('UPDATE games SET revision=revision+1 WHERE id=? AND revision=? AND EXISTS(SELECT 1 FROM ships WHERE id=? AND private_state_json=?)').bind(gameId,game.revision,ship.id,next),
+   db.prepare('INSERT INTO events(id,game_id,turn,phase_id,actor_id,event_type,public_json) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(uuid(),gameId,game.turn,game.phase_id,user.id,'trial_initiative_rolled',JSON.stringify({shipId:ship.id,...result}),gameId,game.revision+1)
+  ]);
+  if(batch.some(x=>x.meta.changes!==1))return fail('Concurrent change; reload',409);
+  return json({shipId:ship.id,initiative:result,revision:game.revision+1});
+ }
  if(route==='trial-thrust'&&req.method==='POST'){
   const b=await readBody(req),ship=await db.prepare('SELECT owner_id,public_state_json FROM ships WHERE id=? AND game_id=?').bind(b.shipId,gameId).first();
   if(!ship||JSON.parse(ship.public_state_json||'{}').libraryId!==VORCHAN_LIBRARY_RECORD.id)return fail('Trial ship not found',404);
