@@ -10,9 +10,11 @@ test('source PDF rectangle audit covers all 301 unique objects',()=>{
 test('reference panel boxes remain separate from ship structure',()=>{
  assert.equal(VORCHAN_VECTOR_BOXES.hangar_reference.length,20);
  assert.equal(VORCHAN_VECTOR_BOXES.aft_structure.length,44);
+ assert.equal(VORCHAN_VECTOR_BOXES.hangar,undefined);
+ assert.equal(VORCHAN_VECTOR_BOXES.reactor,undefined);
  assert.equal(VORCHAN_VECTOR_BOXES.forward_structure.length,48);
- assert.equal(VORCHAN_VECTOR_BOXES.hangar.length,20);
- assert.equal(VORCHAN_VECTOR_BOXES.reactor.length,28);
+ assert.equal(VORCHAN_VECTOR_BOXES.unassigned_hangar_region.length,20);
+ assert.equal(VORCHAN_VECTOR_BOXES.unassigned_reactor_region.length,28);
 });
 test('every extracted box is on the source PDF page',()=>{
  for(const [name,boxes] of Object.entries(VORCHAN_VECTOR_BOXES)){
