@@ -95,8 +95,10 @@ export default {async fetch(req,env){try{
   const defences=defenceRows.map(r=>({playerId:r.player_id,defence:JSON.parse(r.payload_json).defence}));
   const rows=(await db.prepare('SELECT * FROM ships WHERE game_id=?').bind(gameId).all()).results;
   const ships=rows.map(s=>({...s,public_state:JSON.parse(s.public_state_json||'{}'),private_state:JSON.parse(s.private_state_json||'{}')}));
-  const pending=resolveVorchanShipFire({turn:game.turn,ships,declarations,defences,rolls:[],terrainVerified:false});
-  return json({phase:'fire_resolution',authoritative:true,rollsCommitted:false,terrainVerified:false,attacks:pending.results,blockers:['Terrain/LOS verification, defensive interception and server-side resolution are not yet implemented; no dice have been rolled'],damageApplied:false});
+  const journalRow=await db.prepare("SELECT public_json FROM events WHERE game_id=? AND turn=? AND event_type='vorchan_fire_roll_journal' ORDER BY rowid DESC LIMIT 1").bind(gameId,game.turn).first();
+  const journal=journalRow?JSON.parse(journalRow.public_json):null;
+  const pending=resolveVorchanShipFire({turn:game.turn,ships,declarations,defences,rolls:journal?.rolls||[],terrainVerified:false});
+  return json({phase:'fire_resolution',authoritative:true,rollsCommitted:!!journal,rollJournal:journal?.rolls||[],terrainVerified:false,attacks:pending.results,blockers:['Terrain/LOS verification, defender damage choices and SCS damage remain pending; no damage has been applied'],damageApplied:false});
  }
  if(route==='fire-orders'&&req.method==='GET'){
   if(game.status!=='active')return fail('Battle has not started',409);
@@ -372,13 +374,9 @@ export default {async fetch(req,env){try{
     }
    }catch(e){if(e instanceof RangeError||e instanceof TypeError)return fail(e.message);throw e;}
   }
-  // Acknowledging procedures must not silently discard actual weapon attacks.
-  // Empty-fire games retain their existing two-player phase progression.
-  if(game.phase_id==='fire_resolution'){
-   const committed=(await db.prepare('SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id=?').bind(gameId,game.turn,'fire_commit').all()).results.map(r=>({playerId:r.player_id,fire:JSON.parse(r.payload_json).fire}));
-   const guard=combatAdvancementGuard({declarations:committed});
-   if(!guard.allowed)return fail(guard.reason,409);
-  }
+  // Defence declarations must be accepted before server dice are generated.
+  // The final defender locks the roll journal, but unresolved attacks keep
+  // the game in fire_resolution until verified damage adjudication exists.
   const serialized=JSON.stringify(payload);if(serialized.length>10000||!payload||typeof payload!=='object'||Array.isArray(payload))return fail('Invalid order payload');
   if(game.phase_id==='power'||game.phase_id==='ew_commit'){
    const owned=(await db.prepare('SELECT id,private_state_json,public_state_json FROM ships WHERE game_id=? AND owner_id=?').bind(gameId,user.id).all()).results.filter(s=>JSON.parse(s.public_state_json||'{}').trial);
@@ -396,9 +394,19 @@ export default {async fetch(req,env){try{
   }
   const previous=await completedOrders(db,game),completed=previous.map(o=>o.player_id);if(!canSubmit(phase,members,completed,user.id))return fail('No action required from this player',409);
   const newCompleted=[...completed,user.id],isFinal=newCompleted.length===members.length;
-  const next=isFinal?followingPhase(game.phase_id,game.turn):null;
+  const committedFire=game.phase_id==='fire_resolution'?(await db.prepare('SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id=?').bind(gameId,game.turn,'fire_commit').all()).results.map(r=>({playerId:r.player_id,fire:JSON.parse(r.payload_json).fire})):[];
+  const combatGuard=combatAdvancementGuard({declarations:committedFire});
+  const holdsCombat=isFinal&&game.phase_id==='fire_resolution'&&!combatGuard.allowed;
+  const next=isFinal&&!holdsCombat?followingPhase(game.phase_id,game.turn):null;
   const inserts=[db.prepare('INSERT INTO orders(id,game_id,turn,phase_id,player_id,payload_json) VALUES(?,?,?,?,?,?)').bind(uuid(),gameId,game.turn,game.phase_id,user.id,serialized),event(db,game,user.id,'order_committed',{playerId:user.id,phaseId:game.phase_id,turn:game.turn})];
-  if(isFinal){
+  if(holdsCombat){
+   // Generate all dice on the server only after both defensive choices have
+   // been committed. D1 batch atomically stores this journal with final lock.
+   const shots=committedFire.flatMap(d=>d.fire.shots.filter(s=>s.role==='offensive'));
+   const rolls=shots.map(shot=>({attackId:[shot.shipId,shot.mountId,shot.gun].join(':'),roll:crypto.getRandomValues(new Uint32Array(1))[0]%20+1}));
+   inserts.push(event(db,game,null,'vorchan_fire_roll_journal',{turn:game.turn,tier:'ship',rolls,damageApplied:false,requiresAdjudication:true}));
+  }
+  if(isFinal&&!holdsCombat){
    if(phase.secret&&game.phase_id!=='fire_commit')inserts.push(event(db,game,null,'orders_revealed',{phaseId:game.phase_id,turn:game.turn,orders:[...previous.map(o=>({playerId:o.player_id,payload:JSON.parse(o.payload_json)})),{playerId:user.id,payload}]}));
    if(game.phase_id==='criticals'){
     const shipRows=(await db.prepare('SELECT id,private_state_json FROM ships WHERE game_id=?').bind(gameId).all()).results;
@@ -416,7 +424,7 @@ export default {async fetch(req,env){try{
    inserts.push(event(db,game,null,'phase_advanced',{from:game.phase_id,to:next.phase.id,nextTurn:next.turn}));
   }
   try{const results=await db.batch(inserts);if(results[0].meta.changes!==1||isFinal&&results[results.length-2].meta.changes!==1)return fail('Concurrent update; reload',409);}catch(e){if(/UNIQUE|constraint|abort/i.test(String(e)))return fail('Order already submitted or phase changed; reload',409);throw e;}
-  return json({submitted:true,advanced:isFinal,nextPhase:next?.phase.id||null});
+  return json({submitted:true,advanced:isFinal&&!holdsCombat,pendingCombat:holdsCombat,nextPhase:next?.phase.id||null});
  }
  return fail('Not found',404);
  }catch(e){console.error('Worker request failed',e);return fail('Server error',500);}}};
