@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/deploy-movement-test.yml'
       - 'wrangler.staging.jsonc'
+      - 'scripts/staging-smoke.mjs'
   workflow_dispatch:
 permissions:
   contents: read
