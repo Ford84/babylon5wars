@@ -6,6 +6,7 @@ import {VORCHAN_SCS_IDENTIFICATION,auditVorchanIdentification} from '../shared/v
 import {VORCHAN_LIBRARY_RECORD,newVorchanTrialState,vorchanThrustPreview} from '../shared/vorchan-trial-library.mjs';
 import {PHASES,phaseById,validateFacing} from '../shared/phases.mjs';
 import {validateFireDeclaration,validateDefensiveAssignment,publicFireView} from '../shared/fire-orders.mjs';
+import {initialWeaponHistory,resolveVorchanShipFire} from '../shared/weapon-resolution.mjs';
 import {validateSCS,initialSCSState} from '../shared/scs.mjs';
 import {allocateShipEW,rollShipInitiative,verifiedUndamagedThrust} from '../shared/server-rules.mjs';
 import {powerBudget,ewAllocation,initiative,initiativeOrder} from '../shared/preturn.mjs';
@@ -84,6 +85,17 @@ export default {async fetch(req,env){try{
  if(!route&&req.method==='GET'){
   const shipRows=(await db.prepare('SELECT * FROM ships WHERE game_id=?').bind(gameId).all()).results;const templateRows=(await db.prepare('SELECT id,definition_json FROM scs_templates WHERE id IN (SELECT template_id FROM ships WHERE game_id=? AND template_id IS NOT NULL)').bind(gameId).all()).results;const templateById=new Map(templateRows.map(t=>[t.id,JSON.parse(t.definition_json)]));const ships=shipRows.map(s=>{const visible=safeShip(s,user.id);if(s.owner_id===user.id||game.host_id===user.id){if(JSON.parse(s.public_state_json||'{}').libraryId===VORCHAN_LIBRARY_RECORD.id)visible.library_stats={engineEfficiency:VORCHAN_LIBRARY_RECORD.engineEfficiency.power,accelerationCost:VORCHAN_LIBRARY_RECORD.accelerationCost,initiativeBonus:VORCHAN_LIBRARY_RECORD.initiativeBonus,source:VORCHAN_LIBRARY_RECORD.source};const definition=templateById.get(s.template_id);if(definition){visible.library_stats={engineEfficiency:definition.stats.engineEfficiency,accelerationCost:definition.stats.accelerationCost??null,initiativeBonus:definition.stats.initiativeBonus};}}return visible;});const orders=await completedOrders(db,game),completed=orders.map(o=>o.player_id),required=requiredPlayers(phase,members,completed);
   return json({game,phase,members,ships,readiness:members.map(m=>({id:m.user_id,name:m.display_name,submitted:completed.includes(m.user_id),required:required.includes(m.user_id)})),needsAction:required.includes(user.id),myOrder:orders.find(o=>o.player_id===user.id)?JSON.parse(orders.find(o=>o.player_id===user.id).payload_json):null});
+ }
+ if(route==='fire-resolution'&&req.method==='GET'){
+  if(game.status!=='active'||game.phase_id!=='fire_resolution')return fail('Fire resolution phase required',409);
+  const fireRows=(await db.prepare('SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id=?').bind(gameId,game.turn,'fire_commit').all()).results;
+  const defenceRows=(await db.prepare('SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id=?').bind(gameId,game.turn,'fire_resolution').all()).results;
+  const declarations=fireRows.map(r=>({playerId:r.player_id,fire:JSON.parse(r.payload_json).fire}));
+  const defences=defenceRows.map(r=>({playerId:r.player_id,defence:JSON.parse(r.payload_json).defence}));
+  const rows=(await db.prepare('SELECT * FROM ships WHERE game_id=?').bind(gameId).all()).results;
+  const ships=rows.map(s=>({...s,public_state:JSON.parse(s.public_state_json||'{}'),private_state:JSON.parse(s.private_state_json||'{}')}));
+  const pending=resolveVorchanShipFire({turn:game.turn,ships,declarations,defences,rolls:[],terrainVerified:false});
+  return json({phase:'fire_resolution',authoritative:true,rollsCommitted:false,terrainVerified:false,attacks:pending.results,blockers:['Terrain/LOS verification, defensive interception and server-side resolution are not yet implemented; no dice have been rolled'],damageApplied:false});
  }
  if(route==='fire-orders'&&req.method==='GET'){
   if(game.status!=='active')return fail('Battle has not started',409);
@@ -170,7 +182,7 @@ export default {async fetch(req,env){try{
   // dedicated trial marker and conditional game revision as the setup lock.
   const result=await db.batch([
    db.prepare('UPDATE games SET revision=revision+1 WHERE id=? AND revision=? AND phase_id=? AND NOT EXISTS(SELECT 1 FROM ships WHERE game_id=?)').bind(gameId,game.revision,'power',gameId),
-   ...members.map((m,i)=>{const p=positions[i],trial=newVorchanTrialState(ids[i],m.user_id,p.q,p.r,p.facing);return db.prepare('INSERT INTO ships(id,game_id,owner_id,label,q,r,facing,public_state_json,private_state_json) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(ids[i],gameId,m.user_id,'Vorchan Warship '+(i+1),p.q,p.r,p.facing,JSON.stringify({libraryId:trial.libraryId,trial:true}),JSON.stringify({trial}),gameId,game.revision+1);}),
+   ...members.map((m,i)=>{const p=positions[i],trial=newVorchanTrialState(ids[i],m.user_id,p.q,p.r,p.facing);trial.weaponReadiness=initialWeaponHistory(1);return db.prepare('INSERT INTO ships(id,game_id,owner_id,label,q,r,facing,public_state_json,private_state_json) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(ids[i],gameId,m.user_id,'Vorchan Warship '+(i+1),p.q,p.r,p.facing,JSON.stringify({libraryId:trial.libraryId,trial:true}),JSON.stringify({trial}),gameId,game.revision+1);}),
    db.prepare('INSERT INTO events(id,game_id,turn,phase_id,actor_id,event_type,public_json) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(uuid(),gameId,game.turn,game.phase_id,user.id,'vorchan_trial_created',JSON.stringify({shipIds:ids,libraryId:VORCHAN_LIBRARY_RECORD.id,limitations:'SCS damage diagram not verified; combat manual only'}),gameId,game.revision+1)
   ]);
   if(result.some(x=>x.meta.changes!==1))return fail('Concurrent trial setup; reload',409);
