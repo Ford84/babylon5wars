@@ -62,7 +62,7 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
   const shortenBy=action.shortenBy??0;
   if(!Number.isInteger(shortenBy)||shortenBy<0||shortenBy>Math.max(0,delay-1))throw new RangeError('Invalid extended turn shortening');
   const cost=ext.totalCost-ext.initialThrust+shortenBy;
-  if(cost>limits.availableThrust)throw new RangeError('Insufficient thrust to complete extended turn; requires adjudication if physically impossible');
+  if(cost>limits.availableThrust)throw new RangeError('Insufficient thrust to complete extended turn; use forced cancellation if physically impossible');
   next={...old,facing:(old.facing+ext.direction+6)%6,motionFacing:(old.facing+ext.direction+6)%6,turnDelayRemaining:delay-shortenBy,turnDelayOriginal:delay-shortenBy,hexesSinceTurn:0,extendedTurn:null,thrustSpent:cost,started:true,version:old.version+1,history:[...old.history,{type:'extended-complete',direction:ext.direction,spent:cost,shortenBy}]};
  }else if(['pivot-start','pivot-halt','roll-start','roll-halt'].includes(action.type)){
   const cost=action.type.startsWith('pivot')?LIB.pivotCost[action.type==='pivot-start'?0:1]:LIB.rollCost[action.type==='roll-start'?0:1];
