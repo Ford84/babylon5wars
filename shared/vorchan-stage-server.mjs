@@ -3,6 +3,7 @@
 import {pivotStart,pivotHalt,rollStart,rollHalt,orientationAtMovementStart} from './orientation-stage.mjs';
 import {adjustTurnDelay} from './speed-integration.mjs';
 import {newStagedMovement,stagedMove,turnCostAtSpeed,vorchanTurnDelayAtSpeed} from './staged-movement.mjs';
+import {assertVorchanMovementDamageConsistent} from './vorchan-movement-damage.mjs';
 import {vorchanPowerBudget} from './vorchan-power-economy.mjs';
 import {effectiveThrusterRating,overthrustChecksForTurn,manoeuvreIncrementalEngineCost} from './thruster-criticals.mjs';
 import {validateManoeuvreThrusters} from './manoeuvre-thrusters.mjs';
@@ -100,11 +101,13 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
  validateManoeuvreThrusters({action,oldState:old,cost:manoeuvreCost,allocation});
  const previousLedger=(trial.movement?.turn===turn?trial.movement.thrusterLedger:null);
  const criticalEffects=trial.thrusterCriticalEffects??{};
- const effectiveRatings=Object.fromEntries(Object.entries(VORCHAN_THRUSTER_RATINGS).map(([id,rating])=>[id,effectiveThrusterRating(rating,criticalEffects[id])]));
+ assertVorchanMovementDamageConsistent(trial);
+ const destroyed=new Set(trial.destroyedSystems??[]);
+ const effectiveRatings=Object.fromEntries(Object.entries(VORCHAN_THRUSTER_RATINGS).map(([id,rating])=>[id,destroyed.has(id)?0:effectiveThrusterRating(rating,criticalEffects[id])]));
  const ledger=previousLedger??createThrusterLedger(effectiveRatings);
  for(const [id,entry] of Object.entries(ledger))if(entry.rating!==effectiveRatings[id])throw new RangeError('Thruster rating changed during turn; requires adjudication');
  // Existing damage and critical effects must be adjudicated before trusting undamaged ratings.
- if(manoeuvreCost&&Object.keys(trial.systemDamage||{}).length)throw new RangeError('Damaged thruster allocation requires adjudication');
+ if(manoeuvreCost&&Object.keys(trial.systemDamage||{}).length&&!trial.criticalDamageAdjudicated)throw new RangeError('System damage requires critical adjudication');
  const extraEngineCost=manoeuvreIncrementalEngineCost(allocation,ledger,criticalEffects);
  const previousEngineSpent=trial.movement?.turn===turn?(trial.movement.engineThrustSpent??old.thrustSpent):0;
  const engineThrustSpent=previousEngineSpent+extraEngineCost;
