@@ -11,7 +11,7 @@ test('adjudicated engine damage reduces available thrust without fabricating dam
 });
 test('destroyed thruster has zero channel capacity',()=>{
  let trial=newVorchanTrialState('a','b',2,3,0);
- trial=adjudicateVorchanMovementDamage(trial,{systemId:'port_thrust',markedBoxes:5,destroyed:true});
+ trial=adjudicateVorchanMovementDamage(trial,{systemId:'port_thrust',markedBoxes:12,destroyed:true});
  assertVorchanMovementDamageConsistent(trial);
  const ledger=createThrusterLedger({port_thrust:0});
  assert.throws(()=>allocateThrusterThrust(ledger,{port_thrust:1},{availableThrust:10}),/twice/);
