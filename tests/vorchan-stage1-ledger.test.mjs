@@ -28,8 +28,8 @@ test('multi-step SCS plan uses updated speed, facing, delay, movement and engine
 });
 test('planner rejects a turn until required movement delay is satisfied',()=>{
  const actions=[
-  {type:'speed',change:6,purchasedThrust:0,thrusters:{aft_port_thrust:6,aft_starboard_thrust:6}},
-  {type:'turn',direction:1,thrusters:{aft_port_thrust:2,port_thrust:1}},
+  {type:'speed',change:4,purchasedThrust:0,thrusters:{aft_port_thrust:4,aft_starboard_thrust:4}},
+  {type:'turn',direction:1,thrusters:{aft_port_thrust:1,port_thrust:1}},
   {type:'turn',direction:1,thrusters:{aft_port_thrust:2,port_thrust:1}}
  ];
  assert.throws(()=>replay(fixture(),actions),/Turn delay/);
