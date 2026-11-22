@@ -91,6 +91,8 @@ export default {async fetch(req,env){try{
   try{
    if(b.action==='allocate-ew'){
     if(!b.order||typeof b.order!=='object'||Array.isArray(b.order))return fail('EW allocation required');
+    const targets=Object.keys(b.order.offensive||{});if(targets.length>100||targets.some(t=>!/^[a-f0-9-]{36}$/i.test(t)))return fail('EW targets must be ship IDs');
+    if(targets.length){const targetRows=(await db.prepare('SELECT id,owner_id FROM ships WHERE game_id=?').bind(gameId).all()).results;const enemy=new Set(targetRows.filter(t=>t.owner_id!==ship.owner_id).map(t=>t.id));if(targets.some(t=>!enemy.has(t)))return fail('EW target is not an opposing ship in this battle');}
     if(oldState.scs?.ew?.committedTurn===game.turn)return fail('EW already committed this turn',409);
     nextState=allocateShipEW({template,privateState:oldState,order:b.order});
     nextState.scs.ew.committedTurn=game.turn;
@@ -98,7 +100,7 @@ export default {async fetch(req,env){try{
    }else{
     let random;const max=4294967296-(4294967296%20);do{random=crypto.getRandomValues(new Uint32Array(1))[0];}while(random>=max);
     const roll=random%20+1;
-    const result=rollShipInitiative({template,privateState:oldState,ship,roll});
+    const result=rollShipInitiative({template,privateState:oldState,ship:{...ship,turn:game.turn},roll});
     nextState=result.privateState;
     details={shipId:ship.id,action:'roll-initiative',roll:result.result.roll,total:result.result.total};
    }
