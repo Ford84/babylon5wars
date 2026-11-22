@@ -1,3 +1,4 @@
+import {applyVorchanStage} from '../shared/vorchan-stage-server.mjs';
 import {VORCHAN_SCS_IDENTIFICATION,auditVorchanIdentification} from '../shared/vorchan-scs-identification.mjs';
 import {VORCHAN_LIBRARY_RECORD,newVorchanTrialState,vorchanThrustPreview} from '../shared/vorchan-trial-library.mjs';
 import {PHASES,phaseById,validateFacing} from '../shared/phases.mjs';
@@ -172,6 +173,27 @@ export default {async fetch(req,env){try{
   if(batch.some(x=>x.meta.changes!==1))return fail('Concurrent change; reload',409);
   return json({shipId:ship.id,initiative:result,revision:game.revision+1});
  }
+ if(route==='trial-movement'&&req.method==='POST'){
+  if(game.phase_id!=='movement')return fail('Movement phase required',409);
+  const b=await readBody(req);
+  if(b.expectedRevision!==game.revision)return fail('Game changed; reload',409);
+  const previous=await completedOrders(db,game);
+  if(!canSubmit(phase,members,previous.map(o=>o.player_id),user.id))return fail('Wait for your movement turn',409);
+  const ship=await db.prepare('SELECT * FROM ships WHERE id=? AND game_id=?').bind(b.shipId,gameId).first();
+  if(!ship||ship.owner_id!==user.id||JSON.parse(ship.public_state_json||'{}').libraryId!==VORCHAN_LIBRARY_RECORD.id)return fail('Not your trial ship',403);
+  const allShips=(await db.prepare('SELECT id,q,r FROM ships WHERE game_id=?').bind(gameId).all()).results;
+  let result;
+  try{result=applyVorchanStage({ship,privateState:JSON.parse(ship.private_state_json||'{}'),action:b.action,turn:game.turn,otherShips:allShips});}
+  catch(e){if(e instanceof RangeError||e instanceof TypeError)return fail(e.message);throw e;}
+  const state=JSON.stringify(result.nextPrivateState),pos=result.nextShip;
+  const batch=await db.batch([
+   db.prepare('UPDATE ships SET q=?,r=?,facing=?,speed=?,private_state_json=? WHERE id=? AND game_id=? AND private_state_json=? AND EXISTS(SELECT 1 FROM games WHERE id=? AND revision=? AND phase_id=?)').bind(pos.q,pos.r,pos.facing,pos.speed,state,ship.id,gameId,ship.private_state_json,gameId,game.revision,'movement'),
+   db.prepare('UPDATE games SET revision=revision+1 WHERE id=? AND revision=? AND EXISTS(SELECT 1 FROM ships WHERE id=? AND private_state_json=?)').bind(gameId,game.revision,ship.id,state),
+   db.prepare('INSERT INTO events(id,game_id,turn,phase_id,actor_id,event_type,public_json) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(uuid(),gameId,game.turn,game.phase_id,user.id,'trial_movement_stage',JSON.stringify({shipId:ship.id,action:b.action.type,position:pos,remaining:result.movement.remaining,thrustSpent:result.spent}),gameId,game.revision+1)
+  ]);
+  if(batch.some(x=>x.meta.changes!==1))return fail('Concurrent movement; reload',409);
+  return json({ok:true,shipId:ship.id,position:pos,remaining:result.movement.remaining,thrustSpent:result.spent,revision:game.revision+1});
+ }
  if(route==='trial-thrust'&&req.method==='POST'){
   const b=await readBody(req),ship=await db.prepare('SELECT owner_id,public_state_json FROM ships WHERE id=? AND game_id=?').bind(b.shipId,gameId).first();
   if(!ship||JSON.parse(ship.public_state_json||'{}').libraryId!==VORCHAN_LIBRARY_RECORD.id)return fail('Trial ship not found',404);
@@ -258,6 +280,10 @@ export default {async fetch(req,env){try{
  if(route==='orders'&&req.method==='POST'){
   const b=await readBody(req),payload=b.payload??{pass:true};if(!phase||phase.mode==='automatic')return fail('No player order needed');if(b.expectedRevision!==game.revision)return fail('Game state changed; reload',409);
   const serialized=JSON.stringify(payload);if(serialized.length>10000||!payload||typeof payload!=='object'||Array.isArray(payload))return fail('Invalid order payload');
+  if(game.phase_id==='movement'){
+   const ships=(await db.prepare('SELECT owner_id,public_state_json,private_state_json FROM ships WHERE game_id=?').bind(gameId).all()).results.filter(s=>s.owner_id===user.id&&JSON.parse(s.public_state_json||'{}').trial);
+   if(ships.some(s=>{const m=JSON.parse(s.private_state_json||'{}').trial?.movement;return !m||m.turn!==game.turn||m.state.remaining!==0;}))return fail('Complete each trial ship\'s required movement before locking your order',409);
+  }
   if(game.phase_id==='initiative'){
    const shipStates=(await db.prepare('SELECT id,private_state_json,public_state_json FROM ships WHERE game_id=?').bind(gameId).all()).results;
    const missing=shipStates.filter(s=>{const p=JSON.parse(s.public_state_json||'{}'),v=JSON.parse(s.private_state_json||'{}');return p.trial&&v.trial?.initiative?.turn!==game.turn||s.template_id&&v.scs?.initiative?.turn!==game.turn;});
