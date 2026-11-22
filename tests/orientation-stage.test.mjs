@@ -1,0 +1,5 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {pivotStart,pivotHalt,rollStart,rollHalt,orientationAtMovementStart} from '../shared/orientation-stage.mjs';
+test('pivot changes facing without changing motion heading',()=>{const base={turn:1,facing:0,motionFacing:0,rolled:false};const p=pivotStart(base,{direction:1,cost:2,thrusterPair:'forward-port'});assert.equal(p.facing,1);assert.equal(p.motionFacing,0);assert.throws(()=>pivotStart(p,{direction:1,cost:2,thrusterPair:'forward-port'}));const halted=pivotHalt(p,{cost:2,thrusterPair:'aft-port'});assert.equal(halted.pivotInProgress,false);assert.equal(halted.pivotActive,true);});
+test('ongoing pivot shifts facing next turn',()=>{const p=pivotStart({turn:1,facing:0,motionFacing:0,rolled:false},{direction:1,cost:2,thrusterPair:'forward-port'});assert.equal(orientationAtMovementStart(p,2).facing,2);});
+test('ordinary roll flips at next movement step, then can halt',()=>{const r=rollStart({turn:1,facing:0,rolled:false},1);assert.throws(()=>rollHalt(r,1));const next=orientationAtMovementStart(r,2);assert.equal(next.rolled,true);assert.equal(rollHalt(next,1).rollInProgress,false);});
