@@ -26,7 +26,7 @@ export const VORCHAN_SCS_IDENTIFICATION=Object.freeze({
   {id:'jump_drive',kind:'other',section:'aft',armour:6,boxes:16,rows:[4,4,4,4],verified:true}
  ],
  weapons:[{id:'plasma_accelerator',printedMounts:2},{id:'twin_array',printedMounts:2}],
- completeness:{allSystemsLocated:true,allArmourIdentified:true,allDamageBoxesCounted:true,allWeaponArcsIdentified:false,sensorStrengthVerified:false,freeThrustVerified:false}
+ completeness:{allSystemsLocated:true,allArmourIdentified:true,allDamageBoxesCounted:true,allWeaponArcsIdentified:true,sensorStrengthVerified:false,freeThrustVerified:false}
 });
 export function auditVorchanIdentification(){
  const s=VORCHAN_SCS_IDENTIFICATION.systems;
