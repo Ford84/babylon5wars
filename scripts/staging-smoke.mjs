@@ -12,6 +12,7 @@ console.log('PASS /api/phases');
 const catalogue=await get('/api/ships/catalog');
 if(!Array.isArray(catalogue)||!catalogue.length)throw Error('Ship catalogue missing');
 console.log('PASS /api/ships/catalog');
+// Interactive thrust planner: each manoeuvre now requires a deliberate SCS thruster allocation and confirmation.
 const unauthorised=await fetch(base+'/api/games/nonexistent/trial-movement',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
 if(unauthorised.status!==401)throw Error('Movement API unauthorised request returned '+unauthorised.status);
 console.log('PASS movement authorisation gate');
