@@ -10,8 +10,7 @@ const xy=p=>({x:Math.sqrt(3)*(p.q+p.r/2),y:1.5*p.r});
 const directionAngle=(a,b)=>{const p=xy(a),t=xy(b);return Math.atan2(t.y-p.y,t.x-p.x)*180/Math.PI};
 const norm=a=>((a%360)+360)%360;
 const delta=(a,b)=>((a-b+540)%360)-180;
-// Facing 0 points to axial +q (east), 1 to +q,-r (north-east),
-// 2 to -r (north-west), 3 to -q, 4 to -q,+r, 5 to +r.
+// Facing follows movement-rules.mjs: 0 NE (+q,-r), 1 E (+q),\n// 2 SE (+r), 3 SW (-q,+r), 4 W (-q), 5 NW (-r).
 export function bearingDegrees(shooter,target,{sameHexPrevious=null}={}){
  if(![shooter?.q,shooter?.r,target?.q,target?.r].every(int))throw new RangeError('Invalid hex coordinates');
  if(shooter.q===target.q&&shooter.r===target.r){
@@ -24,11 +23,11 @@ export function facingDirections(shooter,target,options={}){
  if(!int(target?.facing)||target.facing<0||target.facing>5)throw new RangeError('Invalid target facing');
  const bearing=bearingDegrees(target,shooter,options);
  if(bearing.requiresChoice)return bearing;
- const relative=norm(bearing.angle+target.facing*60);
+ const relative=norm(bearing.angle-(-30+target.facing*60));
  // Forward 60°, port/starboard 120° each, aft 60°.
- const sector=relative<30||relative>330?'forward':relative<150?'port':relative<210?'aft':'starboard';
+ const sector=relative<30||relative>330?'forward':relative<150?'starboard':relative<210?'aft':'port';
  const boundary=[30,150,210,330].find(n=>Math.abs(relative-n)<1e-8);
- const choices=boundary===30?['forward','port']:boundary===150?['port','aft']:boundary===210?['aft','starboard']:boundary===330?['starboard','forward']:null;
+ const choices=boundary===30?['forward','starboard']:boundary===150?['starboard','aft']:boundary===210?['aft','port']:boundary===330?['port','forward']:null;
  if(choices)return {requiresChoice:true,choices,reason:'Defender chooses a boundary direction for all shots from this shooter in this turn',relative};
  return {requiresChoice:false,direction:sector,relative};
 }
@@ -37,7 +36,7 @@ export function checkMountArc({shooter,target,arc,sameHexPrevious=null}){
  if(!arc||arc.verified!==true||!finite(arc.start)||!finite(arc.end))return {allowed:false,verified:false,reason:'Original SCS mount firing arc has not been verified'};
  const bearing=bearingDegrees(shooter,target,{sameHexPrevious});
  if(bearing.requiresChoice)return {allowed:false,verified:true,...bearing};
- const relative=norm(bearing.angle+shooter.facing*60);
+ const relative=norm(bearing.angle-(-30+shooter.facing*60));
  const start=norm(arc.start),end=norm(arc.end);
  const allowed=start<=end?relative>=start-1e-8&&relative<=end+1e-8:relative>=start-1e-8||relative<=end+1e-8;
  return {allowed,verified:true,relative,reason:allowed?null:'Target outside physical weapon arc'};
@@ -50,7 +49,7 @@ export function lineOfSight({shooter,target,blockingHexes=[]}){
  for(const h of blockingHexes){
   if(!int(h.q)||!int(h.r))throw new RangeError('Invalid terrain hex');
   if(h.q===shooter.q&&h.r===shooter.r||h.q===target.q&&h.r===target.r)continue;
-  const p=xy(h),vertices=Array.from({length:6},(_,i)=>({x:p.x+Math.cos((60*i+30)*RAD),y:p.y+Math.sin((60*i+30)*RAD)}));
+  const p=xy(h),vertices=Array.from({length:6},(_,i)=>({x:p.x+Math.cos((60*i+90)*RAD),y:p.y+Math.sin((60*i+30)*RAD)}));
   if(vertices.some((v,i)=>intersects(a,b,v,vertices[(i+1)%6])))return {clear:false,blockedBy:{q:h.q,r:h.r}};
  }
  return {clear:true};
@@ -75,7 +74,7 @@ export function vorchanTargetingPreview({shooter,target,mountId,arc,blockingHexe
  const incoming=facingDirections(shooter,target,{sameHexPrevious});
  const direction=incoming.requiresChoice?(incoming.choices?.includes(defenderDirection)?defenderDirection:null):incoming.direction;
  const los=verifiedTerrain?lineOfSight({shooter,target,blockingHexes}):{clear:false,reason:'Terrain and LOS not verified'};
- const defence=direction?VORCHAN.defence[direction]:null;
+ if(target.libraryId&&target.libraryId!==VORCHAN.id)throw new RangeError('Target SCS defence not verified for this class');\n const defence=direction?VORCHAN.defence[direction]:null;
  const fireControl=weapon.fireControl[targetFireControlIndex(target.hullClass||'heavy_combat')];
  const rangePenalty=weaponRangePenalty({range:distance,penaltyPerStep:weapon.rangePenaltyPerHex});
  const ew=ewAttackModifier({attackerOffensive:attackerOffensiveEW,targetDefensive:targetDefensiveEW,rangePenalty});
