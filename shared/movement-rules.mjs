@@ -28,3 +28,13 @@ export function advanceHex({q,r},facing){
  const vectors=[[1,-1],[1,0],[0,1],[-1,1],[-1,0],[0,-1]];
  return {q:q+vectors[facing][0],r:r+vectors[facing][1]};
 }
+
+export function accelerationOrder({speed,change,accelCost,freeThrust,purchasedThrust=0,engineEfficiency=0,engineDestroyed=false}){
+ if(!Number.isInteger(speed)||!Number.isInteger(change))throw new RangeError('signed speed/change');
+ nonneg(accelCost,'accelCost');nonneg(freeThrust,'freeThrust');nonneg(purchasedThrust,'purchasedThrust');nonneg(engineEfficiency,'engineEfficiency');
+ if(accelCost===0)throw new RangeError('accelCost');
+ if(engineDestroyed&&(freeThrust||purchasedThrust))throw new RangeError('Destroyed engine produces no thrust');
+ const thrustCost=Math.abs(change)*accelCost;
+ if(thrustCost>freeThrust+purchasedThrust)throw new RangeError('Insufficient thrust');
+ return {previousSpeed:speed,newSpeed:speed+change,hexesToMove:Math.abs(speed+change),reverse:speed+change<0,thrustCost,powerCost:purchasedThrust*engineEfficiency,thrustRemaining:freeThrust+purchasedThrust-thrustCost,requiresThrusterAllocation:thrustCost>0};
+}
