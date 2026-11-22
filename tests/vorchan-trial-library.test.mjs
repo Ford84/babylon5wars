@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {VORCHAN_LIBRARY_RECORD,validateVorchanLibraryRecord,newVorchanTrialState,vorchanThrustPreview} from '../shared/vorchan-trial-library.mjs';
+test('official Vorchan header and combat references validate',()=>{const v=validateVorchanLibraryRecord(VORCHAN_LIBRARY_RECORD);assert.equal(v.valid,true);assert.equal(v.automaticCombatReady,false);assert.equal(VORCHAN_LIBRARY_RECORD.combatPoints,360);assert.deepEqual(VORCHAN_LIBRARY_RECORD.defence,{forward:12,aft:12,port:14,starboard:14});});
+test('two instances share library ID but not mutable state',()=>{const a=newVorchanTrialState('a','p1',3,10,0),b=newVorchanTrialState('b','p2',15,10,3);assert.equal(a.libraryId,b.libraryId);a.systemDamage['x']=2;assert.deepEqual(b.systemDamage,{});assert.equal(a.speed,0);});
+test('Vorchan 2/1 engine efficiency comes from library',()=>{assert.deepEqual(vorchanThrustPreview(3),{purchased:3,powerRequired:6,accelerationThrustPerSpeed:2});assert.throws(()=>vorchanThrustPreview(-1));});
+test('weapon data, movement tables and hit charts available',()=>{assert.equal(VORCHAN_LIBRARY_RECORD.weapons[0].rateOfFire,'1 per 3 turns');assert.equal(VORCHAN_LIBRARY_RECORD.turnCost[11],6);assert.equal(VORCHAN_LIBRARY_RECORD.hitCharts.forward[0][2],'retro_thrust');});
