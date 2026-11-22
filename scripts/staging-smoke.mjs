@@ -87,3 +87,33 @@ const afterMovement=await authed('/api/games/'+id,host);
 if(afterMovement.game.phase_id!=='terrain_post')throw Error('Stationary ship movement could not complete');
 console.log('PASS two-player authoritative SCS power, initiative, EW and stationary movement phase advancement');
 
+
+for(const phase of ['terrain_post','weapon_movement','combat_pivot','recovery','ccew_commit','ramming']){
+ for(const token of tokens)await phaseOrder(token,phase);
+}
+let fire=await authed('/api/games/'+id,host);
+if(fire.game.phase_id!=='fire_commit')throw Error('Fire commit phase not reached: '+fire.game.phase_id);
+const emptyFire={shots:[]};
+const first=await post('/api/games/'+id+'/orders',{expectedRevision:fire.game.revision,payload:{acknowledgedPhase:'fire_commit',acknowledgedProcedures:true,procedureOutcomes:fire.phase.procedures.map(()=> 'completed'),fire:emptyFire}},host);
+if(first.status!==200)throw Error('First secret fire lock failed '+JSON.stringify(first));
+const privateGuest=await authed('/api/games/'+id+'/fire-orders',guest);
+if(privateGuest.revealed!==false||privateGuest.declarations.length!==0||privateGuest.own!==null||privateGuest.committed.length!==1)throw Error('Secret fire leaked before simultaneous commit');
+const privateHost=await authed('/api/games/'+id+'/fire-orders',host);
+if(privateHost.own?.shots?.length!==0)throw Error('Owner cannot inspect own committed fire');
+fire=await authed('/api/games/'+id,guest);
+const second=await post('/api/games/'+id+'/orders',{expectedRevision:fire.game.revision,payload:{acknowledgedPhase:'fire_commit',acknowledgedProcedures:true,procedureOutcomes:fire.phase.procedures.map(()=> 'completed'),fire:emptyFire}},guest);
+if(second.status!==200)throw Error('Second fire lock failed '+JSON.stringify(second));
+fire=await authed('/api/games/'+id,host);
+if(fire.game.phase_id!=='fire_resolution')throw Error('Fire did not advance to reactive defence');
+const reveal=await authed('/api/games/'+id+'/fire-orders',guest);
+if(!reveal.revealed||reveal.declarations.length!==2)throw Error('Simultaneous fire reveal failed');
+const invalid=await post('/api/games/'+id+'/orders',{expectedRevision:fire.game.revision,payload:{acknowledgedPhase:'fire_resolution',acknowledgedProcedures:true,procedureOutcomes:fire.phase.procedures.map(()=> 'completed'),defence:{assignments:[{shipId:hostShip.id,mountId:'twin_nose_port',gun:1,attackId:'unknown'}]}}},host);
+if(invalid.status!==400)throw Error('Unreserved defensive gun was accepted');
+for(const token of tokens){
+ const current=await authed('/api/games/'+id,token);
+ const done=await post('/api/games/'+id+'/orders',{expectedRevision:current.game.revision,payload:{acknowledgedPhase:'fire_resolution',acknowledgedProcedures:true,procedureOutcomes:current.phase.procedures.map(()=> 'unavailable'),defence:{assignments:[]}}},token);
+ if(done.status!==200)throw Error('Defensive allocation lock failed '+JSON.stringify(done));
+}
+const postFire=await authed('/api/games/'+id,host);
+if(postFire.game.phase_id!=='marine')throw Error('Fire resolution phase did not advance after both defensive allocations');
+console.log('PASS W3 two-player secrecy, simultaneous reveal, reactive defence validation and phase progression');
