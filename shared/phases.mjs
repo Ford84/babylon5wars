@@ -52,13 +52,13 @@ export const PHASE_PROCEDURES = Object.freeze({
     "Resolve ramming attempts and transverse-drive activation"
   ],
   "fire_commit": [
-    "Secretly determine fire, targets, called shots and defensive allocations"
+    "Secretly determine fire, targets, attack order and reserve defensive guns"
   ],
   "fire_reveal": [
-    "Reveal fire declarations and defensive allocations after all players commit"
+    "Reveal simultaneous fire declarations after all players commit; assign defensive guns afterwards"
   ],
   "fire_resolution": [
-    "Resolve ballistic impacts",
+    "Reveal fire and assign reserved defensive guns before any rolls; resolve ballistic impacts",
     "Resolve ship weapon fire",
     "Resolve fighter-versus-fighter fire and drop-out",
     "Resolve fighter-versus-ship and remaining weapon fire"
