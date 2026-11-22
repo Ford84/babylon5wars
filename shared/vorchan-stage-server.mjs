@@ -16,14 +16,14 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
  if(!Number.isInteger(turn)||turn<1)throw new RangeError('Invalid battle turn');
  const trial=privateState?.trial;
  if(!trial||trial.libraryId!==LIB.id)throw new RangeError('Not a Vorchan trial ship');
- if(!action||typeof action!=='object'||Array.isArray(action)||!['speed','advance','turn','slide','pivot-start','pivot-halt','roll-start','roll-halt','extended-start','extended-complete'].includes(action.type))throw new RangeError('Invalid staged action');
- if(Object.keys(action).some(k=>!({speed:['type','change','purchasedThrust','thrusters'],advance:['type','hexes'],turn:['type','direction','thrusters','shortenBy'],slide:['type','direction','thrusters'], 'pivot-start':['type','direction','thrusterPair','oddTo','thrusters'], 'pivot-halt':['type','thrusterPair','oddTo','thrusters'], 'roll-start':['type','thrusters'], 'roll-halt':['type','thrusters'], 'extended-start':['type','direction','initialThrust','thrusters'], 'extended-complete':['type','shortenBy','thrusters']}[action.type].includes(k))))throw new RangeError('Client cannot supply movement costs or limits');
+ if(!action||typeof action!=='object'||Array.isArray(action)||!['speed','advance','turn','slide','pivot-start','pivot-halt','roll-start','roll-halt','extended-start','extended-complete','extended-cancel'].includes(action.type))throw new RangeError('Invalid staged action');
+ if(Object.keys(action).some(k=>!({speed:['type','change','purchasedThrust','thrusters'],advance:['type','hexes'],turn:['type','direction','thrusters','shortenBy'],slide:['type','direction','thrusters'], 'pivot-start':['type','direction','thrusterPair','oddTo','thrusters'], 'pivot-halt':['type','thrusterPair','oddTo','thrusters'], 'roll-start':['type','thrusters'], 'roll-halt':['type','thrusters'], 'extended-start':['type','direction','initialThrust','thrusters'], 'extended-complete':['type','shortenBy','thrusters'], 'extended-cancel':['type','thrusters']}[action.type].includes(k))))throw new RangeError('Client cannot supply movement costs or limits');
  const previous=trial.movement?.turn===turn-1?trial.movement.state:null;
  const base=newStagedMovement({q:ship.q,r:ship.r,facing:ship.facing,speed:ship.speed,version:0});
  const carried=previous?orientationAtMovementStart({...previous,turn:turn-1},turn):null;
  const old=trial.movement?.turn===turn?trial.movement.state:carried?{...base,...carried,remaining:Math.abs(ship.speed),moved:0,thrustSpent:0,started:false,normalSinceSlide:true,slideDirection:null,history:[],version:0}:base;
  if(old.q!==ship.q||old.r!==ship.r||(trial.movement?.turn===turn&&old.facing!==ship.facing)||old.speed!==ship.speed)throw new RangeError('Movement state out of sync');
- if(old.extendedTurn&&action.type!=='extended-complete'&&action.type!=='advance')throw new RangeError('Extended turn must be completed before manoeuvring');
+ if(old.extendedTurn&&action.type!=='extended-complete'&&action.type!=='extended-cancel'&&action.type!=='advance')throw new RangeError('Extended turn must be completed before manoeuvring');
  if(old.extendedTurn&&action.type==='advance'&&old.extendedTurn.startedTurn!==turn)throw new RangeError('Complete extended turn before moving next turn');
  const purchased=trial.movement?.turn===turn?trial.movement.purchasedThrust:(trial.powerAllocation?.turn===turn?trial.powerAllocation.purchasedThrust:0);
  let nextPurchase=purchased,moveAction=action;
@@ -49,7 +49,18 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
  const limits={availableThrust:power.availableThrust,accelCost:LIB.accelerationCost};
  if(power.engineDestroyed&&action.type!=='advance')throw new RangeError('Destroyed engine cannot manoeuvre');
  let next;
- if(action.type==='extended-start'){
+ if(action.type==='extended-cancel'){
+  const ext=old.extendedTurn;
+  if(!ext||ext.startedTurn!==turn-1||old.moved!==0||old.thrustSpent!==0)throw new RangeError('No extended turn requiring cancellation');
+  const needed=ext.totalCost-ext.initialThrust;
+  const damage=trial.thrusterCriticalEffects??{};
+  const dead=new Set(trial.destroyedSystems??[]);
+  const eligible=ext.direction===1?['aft_port_thrust','aft_starboard_thrust','port_thrust']:['aft_port_thrust','aft_starboard_thrust','starboard_thrust'];
+  const rating=id=>dead.has(id)?0:effectiveThrusterRating(VORCHAN_THRUSTER_RATINGS[id],damage[id]);
+  const physicalMaximum=eligible.reduce((n,id)=>n+rating(id)*2,0);
+  if(needed<=limits.availableThrust&&needed<=physicalMaximum)throw new RangeError('Voluntary extended-turn cancellation prohibited');
+  next={...old,extendedTurn:null,started:true,version:old.version+1,history:[...old.history,{type:'extended-cancel',reason:'verified physical thrust shortfall',forfeitedThrust:ext.initialThrust}]};
+ }elseif(action.type==='extended-start'){
   if(old.extendedTurn||old.turnDelayRemaining>0||old.rollInProgress||old.pivotInProgress||old.pivotActive||![-1,1].includes(action.direction))throw new RangeError('Extended turn prohibited');
   const cost=turnCostAtSpeed(old.speed,LIB.turnCost);
   if(cost<2)throw new RangeError('Extended turn requires at least two thrust');
