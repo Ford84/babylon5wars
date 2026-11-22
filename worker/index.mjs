@@ -1,3 +1,4 @@
+import {VORCHAN_SCS_IDENTIFICATION,auditVorchanIdentification} from '../shared/vorchan-scs-identification.mjs';
 import {VORCHAN_LIBRARY_RECORD,newVorchanTrialState,vorchanThrustPreview} from '../shared/vorchan-trial-library.mjs';
 import {PHASES,phaseById,validateFacing} from '../shared/phases.mjs';
 import {validateSCS,initialSCSState} from '../shared/scs.mjs';
@@ -147,7 +148,7 @@ export default {async fetch(req,env){try{
   const ship=await db.prepare('SELECT * FROM ships WHERE id=? AND game_id=?').bind(shipId,gameId).first();
   if(!ship||JSON.parse(ship.public_state_json||'{}').libraryId!==VORCHAN_LIBRARY_RECORD.id)return fail('Trial ship not found',404);
   const state=JSON.parse(ship.private_state_json||'{}').trial;
-  return json({library:VORCHAN_LIBRARY_RECORD,ship:{id:ship.id,ownerId:ship.owner_id,q:ship.q,r:ship.r,facing:ship.facing,speed:ship.speed,initiative:state?.initiative??null,ew:ship.owner_id===user.id||user.id===game.host_id?state?.ew:undefined},capabilities:{initiative:true,thrustPreview:true,automaticCombat:false,verifiedDamageDiagram:false}});
+  return json({library:VORCHAN_LIBRARY_RECORD,scsIdentification:VORCHAN_SCS_IDENTIFICATION,scsAudit:auditVorchanIdentification(),ship:{id:ship.id,ownerId:ship.owner_id,q:ship.q,r:ship.r,facing:ship.facing,speed:ship.speed,initiative:state?.initiative??null,ew:ship.owner_id===user.id||user.id===game.host_id?state?.ew:undefined},capabilities:{initiative:true,thrustPreview:true,automaticCombat:false,verifiedDamageDiagram:false}});
  }
  if(route==='trial-roll'&&req.method==='POST'){
   if(game.phase_id!=='initiative')return fail('Initiative phase required',409);
