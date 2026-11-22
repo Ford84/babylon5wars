@@ -403,7 +403,8 @@ export default {async fetch(req,env){try{
    // Generate all dice on the server only after both defensive choices have
    // been committed. D1 batch atomically stores this journal with final lock.
    const shots=committedFire.flatMap(d=>d.fire.shots.filter(s=>s.role==='offensive'));
-   const rolls=shots.map(shot=>({attackId:[shot.shipId,shot.mountId,shot.gun].join(':'),roll:crypto.getRandomValues(new Uint32Array(1))[0]%20+1}));
+   const die=sides=>{const limit=Math.floor(4294967296/sides)*sides;let n;do{n=crypto.getRandomValues(new Uint32Array(1))[0]}while(n>=limit);return n%sides+1};
+   const rolls=shots.map(shot=>({attackId:[shot.shipId,shot.mountId,shot.gun].join(':'),roll:die(20),locationRoll:die(20),primaryRoll:die(20),damageDice:Array.from({length:shot.mountId==='plasma_forward'?(shot.chargeTurns===3?4:shot.chargeTurns):1},()=>die(10))}));
    inserts.push(event(db,game,null,'vorchan_fire_roll_journal',{turn:game.turn,tier:'ship',rolls,damageApplied:false,requiresAdjudication:true}));
   }
   if(isFinal&&!holdsCombat){
