@@ -71,7 +71,7 @@ for(const action of [
 const movedState=await authed('/api/games/'+id,host);const actual=movedState.ships.find(s=>s.id===hostShip.id);
 if(actual.speed!==2||actual.private_state?.trial?.movement?.state?.remaining!==0||actual.private_state?.trial?.movement?.thrusterLedger?.aft_port_thrust?.used!==5)throw Error('SCS-backed movement and thruster ledger not persisted');
 console.log('PASS speed change, turn, advance and SCS thruster-ledger persistence');
-for(const token of tokens)await phaseOrder(token,'movement');
+for(let step=0;step<2;step++){const snapshot=await authed('/api/games/'+id,host);const next=snapshot.readiness.find(x=>x.required);if(!next)throw Error('No player eligible to move');const who=snapshot.members.find(m=>m.user_id===next.id);const index=credentials.findIndex(c=>c.name===who?.display_name);if(index<0)throw Error('Cannot match movement player');await phaseOrder(tokens[index],'movement');}
 const afterMovement=await authed('/api/games/'+id,host);
 if(afterMovement.game.phase_id!=='terrain_post')throw Error('Stationary ship movement could not complete');
 console.log('PASS two-player authoritative SCS power, initiative, EW and stationary movement phase advancement');
