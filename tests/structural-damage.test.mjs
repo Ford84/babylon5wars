@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import app,{SHIP_PRESETS} from '../worker/index.mjs';
+test('All Core Rules presets have parseable structural area totals',()=>{for(const s of SHIP_PRESETS){const x=s.stats.structuralAreas;assert.ok(x.match(/Engine\w*\s+\d+/i),s.id);assert.ok(x.match(/Control\s+\d+/i),s.id);}});
+test('Quick and Enhanced modes are available',async()=>{const r=await app.fetch(new Request('https://test.invalid/'),{DB:{}});const t=await r.text();assert.match(t,/Enhanced weapons/);assert.match(t,/Systems:/);});
+test('Tri-Star has 60 maximum and 52 current structural spaces',()=>{const t=SHIP_PRESETS.find(x=>x.id==='tri-star');assert.equal(t.stats.structure,52);assert.equal(t.stats.structureMaximum,60);assert.match(t.stats.structuralAreas,/Engines 24/);});
