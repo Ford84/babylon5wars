@@ -50,7 +50,7 @@ export function lineOfSight({shooter,target,blockingHexes=[]}){
  for(const h of blockingHexes){
   if(!int(h.q)||!int(h.r))throw new RangeError('Invalid terrain hex');
   if(h.q===shooter.q&&h.r===shooter.r||h.q===target.q&&h.r===target.r)continue;
-  const p=xy(h),vertices=Array.from({length:6},(_,i)=>({x:p.x+Math.cos((60*i+90)*RAD),y:p.y+Math.sin((60*i+30)*RAD)}));
+  const p=xy(h),vertices=Array.from({length:6},(_,i)=>({x:p.x+Math.cos((60*i+90)*RAD),y:p.y+Math.sin((60*i+90)*RAD)}));
   if(vertices.some((v,i)=>intersects(a,b,v,vertices[(i+1)%6])))return {clear:false,blockedBy:{q:h.q,r:h.r}};
  }
  return {clear:true};
