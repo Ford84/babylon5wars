@@ -16,7 +16,7 @@ test('built-in catalogue contains one selectable, versioned Vorchan',()=>{
 test('catalogue preserves incomplete structural damage without fabricating boxes',()=>{
  const ship=getBuiltinShip('centauri-vorchan-v3-2e-sf');
  assert.equal(ship.scs.systems.length,18);
- assert.deepEqual(auditVorchanIdentification().unverifiedTracks,['forward_structure','primary_structure','aft_structure']);
- for(const system of ship.scs.systems.filter(s=>!s.verified))assert.equal(system.boxes,null);
+ assert.deepEqual(auditVorchanIdentification().unverifiedTracks,[]);
+ assert.deepEqual(ship.scs.systems.filter(s=>s.kind==='structure').map(s=>s.boxes),[48,28,44]);
  assert.equal(listBuiltinShips().length,1);
 });
