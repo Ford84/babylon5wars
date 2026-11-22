@@ -8,13 +8,13 @@ export const VORCHAN_SCS_IDENTIFICATION=Object.freeze({
  systems:[
   {id:'retro',kind:'thruster',section:'forward',armour:4,boxes:5,rows:[5],iconValue:null,verified:true},
   {id:'forward_port_thrust',kind:'thruster',section:'forward',armour:null,boxes:null,rows:[],iconValue:2,verified:false},
-  {id:'twin_nose_port',kind:'weapon',section:'forward',armour:3,boxes:6,rows:[3,3],weaponCardId:'twin_array',verified:true},
+  {id:'twin_nose_port',kind:'weapon',section:'forward',armour:3,boxes:6,rows:[3,3],weaponCardId:'twin-array',verified:true},
   {id:'forward_starboard_thrust',kind:'thruster',section:'forward',armour:null,boxes:null,rows:[],iconValue:3,verified:false},
-  {id:'twin_nose_starboard',kind:'weapon',section:'forward',armour:3,boxes:6,rows:[3,3],weaponCardId:'twin_array',verified:true},
-  {id:'plasma_forward',kind:'weapon',section:'forward',armour:4,boxes:8,rows:[4,4],weaponCardId:'plasma_accelerator',verified:true},
+  {id:'twin_nose_starboard',kind:'weapon',section:'forward',armour:3,boxes:6,rows:[3,3],weaponCardId:'twin-array',verified:true},
+  {id:'plasma_forward',kind:'weapon',section:'forward',armour:4,boxes:8,rows:[4,4],weaponCardId:'plasma-accelerator',verified:true},
   {id:'forward_structure',kind:'structure',section:'forward',armour:5,boxes:48,rows:[2,2,2,4,4,6,6,8,8,4,2],verified:true},
-  {id:'twin_forward_port',kind:'weapon',section:'forward',armour:5,boxes:10,rows:[5,5],weaponCardId:'twin_array',iconValue:3,verified:true},
-  {id:'twin_forward_starboard',kind:'weapon',section:'forward',armour:5,boxes:10,rows:[5,5],weaponCardId:'twin_array',iconValue:3,verified:true},
+  {id:'twin_forward_port',kind:'weapon',section:'forward',armour:5,boxes:10,rows:[5,5],weaponCardId:'twin-array',iconValue:3,verified:true},
+  {id:'twin_forward_starboard',kind:'weapon',section:'forward',armour:5,boxes:10,rows:[5,5],weaponCardId:'twin-array',iconValue:3,verified:true},
   {id:'hangar',kind:'hangar',section:'primary',armour:6,boxes:2,rows:[2],iconValue:2,verified:true},
   {id:'engine',kind:'engine',section:'primary',armour:7,boxes:11,rows:[3,5,3],iconValue:10,verified:true},
   {id:'reactor',kind:'reactor',section:'primary',armour:6,boxes:20,rows:[4,4,4,4,4],iconValue:4,verified:true},
@@ -28,7 +28,7 @@ export const VORCHAN_SCS_IDENTIFICATION=Object.freeze({
   {id:'aft_starboard_thrust',kind:'thruster',section:'aft',armour:4,boxes:8,rows:[4,4],iconValue:5,verified:true},
   {id:'jump_drive',kind:'other',section:'aft',armour:6,boxes:16,rows:[4,4,4,4],verified:true}
  ],
- weapons:[{id:'plasma_accelerator',printedMounts:1},{id:'twin_array',printedMounts:4}],
+ weapons:[{id:'plasma-accelerator',printedMounts:1},{id:'twin-array',printedMounts:4}],
  completeness:{allSystemsLocated:false,allArmourIdentified:false,allDamageBoxesCounted:false,allWeaponArcsIdentified:false,sensorStrengthVerified:false,freeThrustVerified:true}
 });
 export function auditVorchanIdentification(){
