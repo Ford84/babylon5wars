@@ -18,7 +18,7 @@ test('visual weapon symbol count: one plasma and two twin arrays',()=>{
 });
 test('visually transcribed SCS system tracks and icon values',()=>{
  const map=Object.fromEntries(SCS.systems.map(s=>[s.id,s]));
- for(const [id,boxes] of Object.entries({retro:5,twin_nose_port:6,twin_nose_starboard:6,plasma_forward:8,jump_forward_port:10,jump_forward_starboard:10,engine:11,reactor:20,sensors:12,command:12,hangar:2,primary_structure:28,port_thrust:12,starboard_thrust:12,jump_aft_port:8,jump_aft_starboard:8,jump_aft_centre:16}))assert.equal(map[id].boxes,boxes,id);
+ for(const [id,boxes] of Object.entries({retro:5,twin_nose_port:6,twin_nose_starboard:6,plasma_forward:8,jump_forward_port:10,jump_forward_starboard:10,engine:11,reactor:20,sensors:12,command:12,hangar:2,primary_structure:28,port_thrust:12,starboard_thrust:12,aft_port_thrust:8,aft_starboard_thrust:8,jump_aft_centre:16}))assert.equal(map[id].boxes,boxes,id);
  assert.equal(map.engine.iconValue,10);
  assert.equal(map.reactor.iconValue,4);
  assert.equal(map.hangar.iconValue,2);
@@ -35,4 +35,14 @@ test('Vorchan baseline reactor budget and all-three-mount deactivation',()=>{
  const budget=vorchanPowerBudget({trial,turn:1,deactivated:all,purchasedThrust:6});
  assert.equal(budget.availablePower,13);
  assert.equal(budget.unusedPower,1);
+});
+
+test('aft flanking nozzle symbols are thrust, centre striped symbol is jump engine',()=>{
+ const byId=Object.fromEntries(SCS.systems.map(s=>[s.id,s]));
+ for(const id of ['aft_port_thrust','aft_starboard_thrust']){
+  assert.equal(byId[id].kind,'thruster');assert.equal(byId[id].iconValue,5);
+  assert.equal(byId[id].boxes,8);
+ }
+ assert.equal(byId.jump_aft_centre.kind,'jump-engine');
+ assert.equal(byId.jump_aft_centre.boxes,16);
 });
