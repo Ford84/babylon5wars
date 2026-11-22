@@ -1,4 +1,4 @@
-import React,{useEffect,useState} from 'react';import Map3D from './Map3D.jsx';import{createRoot}from'react-dom/client';import './style.css';
+import React,{useEffect,useState} from 'react';import Map3D from './Map3D.jsx';import{createRoot}from'react-dom/client';import './style.css';import {applyVorchanStage,VORCHAN_THRUSTER_RATINGS} from '../shared/vorchan-stage-server.mjs';
 const phases=['Ship Power','Initiative','EW and Ballistic Orders','Jump Point Formation','Movement','Fire Determination','Fire Resolution','Critical Hits'];
 const demoShips=[{label:'Omega Destroyer',q:3,r:3,facing:0,owner:'Earth Alliance'},{label:'Sharlin War Cruiser',q:8,r:2,facing:3,owner:'Minbari'},{label:'G’Quan Heavy Cruiser',q:7,r:6,facing:4,owner:'Narn'}];
 const MAP_PRESETS={standard:{columns:20,rows:32,label:'Standard tactical sheet (20 × 32)'},outer:{columns:40,rows:64,label:'Outer Sphere (40 × 64)'},inner:{columns:80,rows:128,label:'Inner Sphere (80 × 128)'}};
@@ -14,29 +14,32 @@ function ThrustLedger({storageKey,ship,turn,revision,onExecute,busy,makeCost}){
  const ledger=actual.thrusterLedger||{};
  const spent=actual.engineThrustSpent||0;
  const purchased=ship?.private_state?.trial?.powerAllocation?.turn===turn?ship.private_state.trial.powerAllocation.purchasedThrust:0;
- const engineLoss=ship?.private_state?.trial?.verifiedEngineThrustLoss||0;
- const available=Math.max(0,10-engineLoss+purchased);
- const cumulative={};
+ const available=10+purchased;
+ let simulatedShip={...ship},simulatedPrivate=ship.private_state;
+ let blocked=false;
  const rows=entries.map((entry,index)=>{
-  const cost=makeCost(entry.action,ship);
-  const output=totalOutput(entry.thrusters);
-  for(const [id,n] of Object.entries(entry.thrusters||{}))cumulative[id]=(cumulative[id]||0)+n;
-  const projected=Object.entries(cumulative).map(([id,n])=>({id,used:(ledger[id]?.used||0)+n,rating:ledger[id]?.rating??THRUSTER_RATINGS[id]??0}));
-  const engine=spent+entries.slice(0,index+1).reduce((n,e)=>n+totalOutput(e.thrusters),0);
+  const action={...entry.action,thrusters:{...entry.thrusters}};
+  if(action.type==='speed')action.purchasedThrust=purchased;
   const errors=[];
-  if(output!==cost)errors.push('Output does not equal required cost');
-  if(projected.some(t=>t.used>t.rating*2))errors.push('Thruster exceeds twice SCS rating');
-  if(engine>available)errors.push('Planned thrust exceeds engine budget');
-  if(entry.action.type==='speed'&&index>0)errors.push('Speed changes must be first');
-  return {...entry,index,cost,output,engine,projected,errors};
+  let projected=null;
+  if(blocked)errors.push('Earlier planned manoeuvre must be corrected first');
+  else try{
+   const result=applyVorchanStage({ship:simulatedShip,privateState:simulatedPrivate,action,turn});
+   simulatedShip={...simulatedShip,...result.nextShip};
+   simulatedPrivate=result.nextPrivateState;
+   projected={ship:result.nextShip,movement:result.movement,ledger:result.nextPrivateState.trial.movement.thrusterLedger,engine:result.engineThrustSpent,overthrust:result.nextPrivateState.trial.movement.pendingOverthrustChecks||[]};
+  }catch(error){errors.push(error.message);blocked=true;}
+  return {...entry,index,cost:makeCost(entry.action,ship),output:totalOutput(entry.thrusters),projected,errors};
  });
+ const projectedLedger=simulatedPrivate?.trial?.movement?.thrusterLedger||ledger;
+ const projectedEngine=simulatedPrivate?.trial?.movement?.engineThrustSpent??spent;
  useEffect(()=>{const listener=e=>{const {action,thrusters,editId}=e.detail||{};if(!action||!thrusters)return;setEntries(old=>editId?old.map(x=>x.id===editId?{...x,action,thrusters}:x):[...old,{id:Date.now()+'-'+Math.random().toString(36).slice(2),action,thrusters,createdRevision:revision}])};window.addEventListener('b5w-thrust-add',listener);return()=>window.removeEventListener('b5w-thrust-add',listener)},[revision]);
  const edit=index=>{const row=entries[index];onExecute({kind:'edit',entry:row,index});};
  const execute=async()=>{if(!rows.length||rows[0].errors.length)return;const row=rows[0];const ok=await onExecute({kind:'commit',entry:row});if(ok)setEntries(old=>old.filter(e=>e.id!==row.id));};
- return <section className="thrust-ledger"><h3>Turn {turn} — planned thrust ledger</h3><p>Saved privately in this browser for this player, battle, ship and turn. Plans are provisional; only confirmed actions alter the server SCS. Review later entries again after each manoeuvre.</p><p><strong>Engine thrust:</strong> {spent} committed + {rows.length?rows[rows.length-1].engine-spent:0} planned / {available} available</p><div className="ledger-bars">{Object.entries(THRUSTER_RATINGS).map(([id,rating])=>{const used=ledger[id]?.used||0,planned=entries.reduce((n,e)=>n+(e.thrusters?.[id]||0),0),limit=(ledger[id]?.rating??rating);return <div key={id}><span>{id.replaceAll('_',' ')}: {used} used + {planned} planned / {limit} normal ({2*limit} maximum)</span><progress value={Math.min(used+planned,2*limit)} max={Math.max(1,2*limit)}/>{used+planned>limit&&<small> Overthrust: +{used+planned-limit}; critical check if executed</small>}</div>})}</div>
- {rows.length?<ol className="ledger-entries">{rows.map(row=><li key={row.id}><strong>{row.action.type.replaceAll('-',' ')} {row.action.direction===1?'starboard':row.action.direction===-1?'port':''}</strong> — {row.output}/{row.cost} thrust; projected engine {row.engine}/{available}{row.errors.length>0&&<p className="error">{row.errors.join('; ')}</p>}<p>{Object.entries(row.thrusters).filter(([,n])=>n>0).map(([id,n])=>id.replaceAll('_',' ')+': '+n).join(' · ')||'No thrust allocated'}</p><button className="secondary" onClick={()=>edit(row.index)}>Edit</button><button className="secondary" disabled={row.index===0} onClick={()=>setEntries(old=>old.map((e,i)=>i===row.index-1?old[row.index]:i===row.index?old[row.index-1]:e))}>Move earlier</button><button className="secondary" disabled={row.index===rows.length-1} onClick={()=>setEntries(old=>old.map((e,i)=>i===row.index+1?old[row.index]:i===row.index?old[row.index+1]:e))}>Move later</button><button className="secondary" onClick={()=>setEntries(old=>old.filter(e=>e.id!==row.id))}>Remove</button></li>)}</ol>:<p>No queued manoeuvres. Prepare one using the SCS allocation controls and add it here.</p>}
+ return <section className="thrust-ledger"><h3>Turn {turn} — planned thrust ledger</h3><p>Saved privately in this browser for this player, battle, ship and turn. Plans are provisional; only confirmed actions alter the server SCS. Review later entries again after each manoeuvre.</p><p><strong>Engine thrust:</strong> {spent} committed + {projectedEngine-spent} projected additional / {available} base thrust. Server simulation includes damaged-thruster efficiency costs.</p><div className="ledger-bars">{Object.entries(THRUSTER_RATINGS).map(([id,rating])=>{const used=ledger[id]?.used||0,planned=(projectedLedger[id]?.used??used)-used,limit=(projectedLedger[id]?.rating??ledger[id]?.rating??rating);return <div key={id}><span>{id.replaceAll('_',' ')}: {used} used + {planned} planned / {limit} normal ({2*limit} maximum)</span><progress value={Math.min(used+planned,2*limit)} max={Math.max(1,2*limit)}/>{used+planned>limit&&<small> Overthrust: +{used+planned-limit}; critical check if executed</small>}</div>})}</div>
+ {rows.length?<ol className="ledger-entries">{rows.map(row=><li key={row.id}><strong>{row.action.type.replaceAll('-',' ')} {row.action.direction===1?'starboard':row.action.direction===-1?'port':''}</strong> — {row.output}/{row.cost} thrust; projected engine {row.projected?.engine??'—'}/{available} · speed {row.projected?.ship?.speed??'—'} · remaining movement {row.projected?.movement?.remaining??'—'}{row.errors.length>0&&<p className="error">{row.errors.join('; ')}</p>}<p>{Object.entries(row.thrusters).filter(([,n])=>n>0).map(([id,n])=>id.replaceAll('_',' ')+': '+n).join(' · ')||'No thrust allocated'}</p><button className="secondary" onClick={()=>edit(row.index)}>Edit</button><button className="secondary" disabled={row.index===0} onClick={()=>setEntries(old=>old.map((e,i)=>i===row.index-1?old[row.index]:i===row.index?old[row.index-1]:e))}>Move earlier</button><button className="secondary" disabled={row.index===rows.length-1} onClick={()=>setEntries(old=>old.map((e,i)=>i===row.index+1?old[row.index]:i===row.index?old[row.index+1]:e))}>Move later</button><button className="secondary" onClick={()=>setEntries(old=>old.filter(e=>e.id!==row.id))}>Remove</button></li>)}</ol>:<p>No queued manoeuvres. Prepare one using the SCS allocation controls and add it here.</p>}
  <button disabled={busy||!rows.length||rows[0].errors.length>0} onClick={execute}>Execute first planned manoeuvre</button><button className="secondary" disabled={!rows.length} onClick={()=>setEntries([])}>Clear draft ledger</button>
- <p className="hint">The projected totals assume no additional damage or efficiency loss. The server checks actual thrust costs, manoeuvre eligibility and critical effects at execution; an invalid plan remains editable.</p></section>;
+ <p className="hint">Every queued manoeuvre is replayed locally through the same movement and SCS validation engine used by the server. Later entries use the projected speed, facing, movement remaining, engine expenditure and thruster damage from earlier entries. The server rechecks authoritative state at execution.</p></section>;
 }
 function Map({ships,selected,setSelected,preset='standard'}){
  const {columns,rows}=MAP_PRESETS[preset]||MAP_PRESETS.standard;
