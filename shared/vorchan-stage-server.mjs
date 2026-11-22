@@ -54,7 +54,7 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
   next=stagedMove(old,moveAction,limits);
  }
  if(action.type==='turn')next={...next,turnDelayOriginal:moveAction.delay,hexesSinceTurn:0};
- if((action.type==='advance'||action.type==='slide')&&old.turnDelayRemaining>0)next={...next,turnDelayOriginal:old.turnDelayOriginal,hexesSinceTurn:(old.hexesSinceTurn??0)+action.hexes};
+ if((action.type==='advance'||action.type==='slide')&&old.turnDelayRemaining>0)next={...next,turnDelayOriginal:old.turnDelayOriginal,hexesSinceTurn:(old.hexesSinceTurn??0)+(action.type==='slide'?1:action.hexes)};
  if(action.type==='speed'&&old.turnDelayRemaining>0){const speed=Math.abs(next.speed);if(speed>12)throw new RangeError('Speed beyond verified turn-delay chart');const delay=speed===0?0:LIB.turnDelay[speed-1];next={...next,turnDelayRemaining:adjustTurnDelay({oldRequired:old.turnDelayOriginal??old.turnDelayRemaining,hexesSinceTurn:old.hexesSinceTurn??0,newRequired:delay}).remaining,turnDelayOriginal:delay};}
  const newPath=next.history.at(-1)?.path||[];
  for(const point of newPath){
