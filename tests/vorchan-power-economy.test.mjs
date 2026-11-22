@@ -13,7 +13,7 @@ test('working mounts release printed power and permit purchases beyond base surp
 test('destroyed systems do not release power and shortage must be covered',()=>{
  assert.throws(()=>vorchanPowerBudget({trial:{...trial(),destroyedSystems:['plasma_forward']},turn:1,deactivated:['plasma_forward']}),/Destroyed/);
  assert.throws(()=>vorchanPowerBudget({trial:{...trial(),verifiedReactorPowerLoss:5},turn:1}),/shortage/);
- const t=vorchanPowerBudget({trial:{...trial(),verifiedReactorPowerLoss:5},turn:1,deactivated:['twin_forward_port']});
+ const t=vorchanPowerBudget({trial:{...trial(),verifiedReactorPowerLoss:5},turn:1,deactivated:['twin_nose_port']});
  assert.equal(t.availablePower,1);
 });
 test('engine losses reduce free thrust and destruction prevents powered manoeuvres',()=>{
