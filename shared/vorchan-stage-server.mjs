@@ -3,6 +3,7 @@
 import {pivotStart,pivotHalt,rollStart,rollHalt,orientationAtMovementStart} from './orientation-stage.mjs';
 import {adjustTurnDelay} from './speed-integration.mjs';
 import {newStagedMovement,stagedMove,turnCostAtSpeed} from './staged-movement.mjs';
+import {vorchanPowerBudget} from './vorchan-power-economy.mjs';
 import {effectiveThrusterRating,overthrustChecksForTurn,manoeuvreIncrementalEngineCost} from './thruster-criticals.mjs';
 import {validateManoeuvreThrusters} from './manoeuvre-thrusters.mjs';
 import {createThrusterLedger,allocateThrusterThrust} from './thruster-ledger.mjs';
@@ -24,7 +25,7 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
  const purchased=trial.movement?.turn===turn?trial.movement.purchasedThrust:(trial.powerAllocation?.turn===turn?trial.powerAllocation.purchasedThrust:0);
  let nextPurchase=purchased,moveAction=action;
  if(action.type==='speed'){
-  if(!Number.isInteger(action.purchasedThrust)||action.purchasedThrust<0||action.purchasedThrust>Math.floor(LIB.extraPower/LIB.engineEfficiency.power))throw new RangeError('Unverified thrust budget; only printed extra reactor power can be purchased');
+  if(!Number.isInteger(action.purchasedThrust)||action.purchasedThrust<0)throw new RangeError('Invalid purchased thrust');
   if(trial.powerAllocation?.turn===turn&&action.purchasedThrust!==trial.powerAllocation.purchasedThrust)throw new RangeError('Thrust purchase must match committed power allocation');
   nextPurchase=action.purchasedThrust;
   moveAction={type:'speed',change:action.change};
@@ -38,7 +39,11 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
   if(speed<1||speed>12)throw new RangeError('Stationary and high-speed turns require separate verified rules');
   moveAction={type:'turn',direction:action.direction,cost:turnCostAtSpeed(old.speed,LIB.turnCost),delay:LIB.turnDelay[speed-1]};
  }
- const limits={availableThrust:10+nextPurchase,accelCost:LIB.accelerationCost};
+ const committed=trial.powerAllocation?.turn===turn?trial.powerAllocation:null;
+ if(committed&&nextPurchase!==committed.purchasedThrust)throw new RangeError('Thrust purchase must match committed power allocation');
+ const power=vorchanPowerBudget({trial,turn,deactivated:committed?.deactivated??[],purchasedThrust:nextPurchase,extraEWPower:committed?.ewPower??0});
+ const limits={availableThrust:power.availableThrust,accelCost:LIB.accelerationCost};
+ if(power.engineDestroyed&&action.type!=='advance')throw new RangeError('Destroyed engine cannot manoeuvre');
  let next;
  if(['pivot-start','pivot-halt','roll-start','roll-halt'].includes(action.type)){
   const cost=action.type.startsWith('pivot')?LIB.pivotCost[action.type==='pivot-start'?0:1]:LIB.rollCost[action.type==='roll-start'?0:1];
