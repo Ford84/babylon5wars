@@ -1,3 +1,4 @@
+import {VORCHAN_LIBRARY_RECORD,newVorchanTrialState,vorchanThrustPreview} from '../shared/vorchan-trial-library.mjs';
 import {PHASES,phaseById,validateFacing} from '../shared/phases.mjs';
 import {validateSCS,initialSCSState} from '../shared/scs.mjs';
 import {allocateShipEW,rollShipInitiative,verifiedUndamagedThrust} from '../shared/server-rules.mjs';
@@ -116,6 +117,43 @@ export default {async fetch(req,env){try{
    ]);
   }catch(e){if(/constraint|abort|stale|conflict/i.test(String(e)))return fail('Concurrent game change; reload',409);throw e;}
   return json({ok:true,action:b.action,shipId:ship.id,revision:game.revision+1,...(b.action==='roll-initiative'?{initiative:details}:{sealed:true})});
+ }
+ if(route==='trial-vorchan'&&req.method==='POST'){
+  if(user.id!==game.host_id)return fail('Host only',403);
+  if(game.turn!==1||game.phase_id!=='power'||game.status!=='active')return fail('Trial setup must occur before turn one',409);
+  if(members.length!==2)return fail('Two distinct battle members are required before trial setup',409);
+  const existing=await db.prepare('SELECT COUNT(*) AS n FROM ships WHERE game_id=?').bind(gameId).first();
+  if(existing.n!==0)return fail('Trial requires an empty battlefield',409);
+  const b=await readBody(req);
+  if(b.expectedRevision!==game.revision)return fail('Game changed; reload',409);
+  const positions=[{q:3,r:10,facing:0},{q:15,r:10,facing:3}];
+  const ids=[uuid(),uuid()];
+  const inserts=members.map((m,i)=>{
+   const p=positions[i],trial=newVorchanTrialState(ids[i],m.user_id,p.q,p.r,p.facing);
+   return db.prepare('INSERT INTO ships(id,game_id,owner_id,label,q,r,facing,public_state_json,private_state_json) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=? AND phase_id=?) AND NOT EXISTS(SELECT 1 FROM ships WHERE game_id=?)').bind(ids[i],gameId,m.user_id,'Vorchan Warship '+(i+1),p.q,p.r,p.facing,JSON.stringify({libraryId:trial.libraryId,trial:true}),JSON.stringify({trial}),gameId,game.revision,'power',gameId);
+  });
+  // The first insert changes the NOT EXISTS predicate for the second. Use a
+  // dedicated trial marker and conditional game revision as the setup lock.
+  const result=await db.batch([
+   db.prepare('UPDATE games SET revision=revision+1 WHERE id=? AND revision=? AND phase_id=? AND NOT EXISTS(SELECT 1 FROM ships WHERE game_id=?)').bind(gameId,game.revision,'power',gameId),
+   ...members.map((m,i)=>{const p=positions[i],trial=newVorchanTrialState(ids[i],m.user_id,p.q,p.r,p.facing);return db.prepare('INSERT INTO ships(id,game_id,owner_id,label,q,r,facing,public_state_json,private_state_json) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(ids[i],gameId,m.user_id,'Vorchan Warship '+(i+1),p.q,p.r,p.facing,JSON.stringify({libraryId:trial.libraryId,trial:true}),JSON.stringify({trial}),gameId,game.revision+1);}),
+   db.prepare('INSERT INTO events(id,game_id,turn,phase_id,actor_id,event_type,public_json) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(uuid(),gameId,game.turn,game.phase_id,user.id,'vorchan_trial_created',JSON.stringify({shipIds:ids,libraryId:VORCHAN_LIBRARY_RECORD.id,limitations:'SCS damage diagram not verified; combat manual only'}),gameId,game.revision+1)
+  ]);
+  if(result.some(x=>x.meta.changes!==1))return fail('Concurrent trial setup; reload',409);
+  return json({created:true,shipIds:ids,libraryId:VORCHAN_LIBRARY_RECORD.id,automaticCombatReady:false},201);
+ }
+ if(route==='trial-ship'&&req.method==='GET'){
+  const shipId=url.searchParams.get('shipId');
+  const ship=await db.prepare('SELECT * FROM ships WHERE id=? AND game_id=?').bind(shipId,gameId).first();
+  if(!ship||JSON.parse(ship.public_state_json||'{}').libraryId!==VORCHAN_LIBRARY_RECORD.id)return fail('Trial ship not found',404);
+  const state=JSON.parse(ship.private_state_json||'{}').trial;
+  return json({library:VORCHAN_LIBRARY_RECORD,ship:{id:ship.id,ownerId:ship.owner_id,q:ship.q,r:ship.r,facing:ship.facing,speed:ship.speed,initiative:state?.initiative??null,ew:ship.owner_id===user.id||user.id===game.host_id?state?.ew:undefined},capabilities:{initiative:true,thrustPreview:true,automaticCombat:false,verifiedDamageDiagram:false}});
+ }
+ if(route==='trial-thrust'&&req.method==='POST'){
+  const b=await readBody(req),ship=await db.prepare('SELECT owner_id,public_state_json FROM ships WHERE id=? AND game_id=?').bind(b.shipId,gameId).first();
+  if(!ship||JSON.parse(ship.public_state_json||'{}').libraryId!==VORCHAN_LIBRARY_RECORD.id)return fail('Trial ship not found',404);
+  if(ship.owner_id!==user.id&&game.host_id!==user.id)return fail('Not your ship',403);
+  try{return json({libraryId:VORCHAN_LIBRARY_RECORD.id,...vorchanThrustPreview(b.purchasedThrust),authoritative:true,committed:false});}catch(e){if(e instanceof RangeError)return fail(e.message);throw e;}
  }
  if(route==='invite'&&req.method==='POST'){if(user.id!==game.host_id)return fail('Host only',403);const token=hex(bytes(24));await db.prepare("INSERT INTO invitations(token_hash,game_id,created_by,expires_at) VALUES(?,?,?,datetime('now','+7 days'))").bind(await sha(token),gameId,user.id).run();return json({token,expiresInDays:7});}
  if(route==='initiative'&&req.method==='POST'){if(user.id!==game.host_id)return fail('Host only',403);const b=await readBody(req);if(!members.some(m=>m.user_id===b.playerId)||!Number.isInteger(b.rank)||b.rank<0||b.rank>999)return fail('Invalid player or rank');if(game.phase_id==='movement')return fail('Cannot change initiative during movement',409);await db.prepare('UPDATE memberships SET initiative_rank=? WHERE game_id=? AND user_id=?').bind(b.rank,gameId,b.playerId).run();return json({ok:true});}
