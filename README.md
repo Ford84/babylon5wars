@@ -30,3 +30,34 @@ The battle-setup screen now includes a **Preloaded ship** drop-down with **29 sp
 The source catalogue preserves structural areas, individual weapon mounts, special traits and the page or character-sheet reference. The Quick Space Combat implementation currently resolves only basic weapon damage and ignores many special weapon modes, shields, defensive interceptors, fire restrictions, and specialised orders. Special-effect-only guns are deliberately **not fired automatically**. Clark's Tri-Star uses published **Defence 40**, **Armour 27 with shields** (14 otherwise), **Sensors +7** crew-capped (+21 installed), **Stealth 48 with equipment** (38 otherwise), **52 current structural spaces** (60 maximum), and the sheet's listed front weapons and turret shield systems. The optional rear Photonic Mine Layer is mentioned but not enabled.
 
 **Source issue:** The Core Rules appear to print Minbari warrior-caste crew values for the Narn Frazi fighter. This discrepancy is annotated rather than silently changed.
+
+## Enhanced weapons experiment (2026-11-22)
+
+A per-attack **Enhanced weapons** mode has been added without removing the published Quick Space Combat choice. The mode uses the source's **Rapid Fire X** extra attack rolls at -5, **critical-hit confirmation**, **half-Offence subsequent hits** in a barrage, **Beam XdX** armour erosion, **Electro-Pulse** checks and **Interceptor** reductions. The following new orders are selectable: **Fire Interceptors!**, **Lock Weapons!** and **Shake The Lock!**. The latter two currently use provisional simplified checks; they must be corrected against the full printed orders before rules-compliant release. Targeting computer bonuses are parsed from preset features and apply only to locked non-Array guns.
+
+**Not yet rules-compliant:** the interception implementation uses a single automatically selected available interceptor and a Training check rather than the full player-choice/Operations (gunnery) process. Beam damage is applied as a simplified per-hit armour erosion, not yet reconciled with every printed timing interaction. Electro-Pulse counts lost control spaces but does not impair control systems or enforce all associated penalties. The game does not yet distinguish solo-pilot versus full-crew skill modifiers, and it does not model persistent damage to individual mounts, lock range/sensor detection, fleet support, fire selection by mount, or response orders. The UI labels this mode **Enhanced** and the event log marks it **enhanced-experimental**; it is not a complete full-combat rules mode.
+
+### Remaining rules assessment (Space Combat chapter, Core Rules 2e pp. 180–209)
+
+These are **implementation work packages**, not a count of every printed paragraph or rule:
+
+1. **Detection and stealth** — sensors, visibility, detection state, countermeasures, special stealth.
+2. **Initiative and turn structure** — initiative ties, command timing, multiple actions and held orders.
+3. **Full response-order engine** — interrupt windows, opposed Tactics, ordering, target restrictions, async policy.
+4. **Shipboard crew skills** — solo/crew distinctions, Operations specialties, proficiency, crew stations.
+5. **Full movement and positioning** — range-band relative centre, pivots, arcs, retreat, positioning exceptions.
+6. **Offensive order catalogue** — Broadsides, Concentrate, linked tactics, Fire Main Gun and other full orders.
+7. **Defensive order catalogue** — Defensive Position, Fire Interceptors details, screens, lock shaking.
+8. **Tactical order catalogue** — Pivot, boarding, repairs, launch, jump, and remaining printed orders.
+9. **Weapons targeting** — locks, targeting computers, stealth, legal mount selection, fire restrictions.
+10. **Special weapon qualities** — complete Array, Beam, Electro-Pulse, Rapid Fire, interceptors and all exceptions.
+11. **Structural location damage** — 2d6 damage table, spillover, random weapon arcs, player allocation.
+12. **Damage consequences** — impairment checks, destroyed areas, crew casualties, special features, armour.
+13. **Stress and technical checks** — failures, recovery, environmental effects.
+14. **Fighters, wings and fleets** — squadron mechanics, fighter screens, launching and coordination.
+15. **Boarding, repairs and post-battle resolution** — related actions, adjudication, persistence.
+16. **Nonstandard ship abilities** — adaptive armour, shields, jamming, self-repair, biological/advanced drives.
+17. **Battle lifecycle and victory** — objectives, neutralisation versus destruction, disengagement, GM choice.
+18. **Verification and multiplayer hardening** — official example fixtures, regression tests, async concurrency, permissions.
+
+This is a **conservative 18-work-package backlog**, not 18 missing rules. The first version implements portions of several packages but fully closes none of the advanced packages.
