@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import app,{SHIP_PRESETS} from '../worker/index.mjs';
+test('defender allocation is present and has numeric mount controls',async()=>{const r=await app.fetch(new Request('https://test.invalid/'),{DB:{}});const html=await r.text();assert.match(html,/Defender weapon allocation/);assert.match(html,/data-weapon/);assert.match(html,/\/allocate/);});
+test('Tri-Star mounts and Core Rules catalogue remain present',()=>{const t=SHIP_PRESETS.find(s=>s.id==='tri-star');assert.equal(t.stats.structure,52);assert.equal(t.stats.weapons.length,5);assert.ok(SHIP_PRESETS.length>=30);});
