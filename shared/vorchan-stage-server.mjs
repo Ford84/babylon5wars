@@ -10,7 +10,7 @@ import {validateManoeuvreThrusters} from './manoeuvre-thrusters.mjs';
 import {createThrusterLedger,allocateThrusterThrust} from './thruster-ledger.mjs';
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
 // Ratings refer to channel capacity, not damage boxes or armour.
-// The forward thruster ratings require an SCS verification pass before damaged-thruster automation.
+// WARNING: aft-port/aft-starboard entries below are legacy provisional movement channels.\n// The vector legend identifies the corresponding aft damage-track glyphs as jump engines.\n// Their relation to ordinary main thrust MUST be adjudicated before release; see SCS checklist.
 export const VORCHAN_THRUSTER_RATINGS=Object.freeze({retro:1,forward_port_thrust:2,forward_starboard_thrust:3,port_thrust:5,starboard_thrust:5,aft_port_thrust:5,aft_starboard_thrust:5});
 export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]}){
  if(!Number.isInteger(turn)||turn<1)throw new RangeError('Invalid battle turn');
