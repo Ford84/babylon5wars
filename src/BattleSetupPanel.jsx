@@ -33,9 +33,11 @@ export default function BattleSetupPanel({
         </select>
       </label>
       <label>Ship model
-        <select value={modelId} onChange={event => onModelChange(event.target.value)} disabled={busy || !hostCanEdit}>
-          {VORCHAN_MODELS.map(model => <option key={model.id} value={model.id}>{model.label}</option>)}
-        </select>
+        {VORCHAN_MODELS.length === 1
+          ? <span className="setup-fixed-value">{VORCHAN_MODELS[0].label}</span>
+          : <select value={modelId} onChange={event => onModelChange(event.target.value)} disabled={busy || !hostCanEdit}>
+              {VORCHAN_MODELS.map(model => <option key={model.id} value={model.id}>{model.label}</option>)}
+            </select>}
       </label>
       <label>Battlefield view
         <select value={mapMode} onChange={event => onMapModeChange(event.target.value)}>

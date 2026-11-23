@@ -137,12 +137,12 @@ export default function VorchanShowcase({selectedModelId, onSelectedModelChange,
   return (
     <section className="panel vorchan-showcase" aria-labelledby="vorchan-showcase-title">
       <div className="sectionhead">
-        <h2 id="vorchan-showcase-title">Centauri Vorchan model gallery</h2>
+        <h2 id="vorchan-showcase-title">Centauri Vorchan Model</h2>
         <span>Public 3D preview</span>
       </div>
-      <p>Inspect the Vorchan models in an interactive viewer. Drag to rotate and use the scroll wheel or trackpad to zoom.</p>
+      <p>Inspect the Attack Cruiser in the interactive viewer. Drag to rotate and use the scroll wheel or trackpad to zoom.</p>
       <div className="model-showcase-controls">
-        {showSelector && <><label htmlFor="vorchan-model-choice">Model variant</label>
+        {showSelector && VORCHAN_MODELS.length > 1 && <><label htmlFor="vorchan-model-choice">Model variant</label>
         <select id="vorchan-model-choice" value={model.id} onChange={(event) => setSelected(event.target.value)}>
           {VORCHAN_MODELS.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
         </select></>}
