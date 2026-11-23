@@ -91,6 +91,60 @@ export default {async fetch(req,env){try{
   const shipRows=(await db.prepare('SELECT * FROM ships WHERE game_id=?').bind(gameId).all()).results;const templateRows=(await db.prepare('SELECT id,definition_json FROM scs_templates WHERE id IN (SELECT template_id FROM ships WHERE game_id=? AND template_id IS NOT NULL)').bind(gameId).all()).results;const templateById=new Map(templateRows.map(t=>[t.id,JSON.parse(t.definition_json)]));const ships=shipRows.map(s=>{const visible=safeShip(s,user.id);if(s.owner_id===user.id||game.host_id===user.id){if(JSON.parse(s.public_state_json||'{}').libraryId===VORCHAN_LIBRARY_RECORD.id)visible.library_stats={engineEfficiency:VORCHAN_LIBRARY_RECORD.engineEfficiency.power,accelerationCost:VORCHAN_LIBRARY_RECORD.accelerationCost,initiativeBonus:VORCHAN_LIBRARY_RECORD.initiativeBonus,source:VORCHAN_LIBRARY_RECORD.source};const definition=templateById.get(s.template_id);if(definition){visible.library_stats={engineEfficiency:definition.stats.engineEfficiency,accelerationCost:definition.stats.accelerationCost??null,initiativeBonus:definition.stats.initiativeBonus};}}return visible;});const orders=await completedOrders(db,game),completed=orders.map(o=>o.player_id),required=requiredPlayers(phase,members,completed);
   return json({game,phase,members,ships,readiness:members.map(m=>({id:m.user_id,name:m.display_name,submitted:completed.includes(m.user_id),required:required.includes(m.user_id)})),needsAction:required.includes(user.id),myOrder:orders.find(o=>o.player_id===user.id)?JSON.parse(orders.find(o=>o.player_id===user.id).payload_json):null});
  }
+ if(route==='combat-resolve'&&req.method==='POST'){
+  if(game.status!=='active'||game.phase_id!=='fire_resolution')return fail('Fire phase required',409);
+  const b=await readBody(req);
+  if(b.expectedRevision!==game.revision)return fail('Stale game revision',409);
+  const fireRows=(await db.prepare("SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id='fire_commit'").bind(gameId,game.turn).all()).results;
+  const defenceRows=(await db.prepare("SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id='fire_resolution'").bind(gameId,game.turn).all()).results;
+  if(fireRows.length!==members.length||defenceRows.length!==members.length)return fail('Both players must lock fire and defence',409);
+  const declarations=fireRows.map(r=>({playerId:r.player_id,fire:JSON.parse(r.payload_json).fire}));
+  const defences=defenceRows.map(r=>({playerId:r.player_id,defence:JSON.parse(r.payload_json).defence}));
+  const journalRow=await db.prepare("SELECT public_json FROM events WHERE game_id=? AND turn=? AND event_type='vorchan_fire_roll_journal'").bind(gameId,game.turn).first();
+  const terrainRow=await db.prepare('SELECT blocking_hexes_json FROM combat_terrain WHERE game_id=? AND turn=?').bind(gameId,game.turn).first();
+  if(!journalRow||!terrainRow)return fail('Server dice and verified terrain required',409);
+  const rolls=JSON.parse(journalRow.public_json).rolls,blockingHexes=JSON.parse(terrainRow.blocking_hexes_json);
+  const shipRows=(await db.prepare('SELECT * FROM ships WHERE game_id=?').bind(gameId).all()).results;
+  const ships=shipRows.map(r=>({...r,public_state:JSON.parse(r.public_state_json||'{}'),private_state:JSON.parse(r.private_state_json||'{}')}));
+  if(ships.some(x=>x.public_state?.libraryId!==VORCHAN_LIBRARY_RECORD.id))return fail('Unverified ship class in combat',409);
+  const choiceRows=(await db.prepare('SELECT attack_id,choice_json FROM combat_choices WHERE game_id=? AND turn=?').bind(gameId,game.turn).all()).results;
+  const choices=Object.fromEntries(choiceRows.map(r=>[r.attack_id,JSON.parse(r.choice_json)])),directionChoices={};
+  for(const d of declarations)for(const shot of d.fire.shots.filter(x=>x.role==='offensive')){
+   const c=choices[shot.shipId+':'+shot.mountId+':'+shot.gun];
+   if(c?.incoming)directionChoices[shot.shipId+':'+shot.targetId]=c.incoming;
+  }
+  const fire=resolveVorchanShipFire({turn:game.turn,ships,declarations,defences,rolls,blockingHexes,terrainVerified:true,defenderChoices:directionChoices});
+  if(!fire.complete)return json({resolved:false,blockers:fire.results.filter(x=>x.blockers.length).map(x=>({attackId:x.id,blockers:x.blockers}))},409);
+  const initialDamage=Object.fromEntries(ships.map(x=>[x.id,x.private_state?.trial?.damage||initialVorchanDamage()]));
+  let adjudication;
+  try{adjudication=adjudicateVorchanShipTier({ships,attacks:fire.results,rollJournal:rolls,defenderChoices:choices,initialDamage})}
+  catch(e){if(e instanceof RangeError||e instanceof TypeError)return fail('Damage adjudication blocked: '+e.message,409);throw e}
+  if(!adjudication.complete)return json({resolved:false,pending:adjudication.pending},409);
+  const next=followingPhase(game.phase_id,game.turn);
+  const statements=[];
+  // All shots in the ship tier fire from the frozen declaration state.
+  // Only after the tier is fully adjudicated are damage and gun histories saved.
+  for(const ship of ships){
+   const old=ship.private_state,trial=structuredClone(old.trial);
+   trial.damage=adjudication.states[ship.id];
+   for(const shot of fire.results.filter(a=>a.shipId===ship.id)){
+    const history=trial.weaponReadiness?.[shot.mountId]?.[shot.gun];
+    if(!history)return fail('Gun readiness history unavailable',409);
+    history.lastFiredTurn=game.turn;
+   }
+   const updated=JSON.stringify({...old,trial});
+   statements.push(db.prepare('UPDATE ships SET private_state_json=? WHERE id=? AND game_id=? AND private_state_json=?').bind(updated,ship.id,gameId,ship.private_state_json));
+  }
+  const summary={turn:game.turn,tier:'ship',outcomes:adjudication.outcomes,states:adjudication.states,criticalChecksDeferred:true,rollJournalCommitted:true};
+  statements.push(event(db,game,null,'vorchan_damage_committed',summary));
+  statements.push(db.prepare("UPDATE games SET phase_id=?,turn=?,revision=revision+1 WHERE id=? AND revision=? AND phase_id='fire_resolution'").bind(next.phase.id,next.turn,gameId,game.revision));
+  statements.push(event(db,game,null,'phase_advanced',{from:'fire_resolution',to:next.phase.id,nextTurn:next.turn}));
+  try{
+   const results=await db.batch(statements);
+   if(results.slice(0,ships.length).some(r=>r.meta.changes!==1)||results[results.length-2].meta.changes!==1)return fail('Concurrent combat resolution; reload',409);
+  }catch(e){if(/UNIQUE|constraint|abort/i.test(String(e)))return fail('Combat already resolved; reload',409);throw e}
+  return json({resolved:true,advanced:true,nextPhase:next.phase.id,summary});
+ }
  if(route==='combat-terrain'&&req.method==='POST'){
   if(game.status!=='active'||game.phase_id!=='fire_resolution')return fail('Fire phase required',409);
   if(user.id!==game.host_id)return fail('Host must verify board terrain',403);
