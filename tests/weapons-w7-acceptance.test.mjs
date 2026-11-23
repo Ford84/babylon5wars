@@ -1,0 +1,76 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {checkMountArc,bearingDegrees,facingDirections,lineOfSight,vorchanTargetingPreview,targetFireControlIndex,weaponRangePenalty} from '../shared/weapon-targeting.mjs';
+import {validateFireDeclaration,validateDefensiveAssignment,publicFireView} from '../shared/fire-orders.mjs';
+import {initialWeaponHistory,resolveVorchanShipFire} from '../shared/weapon-resolution.mjs';
+import {initialVorchanDamage,vorchanHitToken,rollVorchanDamage,applyVorchanStandardVolley} from '../shared/vorchan-damage.mjs';
+import {criticalCandidatesForTurn,weaponCritical} from '../shared/vorchan-criticals.mjs';
+import {VORCHAN_LIBRARY_RECORD as LIB} from '../shared/vorchan-trial-library.mjs';
+const make=(id,owner,q,facing)=>({id,owner_id:owner,q,r:0,facing,public_state:{libraryId:LIB.id},private_state:{trial:{libraryId:LIB.id,weaponReadiness:initialWeaponHistory(1),powerAllocation:{turn:1,deactivated:[]},ewAllocation:{turn:1,offensive:{},defensive:2}}}});
+const ships=[make('a','p1',0,1),make('b','p2',4,4)];
+const attack={shipId:'a',mountId:'twin_nose_port',gun:1,role:'offensive',targetId:'b',order:1};
+const reserve={shipId:'b',mountId:'twin_nose_starboard',gun:2,role:'defensive'};
+const declaration=(playerId,shots)=>({playerId,fire:validateFireDeclaration({playerId,ships,fire:{shots},turn:1})});
+test('W7: two forward arrays, no primary/aft guns, five independently declared guns',()=>{
+ assert.equal(LIB.weaponMounts.length,3);
+ assert.deepEqual(LIB.weaponMounts.map(m=>m.arc.coverageDegrees),[90,270,270]);
+ assert.equal(LIB.weaponMounts.filter(m=>m.weaponId==='twin-array').length,2);
+ const all=LIB.weaponMounts.flatMap(m=>Array.from({length:m.weaponId==='twin-array'?2:1},(_,i)=>({shipId:'a',mountId:m.id,gun:i+1,role:'offensive',targetId:'b',order:1+LIB.weaponMounts.indexOf(m)*2+i,...(m.weaponId==='plasma-accelerator'?{chargeTurns:1}:{})})));
+ assert.equal(validateFireDeclaration({playerId:'p1',ships,fire:{shots:all},turn:1}).shots.length,5);
+});
+test('W7: secret declarations cannot leak and defence requires prior reservation',()=>{
+ const d=[declaration('p1',[attack]),declaration('p2',[reserve])];
+ const pre=publicFireView({phase:'fire_commit',playerId:'p2',declarations:d});
+ assert.deepEqual(pre.declarations,[]);assert.equal(pre.own.shots.length,1);
+ assert.equal(JSON.stringify(pre).includes('"targetId":"b"'),false);
+ assert.equal(publicFireView({phase:'fire_resolution',playerId:'p2',declarations:d}).declarations.length,2);
+ const good={shipId:'b',mountId:'twin_nose_starboard',gun:2,attackId:'a:twin_nose_port:1'};
+ assert.equal(validateDefensiveAssignment({playerId:'p2',ships,declarations:d,assignments:[good]}).assignments.length,1);
+ assert.throws(()=>validateDefensiveAssignment({playerId:'p1',ships,declarations:d,assignments:[good]}),/reserved/);
+ assert.throws(()=>validateDefensiveAssignment({playerId:'p2',ships,declarations:d,assignments:[good,good]}),/unique/);
+});
+test('W7: arc/LOS geometry, same-hex and range/FC/EW preview gates',()=>{
+ const plasma=LIB.weaponMounts[0].arc,twin=LIB.weaponMounts[1].arc;
+ assert.equal(checkMountArc({shooter:ships[0],target:ships[1],arc:plasma}).allowed,true);
+ assert.equal(checkMountArc({shooter:ships[0],target:{...ships[1],q:-4},arc:plasma}).allowed,false);
+ assert.equal(checkMountArc({shooter:ships[0],target:{...ships[1],q:0,r:4},arc:twin}).allowed,true);
+ assert.equal(bearingDegrees(ships[0],{...ships[1],q:0,r:0}).requiresChoice,true);
+ assert.equal(bearingDegrees(ships[0],{...ships[1],q:0,r:0},{sameHexPrevious:{shooter:ships[0],target:ships[1]}}).requiresChoice,false);
+ assert.equal(lineOfSight({shooter:ships[0],target:ships[1],blockingHexes:[{q:2,r:0}]}).clear,false);
+ assert.deepEqual(['heavy_combat','medium','fighter'].map(targetFireControlIndex),[0,1,2]);
+ assert.equal(weaponRangePenalty({range:7,penaltyPerStep:-2,hexesPerStep:3}),-6);
+ const p=vorchanTargetingPreview({shooter:ships[0],target:{...ships[1],libraryId:LIB.id,hullClass:'heavy_combat'},mountId:'plasma_forward',attackerOffensiveEW:0,targetDefensiveEW:2});
+ assert.equal(p.breakdown.rangePenalty,-8);
+ assert.equal(p.readyForHitRoll,true);
+ assert.equal(vorchanTargetingPreview({shooter:ships[0],target:{...ships[1],libraryId:LIB.id},mountId:'plasma_forward',verifiedTerrain:false}).readyForHitRoll,false);
+});
+test('W7: deterministic simultaneous fire snapshot is blocked pending terrain and interception',()=>{
+ const d=[declaration('p1',[attack]),declaration('p2',[reserve])];
+ const input={turn:1,ships,declarations:d,defences:[],rolls:[],terrainVerified:false};
+ const first=resolveVorchanShipFire(input);
+ assert.deepEqual(first,resolveVorchanShipFire(input));
+ assert.equal(first.complete,false);assert.equal(first.damageApplied,false);
+ assert.equal(first.results[0].roll,null);
+ const defended=resolveVorchanShipFire({...input,defences:[{playerId:'p2',defence:{assignments:[{shipId:'b',mountId:'twin_nose_starboard',gun:2,attackId:'a:twin_nose_port:1'}]}}]});
+ assert.equal(defended.results[0].intercept.total,-2);assert.match(defended.results[0].blockers.join(' '),/terrain|line of sight/i);
+});
+test('W7: three plasma charge levels, repeated armour, overkill and critical timing',()=>{
+ assert.deepEqual([1,2,3].map((n)=>rollVorchanDamage({mountId:'plasma_forward',chargeTurns:n,dice:Array(n===3?4:n).fill(5),range:2}).damage),[7,16,30]);
+ const before=initialVorchanDamage();
+ const first=applyVorchanStandardVolley({state:before,damage:5,incoming:'forward',locationRoll:4});
+ const second=applyVorchanStandardVolley({state:first.state,damage:5,incoming:'forward',locationRoll:4});
+ assert.equal(second.state.tracks.plasma_forward.marked,2);
+ assert.equal(before.tracks.plasma_forward.marked,0);
+ const criticals=criticalCandidatesForTurn({before,after:second.state});
+ assert.ok(criticals.some(c=>c.systemId==='plasma_forward'));
+ assert.equal(weaponCritical({systemId:'plasma_forward',roll:12,marked:2}).effects.includes('range_penalty_worsened'),true);
+ const overkill=applyVorchanStandardVolley({state:before,damage:15,incoming:'forward',locationRoll:6,systemChoice:'twin_nose_port'});
+ assert.equal(overkill.state.tracks.forward_structure.marked,1);
+ assert.equal(vorchanHitToken({incoming:'aft',locationRoll:19}).requiresChoice,true);
+});
+test('W7: duplicate gun use, out-of-arc and unauthorized declarations are rejected',()=>{
+ assert.throws(()=>declaration('p1',[attack,attack]),/only once/);
+ assert.throws(()=>declaration('p2',[attack]),/not on your Vorchan/);
+ assert.throws(()=>declaration('p1',[{...attack,mountId:'plasma_forward',chargeTurns:3,targetId:'b',gun:2}]),/outside mount/);
+ assert.throws(()=>declaration('p1',[{...attack,targetId:'a'}]),/enemy/);
+});

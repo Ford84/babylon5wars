@@ -12,7 +12,7 @@ export function pivotHalt(state,{cost,thrusterPair}){
  if(!state.pivotInProgress||!valid(cost)||cost<1)throw new RangeError('No pivot to halt');
  const opposite={'forward-port':['forward-starboard','aft-port'],'aft-starboard':['forward-starboard','aft-port'],'forward-starboard':['forward-port','aft-starboard'],'aft-port':['forward-port','aft-starboard']};
  if(!opposite[state.pivotStartPair]?.includes(thrusterPair))throw new RangeError('Opposing pivot thruster pair required');
- return {...state,pivotInProgress:false,pivotThrustSpent:(state.pivotThrustSpent||0)+cost};
+ return {...state,pivotInProgress:false,pivotActive:true,pivotThrustSpent:(state.pivotThrustSpent||0)+cost};
 }
 export function rollStart(state,cost){
  if(!valid(cost)||cost<1||state.rollInProgress||state.pivotInProgress)throw new RangeError('Cannot start roll');
