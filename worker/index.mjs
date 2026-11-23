@@ -182,8 +182,15 @@ export default {async fetch(req,env){try{
     if(Object.keys(b.choice).some(k=>k!=='incoming'))return fail('Boundary choice may specify only incoming direction');
    }else validateVorchanDamageChoice({playerId:user.id,ships,attacks:result.results,rollJournal:rolls,attackId:b.attackId,choice:b.choice});
   }catch(e){return fail(e.message,409)}
-  try{await db.prepare('INSERT INTO combat_choices(game_id,turn,attack_id,defender_id,choice_json) VALUES(?,?,?,?,?)').bind(gameId,game.turn,b.attackId,user.id,JSON.stringify(b.choice)).run()}
-  catch(e){if(/UNIQUE|constraint/i.test(String(e)))return fail('This damage choice is already locked',409);throw e}
+  try{
+   const existing=await db.prepare('SELECT defender_id,choice_json FROM combat_choices WHERE game_id=? AND turn=? AND attack_id=?').bind(gameId,game.turn,b.attackId).first();
+   if(existing){
+    const previous=JSON.parse(existing.choice_json);
+    if(existing.defender_id!==user.id||Object.keys(previous).some(k=>k!=='incoming')||previous.incoming!==b.choice.incoming)return fail('Defender choice already locked',409);
+    const updated=await db.prepare('UPDATE combat_choices SET choice_json=? WHERE game_id=? AND turn=? AND attack_id=? AND defender_id=? AND choice_json=?').bind(JSON.stringify(b.choice),gameId,game.turn,b.attackId,user.id,existing.choice_json).run();
+    if(updated.meta.changes!==1)return fail('Concurrent defender choice; reload',409);
+   }else await db.prepare('INSERT INTO combat_choices(game_id,turn,attack_id,defender_id,choice_json) VALUES(?,?,?,?,?)').bind(gameId,game.turn,b.attackId,user.id,JSON.stringify(b.choice)).run();
+  }catch(e){if(/UNIQUE|constraint/i.test(String(e)))return fail('This damage choice is already locked',409);throw e}
   return json({committed:true,attackId:b.attackId});
  }
  if(route==='fire-resolution'&&req.method==='GET'){
