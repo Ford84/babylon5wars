@@ -13,7 +13,7 @@ test('any offensive attack blocks premature progression even if client claims co
  for(const resolution of [null,{complete:true,damageApplied:true},{rollsCommitted:true,damageApplied:true}]){
   const result=combatAdvancementGuard({declarations,resolution});
   assert.equal(result.allowed,false);assert.equal(result.offensiveShots,1);
-  assert.match(result.reason,/authoritative server rolls/);
+  assert.match(result.reason,/saved player rolls/);
  }
 });
 test('malformed or missing declarations fail closed',()=>{

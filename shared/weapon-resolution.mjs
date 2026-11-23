@@ -36,11 +36,15 @@ export function resolveVorchanShipFire({turn,ships,declarations,defences,rolls,b
   if(attackerEW===null||defenderEW===null)blockers.push('Missing committed EW');
   const defenderDirection=defenderChoices[source.id+':'+target.id]??null;
   let preview=null;
-  try{preview=vorchanTargetingPreview({shooter:source,target:{...target,libraryId:LIB.id,hullClass:LIB.class},mountId:shot.mountId,blockingHexes,verifiedTerrain:terrainVerified,defenderDirection,attackerOffensiveEW:attackerEW??0,targetDefensiveEW:defenderEW??0});blockers.push(...preview.blockers)}catch(e){blockers.push('Targeting unavailable: '+e.message)}
+  const targetLibraryId=target.public_state?.libraryId;
+  const targetHullClass=targetLibraryId===LIB.id?LIB.class:target.public_state?.hullClass;
+  const sourceLibraryId=source.public_state?.libraryId;
+  const sourceHullClass=sourceLibraryId===LIB.id?LIB.class:source.public_state?.hullClass;
+  try{preview=vorchanTargetingPreview({shooter:{...source,libraryId:sourceLibraryId,hullClass:sourceHullClass},target:{...target,libraryId:targetLibraryId,hullClass:targetHullClass},mountId:shot.mountId,blockingHexes,verifiedTerrain:terrainVerified,defenderDirection,attackerOffensiveEW:attackerEW??0,targetDefensiveEW:defenderEW??0});blockers.push(...preview.blockers)}catch(e){blockers.push('Targeting unavailable: '+e.message)}
   const defensive=defenceMap.get(id)??null;
   const intercept=intercepts[id]??{total:0,contributions:[]};
   const roll=rollMap.get(id);
-  if(!Number.isInteger(roll)||roll<1||roll>20)blockers.push('Server d20 roll missing');
+  if(!Number.isInteger(roll)||roll<1||roll>20)blockers.push('Attacker d20 roll missing');
   const uniqueBlockers=[...new Set(blockers)];
   const effectivePreview=preview?.readyForHitRoll?{...preview,hitOnD20AtOrBelow:preview.hitOnD20AtOrBelow+intercept.total}:preview;
   const result=uniqueBlockers.length?null:resolveToHit(effectivePreview,roll);
