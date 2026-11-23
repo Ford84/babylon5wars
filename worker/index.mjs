@@ -138,8 +138,18 @@ export default {async fetch(req,env){try{
   const ships=rows.map(s=>({...s,public_state:JSON.parse(s.public_state_json||'{}'),private_state:JSON.parse(s.private_state_json||'{}')}));
   const journalRow=await db.prepare("SELECT public_json FROM events WHERE game_id=? AND turn=? AND event_type='vorchan_fire_roll_journal' ORDER BY rowid DESC LIMIT 1").bind(gameId,game.turn).first();
   const journal=journalRow?JSON.parse(journalRow.public_json):null;
-  const pending=resolveVorchanShipFire({turn:game.turn,ships,declarations,defences,rolls:journal?.rolls||[],terrainVerified:false});
-  return json({phase:'fire_resolution',authoritative:true,rollsCommitted:!!journal,rollJournal:journal?.rolls||[],terrainVerified:false,attacks:pending.results,blockers:['Terrain/LOS verification, defender damage choices and SCS damage remain pending; no damage has been applied'],damageApplied:false});
+  const terrainRow=await db.prepare('SELECT blocking_hexes_json FROM combat_terrain WHERE game_id=? AND turn=?').bind(gameId,game.turn).first();
+  const blockingHexes=terrainRow?JSON.parse(terrainRow.blocking_hexes_json):[];
+  const choiceRows=(await db.prepare('SELECT attack_id,choice_json FROM combat_choices WHERE game_id=? AND turn=?').bind(gameId,game.turn).all()).results;
+  const defenderChoices=Object.fromEntries(choiceRows.map(r=>[r.attack_id,JSON.parse(r.choice_json)]));
+  const directionChoices={};
+  for(const d of declarations)for(const shot of d.fire.shots.filter(x=>x.role==='offensive')){
+   const choice=defenderChoices[shot.shipId+':'+shot.mountId+':'+shot.gun];
+   if(choice?.incoming)directionChoices[shot.shipId+':'+shot.targetId]=choice.incoming;
+  }
+  const pending=resolveVorchanShipFire({turn:game.turn,ships,declarations,defences,rolls:journal?.rolls||[],blockingHexes,terrainVerified:!!terrainRow,defenderChoices:directionChoices});
+  const damageRow=await db.prepare("SELECT public_json FROM events WHERE game_id=? AND turn=? AND event_type='vorchan_damage_committed'").bind(gameId,game.turn).first();
+  return json({phase:'fire_resolution',authoritative:true,rollsCommitted:!!journal,rollJournal:journal?.rolls||[],terrainVerified:!!terrainRow,attacks:pending.results,defenderChoices,blockers:pending.results.flatMap(a=>a.blockers),damageApplied:!!damageRow,damageResolution:damageRow?JSON.parse(damageRow.public_json):null});
  }
  if(route==='fire-orders'&&req.method==='GET'){
   if(game.status!=='active')return fail('Battle has not started',409);
