@@ -8,6 +8,10 @@ import {PHASES,phaseById,validateFacing} from '../shared/phases.mjs';
 import {validateFireDeclaration,validateDefensiveAssignment,publicFireView} from '../shared/fire-orders.mjs';
 import {initialWeaponHistory,resolveVorchanShipFire} from '../shared/weapon-resolution.mjs';
 import {combatAdvancementGuard} from '../shared/combat-advancement.mjs';
+import {adjudicateVorchanShipTier} from '../shared/vorchan-tier-adjudicator.mjs';
+import {validateVorchanDamageChoice} from '../shared/vorchan-defender-choice.mjs';
+import {facingDirections} from '../shared/weapon-targeting.mjs';
+import {initialVorchanDamage} from '../shared/vorchan-damage.mjs';
 import {validateSCS,initialSCSState} from '../shared/scs.mjs';
 import {allocateShipEW,rollShipInitiative,verifiedUndamagedThrust} from '../shared/server-rules.mjs';
 import {powerBudget,ewAllocation,initiative,initiativeOrder} from '../shared/preturn.mjs';
@@ -86,6 +90,43 @@ export default {async fetch(req,env){try{
  if(!route&&req.method==='GET'){
   const shipRows=(await db.prepare('SELECT * FROM ships WHERE game_id=?').bind(gameId).all()).results;const templateRows=(await db.prepare('SELECT id,definition_json FROM scs_templates WHERE id IN (SELECT template_id FROM ships WHERE game_id=? AND template_id IS NOT NULL)').bind(gameId).all()).results;const templateById=new Map(templateRows.map(t=>[t.id,JSON.parse(t.definition_json)]));const ships=shipRows.map(s=>{const visible=safeShip(s,user.id);if(s.owner_id===user.id||game.host_id===user.id){if(JSON.parse(s.public_state_json||'{}').libraryId===VORCHAN_LIBRARY_RECORD.id)visible.library_stats={engineEfficiency:VORCHAN_LIBRARY_RECORD.engineEfficiency.power,accelerationCost:VORCHAN_LIBRARY_RECORD.accelerationCost,initiativeBonus:VORCHAN_LIBRARY_RECORD.initiativeBonus,source:VORCHAN_LIBRARY_RECORD.source};const definition=templateById.get(s.template_id);if(definition){visible.library_stats={engineEfficiency:definition.stats.engineEfficiency,accelerationCost:definition.stats.accelerationCost??null,initiativeBonus:definition.stats.initiativeBonus};}}return visible;});const orders=await completedOrders(db,game),completed=orders.map(o=>o.player_id),required=requiredPlayers(phase,members,completed);
   return json({game,phase,members,ships,readiness:members.map(m=>({id:m.user_id,name:m.display_name,submitted:completed.includes(m.user_id),required:required.includes(m.user_id)})),needsAction:required.includes(user.id),myOrder:orders.find(o=>o.player_id===user.id)?JSON.parse(orders.find(o=>o.player_id===user.id).payload_json):null});
+ }
+ if(route==='combat-terrain'&&req.method==='POST'){
+  if(game.status!=='active'||game.phase_id!=='fire_resolution')return fail('Fire phase required',409);
+  if(user.id!==game.host_id)return fail('Host must verify board terrain',403);
+  const b=await readBody(req);
+  if(b.expectedRevision!==game.revision||b.confirmed!==true||!Array.isArray(b.blockingHexes)||b.blockingHexes.length>1000||b.blockingHexes.some(h=>!Number.isInteger(h?.q)||!Number.isInteger(h?.r)))return fail('Explicit verified terrain and current revision required',400);
+  const hexes=[...new Map(b.blockingHexes.map(h=>[h.q+','+h.r,{q:h.q,r:h.r}])).values()];
+  try{await db.prepare('INSERT INTO combat_terrain(game_id,turn,blocking_hexes_json,confirmed_by) VALUES(?,?,?,?)').bind(gameId,game.turn,JSON.stringify(hexes),user.id).run();}
+  catch(e){if(/UNIQUE|constraint/i.test(String(e)))return fail('Terrain already confirmed for this turn',409);throw e}
+  return json({verified:true,blockingHexes:hexes});
+ }
+ if(route==='combat-choice'&&req.method==='POST'){
+  if(game.status!=='active'||game.phase_id!=='fire_resolution')return fail('Fire phase required',409);
+  const b=await readBody(req);
+  if(b.expectedRevision!==game.revision||typeof b.attackId!=='string')return fail('Stale or invalid combat choice',409);
+  const journalRow=await db.prepare("SELECT public_json FROM events WHERE game_id=? AND turn=? AND event_type='vorchan_fire_roll_journal'").bind(gameId,game.turn).first();
+  const terrainRow=await db.prepare('SELECT blocking_hexes_json FROM combat_terrain WHERE game_id=? AND turn=?').bind(gameId,game.turn).first();
+  if(!journalRow||!terrainRow)return fail('Server rolls and verified terrain required before damage allocation',409);
+  const rolls=JSON.parse(journalRow.public_json).rolls,blockingHexes=JSON.parse(terrainRow.blocking_hexes_json);
+  const fireRows=(await db.prepare("SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id='fire_commit'").bind(gameId,game.turn).all()).results;
+  const defenceRows=(await db.prepare("SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id='fire_resolution'").bind(gameId,game.turn).all()).results;
+  if(defenceRows.length!==members.length)return fail('Defensive locks incomplete',409);
+  const declarations=fireRows.map(r=>({playerId:r.player_id,fire:JSON.parse(r.payload_json).fire}));
+  const defences=defenceRows.map(r=>({playerId:r.player_id,defence:JSON.parse(r.payload_json).defence}));
+  const shipRows=(await db.prepare('SELECT * FROM ships WHERE game_id=?').bind(gameId).all()).results;
+  const ships=shipRows.map(r=>({...r,public_state:JSON.parse(r.public_state_json||'{}'),private_state:JSON.parse(r.private_state_json||'{}')}));
+  const shot=declarations.flatMap(d=>d.fire.shots).find(a=>a.shipId+':'+a.mountId+':'+a.gun===b.attackId);
+  const shooter=ships.find(x=>x.id===shot?.shipId),target=ships.find(x=>x.id===shot?.targetId);
+  if(!shooter||!target||target.owner_id!==user.id)return fail('Only defending player may allocate this attack',403);
+  const facing=facingDirections(shooter,target);
+  if(facing.requiresChoice&&!facing.choices?.includes(b.choice?.incoming))return fail('Select a legal incoming boundary direction');
+  if(!facing.requiresChoice&&b.choice?.incoming!==facing.direction)return fail('Incoming direction does not match ship geometry');
+  const result=resolveVorchanShipFire({turn:game.turn,ships,declarations,defences,rolls,blockingHexes,terrainVerified:true,defenderChoices:{[shooter.id+':'+target.id]:b.choice.incoming}});
+  try{validateVorchanDamageChoice({playerId:user.id,ships,attacks:result.results,rollJournal:rolls,attackId:b.attackId,choice:b.choice})}catch(e){return fail(e.message,409)}
+  try{await db.prepare('INSERT INTO combat_choices(game_id,turn,attack_id,defender_id,choice_json) VALUES(?,?,?,?,?)').bind(gameId,game.turn,b.attackId,user.id,JSON.stringify(b.choice)).run()}
+  catch(e){if(/UNIQUE|constraint/i.test(String(e)))return fail('This damage choice is already locked',409);throw e}
+  return json({committed:true,attackId:b.attackId});
  }
  if(route==='fire-resolution'&&req.method==='GET'){
   if(game.status!=='active'||game.phase_id!=='fire_resolution')return fail('Fire resolution phase required',409);
