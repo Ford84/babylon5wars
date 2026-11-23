@@ -82,10 +82,10 @@ export default function WeaponFirePanel({phase,ships=[],userId,fireView,prefligh
    <h3>Combat adjudication</h3>
    {isHost&&!preflight.terrainVerified&&<div><p>Confirm the battlefield's blocking terrain before rolling hits. Enter the blocking hex coordinates as a JSON array, e.g. <code>{'[{"q":2,"r":3}]'} </code>. An empty array explicitly confirms clear terrain.</p><label>Blocking terrain hexes <textarea value={terrainText} onChange={e=>setTerrainText(e.target.value)} rows={3}/></label><button disabled={combatBusy} onClick={()=>{try{const blockingHexes=JSON.parse(terrainText);combatAction('combat-terrain',{confirmed:true,blockingHexes})}catch{setChoiceError('Invalid terrain JSON')}}}>Confirm battlefield terrain</button></div>}
    {preflight.terrainVerified&&<p>Battlefield terrain verified. {preflight.damageApplied?'Damage committed.':'Defenders may allocate confirmed hits before the final damage commit.'}</p>}
-   {(preflight.attacks||[]).filter(a=>a.hit===true&&!preflight.defenderChoices?.[a.id]&&own.some(o=>o.id===a.targetId)).map(a=>{
+   {(preflight.attacks||[]).filter(a=>own.some(o=>o.id===a.targetId)&&(a.hit===true&&!preflight.defenderChoices?.[a.id]?.systemChoice||a.hit===null&&a.blockers?.some(x=>/boundary direction/i.test(x)))).map(a=>{
     const source=ships.find(x=>x.id===a.shipId),defender=ships.find(x=>x.id===a.targetId);
     const dir=source&&defender?facingDirections(source,defender):null;
-    const c=combatChoices[a.id]||{incoming:dir?.requiresChoice?'':dir?.direction||'forward',sideChoice:'',systemChoice:''};
+    const c=combatChoices[a.id]||{incoming:preflight.defenderChoices?.[a.id]?.incoming||(dir?.requiresChoice?'':dir?.direction||'forward'),sideChoice:'',systemChoice:''};
     const dice=preflight.rollJournal?.find(r=>r.attackId===a.id);
     let hit=null;try{if(dice&&c.incoming)hit=vorchanHitToken({incoming:c.incoming,locationRoll:dice.locationRoll,primaryRoll:dice.primaryRoll,sideChoice:c.sideChoice||null})}catch{}
     const update=(key,value)=>setCombatChoices(prev=>({...prev,[a.id]:{...c,[key]:value}}));
@@ -93,7 +93,7 @@ export default function WeaponFirePanel({phase,ships=[],userId,fireView,prefligh
      <label>Incoming direction <select value={c.incoming} onChange={e=>update('incoming',e.target.value)}><option value="">Choose…</option>{(dir?.requiresChoice?dir.choices:[dir?.direction]).filter(Boolean).map(x=><option key={x} value={x}>{x}</option>)}</select></label>
      {['port','starboard'].includes(c.incoming)&&<label>Side hit chart <select value={c.sideChoice} onChange={e=>update('sideChoice',e.target.value)}><option value="">Choose…</option><option value="forward">Forward hull</option><option value="aft">Aft hull</option></select></label>}
      {hit&&!hit.requiresChoice&&hit.candidates.length>1&&<label>Damaged system <select value={c.systemChoice} onChange={e=>update('systemChoice',e.target.value)}><option value="">Choose…</option>{hit.candidates.map(x=><option key={x} value={x}>{x.replaceAll('_',' ')}</option>)}</select></label>}
-     <button disabled={combatBusy||!c.incoming||['port','starboard'].includes(c.incoming)&&!c.sideChoice||hit?.candidates?.length>1&&!c.systemChoice} onClick={()=>combatAction('combat-choice',{attackId:a.id,choice:{incoming:c.incoming,...(c.sideChoice?{sideChoice:c.sideChoice}:{}),...(c.systemChoice?{systemChoice:c.systemChoice}:{})}})}>Lock defender choice</button>
+     <button disabled={combatBusy||!c.incoming||a.hit===true&&(['port','starboard'].includes(c.incoming)&&!c.sideChoice||hit?.candidates?.length>1&&!c.systemChoice)} onClick={()=>combatAction('combat-choice',{attackId:a.id,choice:{incoming:c.incoming,...(a.hit===true&&c.sideChoice?{sideChoice:c.sideChoice}:{}),...(a.hit===true&&c.systemChoice?{systemChoice:c.systemChoice}:{})}})}>Lock defender choice</button>
     </div>;
    })}
    {isHost&&preflight.terrainVerified&&!preflight.damageApplied&&<button disabled={combatBusy} onClick={()=>combatAction('combat-resolve',{})}>Resolve verified combat and advance</button>}
