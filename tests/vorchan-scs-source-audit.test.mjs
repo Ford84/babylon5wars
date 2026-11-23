@@ -18,12 +18,15 @@ test('visual weapon symbol count: one plasma and two twin arrays',()=>{
 });
 test('visually transcribed SCS system tracks and icon values',()=>{
  const map=Object.fromEntries(SCS.systems.map(s=>[s.id,s]));
- for(const [id,boxes] of Object.entries({retro:5,twin_nose_port:6,twin_nose_starboard:6,plasma_forward:8,jump_forward_port:10,jump_forward_starboard:10,engine:11,reactor:20,sensors:12,command:12,hangar:2,primary_structure:28,port_thrust:12,starboard_thrust:12,aft_port_thrust:8,aft_starboard_thrust:8,jump_aft_centre:16}))assert.equal(map[id].boxes,boxes,id);
+ for(const [id,boxes] of Object.entries({retro:5,forward_port_thrust:null,twin_nose_port:6,forward_starboard_thrust:null,twin_nose_starboard:6,plasma_forward:8,jump_forward_port:10,jump_forward_starboard:10,engine:11,reactor:20,sensors:12,command:12,hangar:2,primary_structure:28,port_thrust:12,starboard_thrust:12,aft_port_thrust:8,aft_starboard_thrust:8,jump_aft_centre:16}))assert.equal(map[id].boxes,boxes,id);
+ assert.deepEqual([map.forward_port_thrust.iconValue,map.forward_starboard_thrust.iconValue],[2,3]);
+ assert.equal(map.plasma_forward.mountNumber,1);
+ assert.deepEqual([map.twin_nose_port.mountNumber,map.twin_nose_starboard.mountNumber],[2,3]);
  assert.equal(map.engine.iconValue,10);
  assert.equal(map.reactor.iconValue,4);
  assert.equal(map.hangar.iconValue,2);
 });
-test('automatic combat remains blocked by unresolved forward thruster and damage diagram audit',()=>{
+test('automatic combat remains blocked by unresolved whole-sheet verification',()=>{
  const audit=auditVorchanIdentification();assert.equal(audit.readyForCombat,false);
  assert.equal(SCS.completeness.allWeaponArcsIdentified,false);
  assert.equal(SCS.completeness.allDamageBoxesCounted,false);

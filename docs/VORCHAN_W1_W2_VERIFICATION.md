@@ -31,3 +31,8 @@
 
 ## 22 November 2026 — player-confirmed firing arcs
 The user explicitly confirmed Plasma Accelerator **forward 90°**, port Twin Array **forward 270°**, and starboard Twin Array **forward 270°**. Canonical mount arcs in `shared/vorchan-trial-library.mjs` now use forward-centred angular intervals [315°,45°] and [225°,135°], respectively, inclusive of boundaries. This confirmation supersedes the earlier unresolved arc status; it is a user-provided ship-specific rule, not a claim that the original SCS diagram was independently legible. `shared/weapon-targeting.mjs` now consumes these arcs by default. The remaining full-ship damage diagram and per-gun arming history are separate blockers to automatic fire.
+
+
+## 23 November 2026 — SCS viewer integration
+
+The SCS viewer now pairs the source schematic with the canonical weapon records and a text component register. The three forward weapons display mount numbers 1–3 and reference the stored weapon records for damage and targeting values. The external forward thruster icon values 2 and 3 are shown, but their damage-box and armour fields remain unverified. The wing-root 10-box components remain jump-engine tracks according to the corrected vector-key audit. The vector is static and does not mark current ship damage; automatic damage remains gated. See `docs/VORCHAN_SCS_UI.md`.

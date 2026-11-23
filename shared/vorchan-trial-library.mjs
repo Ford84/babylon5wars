@@ -30,9 +30,9 @@ export const VORCHAN_LIBRARY_RECORD=Object.freeze({
    firingOptions:[{shots:2,turns:1,damageDice:{count:1,sides:10,bonus:4,perHex:0}}]}
  ],
  weaponMounts:[
-  {id:'plasma_forward',weaponId:'plasma-accelerator',section:'forward',armour:4,damageBoxes:8,arc:{verified:true,start:315,end:45,coverageDegrees:90,orientation:'forward',source:'player-confirmed Vorchan v3 SCS firing arc'}},
-  {id:'twin_nose_port',weaponId:'twin-array',section:'forward',armour:3,damageBoxes:6,arc:{verified:true,start:225,end:135,coverageDegrees:270,orientation:'forward',source:'player-confirmed Vorchan v3 SCS firing arc'}},
-  {id:'twin_nose_starboard',weaponId:'twin-array',section:'forward',armour:3,damageBoxes:6,arc:{verified:true,start:225,end:135,coverageDegrees:270,orientation:'forward',source:'player-confirmed Vorchan v3 SCS firing arc'}}
+  {id:'plasma_forward',weaponId:'plasma-accelerator',mountNumber:1,section:'forward',armour:4,damageBoxes:8,arc:{verified:true,start:315,end:45,coverageDegrees:90,orientation:'forward',source:'player-confirmed Vorchan v3 SCS firing arc'}},
+  {id:'twin_nose_port',weaponId:'twin-array',mountNumber:2,section:'forward',armour:3,damageBoxes:6,arc:{verified:true,start:225,end:135,coverageDegrees:270,orientation:'forward',source:'player-confirmed Vorchan v3 SCS firing arc'}},
+  {id:'twin_nose_starboard',weaponId:'twin-array',mountNumber:3,section:'forward',armour:3,damageBoxes:6,arc:{verified:true,start:225,end:135,coverageDegrees:270,orientation:'forward',source:'player-confirmed Vorchan v3 SCS firing arc'}}
  ],
  hitCharts:CENTAURI_HIT_CHARTS['centauri-vorchan-v3-2e-sf'],
  // The full system diagram remains to be transcribed: do not fabricate boxes.

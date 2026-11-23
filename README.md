@@ -1,6 +1,6 @@
 # Babylon 5 Wars — Stage 1
 
-Early multiplayer prototype using React, a Cloudflare Worker, D1 database and private R2 ship-image storage. This is **not yet a complete implementation of the tabletop rules** and is **not yet deployed or end-to-end verified**.
+Early multiplayer prototype using React, a Cloudflare Worker, D1 database and private R2 ship-image storage. This is **not yet a complete implementation of the tabletop rules**. The live prototype is hosted on Cloudflare; end-to-end multiplayer acceptance checks remain outstanding.
 
 ## Build and test
 
@@ -18,9 +18,17 @@ The initial repository does not include a lockfile; once generated, commit `pack
 
 ## Deployment
 
-The `Deploy to Cloudflare` workflow is **manual only**. Do not run it until the latest build passes and the D1 schema has been checked against the live database. In GitHub repository settings, configure Actions secrets `CLOUDFLARE_API_TOKEN` (scoped for Workers deployment) and `CLOUDFLARE_ACCOUNT_ID`. Do not commit credentials.
+The `Deploy to Cloudflare` workflow runs on pushes to `main` that touch application, migration, test or deployment files, and can also be started manually. It builds and runs the test suite, applies pending D1 migrations, then deploys the Worker. In GitHub repository settings, configure Actions secrets `CLOUDFLARE_API_TOKEN` (scoped for Workers deployment) and `CLOUDFLARE_ACCOUNT_ID`. Do not commit credentials.
 
-The existing Cloudflare Worker is named `babylon5wars`, with D1 `b5w-private` and R2 `b5w-ship-images`. The remote database was provisioned outside Wrangler's migration tracker; **do not blindly reapply migrations**.
+The Cloudflare Worker is named `babylon5wars`, with D1 `b5w-private` and R2 `b5w-ship-images`. Check the live migration tracker before any manual schema changes.
+
+## Public ship model
+
+The app includes an interactive gallery for three Vorchan STL variants supplied by the project owner. The gallery and tactical board credit Tyrel Lohr and link to the original [Cults3D model listing](https://cults3d.com/en/3d-model/game/centauri-vorchan-attack-cruiser). Public model assets are in `public/models/vorchan/`.
+
+## Interface and SCS reference
+
+City is the primary interface font; Babylon 5 is used for headings. The Vorchan systems view pairs the SCS component diagram with weapon-mount records and a text component register. It is a static reference, not a live damage display. Forward external thruster damage tracks remain unverified and must not be treated as combat-ready.
 
 ## Remaining acceptance checks
 

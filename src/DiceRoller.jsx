@@ -18,6 +18,9 @@ export default function DiceRoller({dice, onRoll, disabled = false, label = 'Rol
   const timer = useRef(null);
   const ticker = useRef(null);
   const diceKey = JSON.stringify(dice);
+  const resultLabel = rolling ? 'Dice are rolling' : faces.every(face => Number.isInteger(face.value))
+    ? 'Results: ' + faces.map(face => `${face.label} ${face.value} on d${face.sides}`).join(', ')
+    : 'Dice ready to roll';
 
   useEffect(() => {
     setFaces(dice.map(die => ({...die, value: null})));
@@ -50,7 +53,8 @@ export default function DiceRoller({dice, onRoll, disabled = false, label = 'Rol
   }
 
   return <div className="dice-roll-group">
-    <div className="dice-tray" aria-live="polite" aria-label={rolling ? 'Dice rolling' : 'Dice results'}>
+    <div className="dice-tray" role="status" aria-live="polite" aria-atomic="true" aria-label={resultLabel}>
+      <span className="sr-only">{resultLabel}</span>
       {faces.map((die, index) => <div className={'die-face' + (rolling ? ' rolling' : '')} key={die.id || index}>
         <small>{die.label}</small><strong>{die.value ?? '—'}</strong><small>d{die.sides}</small>
       </div>)}

@@ -1,0 +1,5 @@
+Centauri Vorchan 3D model files
+
+Model creator: Tyrel Lohr (Cults3D username tyrellohr).
+Source listing: https://cults3d.com/en/3d-model/game/centauri-vorchan-attack-cruiser
+The files in this directory were supplied by the project owner for the public model viewer.

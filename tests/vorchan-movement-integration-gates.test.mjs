@@ -5,10 +5,14 @@ import {adjudicateVorchanMovementDamage} from '../shared/vorchan-movement-damage
 import {newVorchanTrialState} from '../shared/vorchan-trial-library.mjs';
 import {VORCHAN_SCS_IDENTIFICATION as SCS} from '../shared/vorchan-scs-identification.mjs';
 const trial=()=>newVorchanTrialState('s','o',4,10,0);
-test('forward nozzle ratings follow original 1/2/3 icon values, not weapon armour',()=>{
+test('provisional forward outer icon values are preserved without claiming verified tracks',()=>{
  assert.equal(VORCHAN_THRUSTER_RATINGS.retro,1);
  assert.equal(VORCHAN_THRUSTER_RATINGS.forward_port_thrust,2);
  assert.equal(VORCHAN_THRUSTER_RATINGS.forward_starboard_thrust,3);
+ for(const id of ['forward_port_thrust','forward_starboard_thrust']){
+  const system=SCS.systems.find(s=>s.id===id);
+  assert.equal(system.boxes,null);assert.equal(system.armour,null);assert.equal(system.verified,false);
+ }
  assert.equal(SCS.systems.find(s=>s.id==='twin_nose_port').kind,'weapon');
 });
 test('unverified forward-thruster damage tracks are not guessed',()=>{

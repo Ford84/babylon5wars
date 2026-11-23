@@ -8,10 +8,10 @@ export const VORCHAN_SCS_IDENTIFICATION=Object.freeze({
  systems:[
   {id:'retro',kind:'thruster',section:'forward',armour:4,boxes:5,rows:[5],iconValue:null,verified:true},
   {id:'forward_port_thrust',kind:'thruster',section:'forward',armour:null,boxes:null,rows:[],iconValue:2,verified:false},
-  {id:'twin_nose_port',kind:'weapon',section:'forward',armour:3,boxes:6,rows:[3,3],weaponCardId:'twin-array',verified:true},
+  {id:'twin_nose_port',kind:'weapon',section:'forward',armour:3,boxes:6,rows:[3,3],weaponCardId:'twin-array',mountNumber:2,verified:true},
   {id:'forward_starboard_thrust',kind:'thruster',section:'forward',armour:null,boxes:null,rows:[],iconValue:3,verified:false},
-  {id:'twin_nose_starboard',kind:'weapon',section:'forward',armour:3,boxes:6,rows:[3,3],weaponCardId:'twin-array',verified:true},
-  {id:'plasma_forward',kind:'weapon',section:'forward',armour:4,boxes:8,rows:[4,4],weaponCardId:'plasma-accelerator',verified:true},
+  {id:'twin_nose_starboard',kind:'weapon',section:'forward',armour:3,boxes:6,rows:[3,3],weaponCardId:'twin-array',mountNumber:3,verified:true},
+  {id:'plasma_forward',kind:'weapon',section:'forward',armour:4,boxes:8,rows:[4,4],weaponCardId:'plasma-accelerator',mountNumber:1,verified:true},
   {id:'forward_structure',kind:'structure',section:'forward',armour:5,boxes:48,rows:[2,2,2,4,4,6,6,8,8,4,2],verified:true},
   {id:'jump_forward_port',kind:'jump-engine',section:'forward',armour:5,boxes:10,rows:[5,5],verified:true},
   {id:'jump_forward_starboard',kind:'jump-engine',section:'forward',armour:5,boxes:10,rows:[5,5],verified:true},
@@ -39,5 +39,9 @@ export function auditVorchanIdentification(){
   if(sys.verified&&(!Number.isInteger(sys.boxes)||sys.rows.reduce((a,b)=>a+b,0)!==sys.boxes))issues.push(sys.id+': damage box mismatch');
   if(sys.verified&&!Number.isInteger(sys.armour))issues.push(sys.id+': armour missing');
  }
+ if(!VORCHAN_SCS_IDENTIFICATION.completeness.allSystemsLocated)issues.push('Not all SCS systems have been independently located');
+ if(!VORCHAN_SCS_IDENTIFICATION.completeness.allArmourIdentified)issues.push('Armour verification is incomplete');
+ if(!VORCHAN_SCS_IDENTIFICATION.completeness.allDamageBoxesCounted)issues.push('Damage-box verification is incomplete');
+ if(!VORCHAN_SCS_IDENTIFICATION.completeness.allWeaponArcsIdentified)issues.push('Weapon-arc verification is incomplete');
  return {systems:s.length,verifiedTracks:s.filter(x=>x.verified).length,unverifiedTracks:s.filter(x=>!x.verified).map(x=>x.id),issues,readyForCombat:issues.length===0&&s.every(x=>x.verified)&&VORCHAN_SCS_IDENTIFICATION.completeness.allWeaponArcsIdentified};
 }
