@@ -19,6 +19,8 @@ import {validateSCS,initialSCSState} from '../shared/scs.mjs';
 import {allocateShipEW,rollShipInitiative,verifiedUndamagedThrust} from '../shared/server-rules.mjs';
 import {powerBudget,ewAllocation,initiative,initiativeOrder} from '../shared/preturn.mjs';
 import {requiredPlayers,followingPhase,canSubmit,safeShip} from '../shared/coordinator.mjs';
+import {isMapPreset} from '../shared/battle-setup.mjs';
+import {isVorchanModelId} from '../shared/vorchan-models.mjs';
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'}});
 const fail=(msg,status=400)=>json({error:msg},status);
 const uuid=()=>crypto.randomUUID();
@@ -92,12 +94,40 @@ export default {async fetch(req,env){try{
  if(path==='/api/logout'&&req.method==='POST'){const token=req.headers.get('authorization').slice(7);await db.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await sha(token)).run();return json({ok:true});}
  if(path==='/api/me')return json(user);
  if(path==='/api/games'&&req.method==='GET'){const rows=await db.prepare('SELECT g.* FROM games g JOIN memberships m ON m.game_id=g.id WHERE m.user_id=? ORDER BY g.created_at DESC').bind(user.id).all();return json(rows.results);}
- if(path==='/api/games'&&req.method==='POST'){const b=await readBody(req),id=uuid(),title=String(b.title||'New battle').trim().slice(0,100);await db.batch([db.prepare("INSERT INTO games(id,title,host_id,status) VALUES(?,?,?,'setup')").bind(id,title,user.id),db.prepare('INSERT INTO memberships(game_id,user_id,role) VALUES(?,?,?)').bind(id,user.id,'host')]);return json({id},201);}
+ if(path==='/api/games'&&req.method==='POST'){const b=await readBody(req),id=uuid(),title=String(b.title||'New battle').trim().slice(0,100),mapPreset=b.mapPreset??'standard',modelId=b.modelId??'attack-cruiser-rc2';if(!isMapPreset(mapPreset)||!isVorchanModelId(modelId))return fail('Invalid battlefield setup choice');await db.batch([db.prepare("INSERT INTO games(id,title,host_id,status,map_preset,model_id) VALUES(?,?,?,'setup',?,?)").bind(id,title,user.id,mapPreset,modelId),db.prepare('INSERT INTO memberships(game_id,user_id,role) VALUES(?,?,?)').bind(id,user.id,'host')]);return json({id},201);}
  if(path==='/api/invitations/redeem'&&req.method==='POST'){const b=await readBody(req);if(typeof b.token!=='string'||b.token.length>200)return fail('Invalid invitation');const key=await sha(b.token);const invite=await db.prepare("SELECT * FROM invitations WHERE token_hash=? AND used_by IS NULL AND expires_at>datetime('now')").bind(key).first();if(!invite)return fail('Invitation expired or already used',404);const invitedGame=await db.prepare('SELECT status FROM games WHERE id=?').bind(invite.game_id).first();if(invitedGame?.status!=='setup')return fail('This battle has already started',409);const result=await db.batch([db.prepare('UPDATE invitations SET used_by=? WHERE token_hash=? AND used_by IS NULL').bind(user.id,key),db.prepare('INSERT OR IGNORE INTO memberships(game_id,user_id) VALUES(?,?)').bind(invite.game_id,user.id)]);if(result[0].meta.changes!==1)return fail('Invitation already used',409);return json({gameId:invite.game_id});}
  const match=path.match(/^\/api\/games\/([^/]+)(?:\/([a-z-]+))?$/);if(!match)return fail('Not found',404);
- const [,gameId,route]=match;if(!await member(db,gameId,user.id))return fail('Not a game member',403);
+ const [,gameId,route]=match;
+ if(!route&&req.method==='DELETE'){
+  const existing=await db.prepare('SELECT host_id FROM games WHERE id=?').bind(gameId).first();
+  if(!existing)return fail('Battle not found',404);
+  if(existing.host_id!==user.id)return fail('Only the battle host can delete this battle',403);
+  await db.batch([
+   db.prepare('DELETE FROM combat_rolls WHERE game_id=?').bind(gameId),
+   db.prepare('DELETE FROM combat_choices WHERE game_id=?').bind(gameId),
+   db.prepare('DELETE FROM combat_terrain WHERE game_id=?').bind(gameId),
+   db.prepare('DELETE FROM events WHERE game_id=?').bind(gameId),
+   db.prepare('DELETE FROM orders WHERE game_id=?').bind(gameId),
+   db.prepare('DELETE FROM ships WHERE game_id=?').bind(gameId),
+   db.prepare('DELETE FROM invitations WHERE game_id=?').bind(gameId),
+   db.prepare('DELETE FROM memberships WHERE game_id=?').bind(gameId),
+   db.prepare('DELETE FROM games WHERE id=? AND host_id=?').bind(gameId,user.id),
+  ]);
+  return json({deleted:true});
+ }
+ if(!await member(db,gameId,user.id))return fail('Not a game member',403);
  const game=await db.prepare('SELECT * FROM games WHERE id=?').bind(gameId).first();if(!game)return fail('Not found',404);
  const members=await memberships(db,gameId),phase=phaseById(game.phase_id);
+ if(route==='setup'&&req.method==='POST'){
+  if(game.host_id!==user.id)return fail('Only the battle host can change these settings',403);
+  if(game.status!=='setup')return fail('Battle setup is locked after the battle starts',409);
+  const b=await readBody(req),mapPreset=b.mapPreset,modelId=b.modelId;
+  if(b.expectedRevision!==game.revision)return fail('Battle changed; refresh and try again',409);
+  if(!isMapPreset(mapPreset)||!isVorchanModelId(modelId))return fail('Invalid battlefield setup choice');
+  const updated=await db.prepare("UPDATE games SET map_preset=?,model_id=?,revision=revision+1 WHERE id=? AND revision=? AND status='setup'").bind(mapPreset,modelId,gameId,game.revision).run();
+  if(updated.meta.changes!==1)return fail('Battle changed; refresh and try again',409);
+  return json({updated:true,mapPreset,modelId});
+ }
  if(!route&&req.method==='GET'){
   const shipRows=(await db.prepare('SELECT * FROM ships WHERE game_id=?').bind(gameId).all()).results;const templateRows=(await db.prepare('SELECT id,definition_json FROM scs_templates WHERE id IN (SELECT template_id FROM ships WHERE game_id=? AND template_id IS NOT NULL)').bind(gameId).all()).results;const templateById=new Map(templateRows.map(t=>[t.id,JSON.parse(t.definition_json)]));const ships=shipRows.map(s=>{const visible=safeShip(s,user.id);if(s.owner_id===user.id||game.host_id===user.id){if(JSON.parse(s.public_state_json||'{}').libraryId===VORCHAN_LIBRARY_RECORD.id)visible.library_stats={engineEfficiency:VORCHAN_LIBRARY_RECORD.engineEfficiency.power,accelerationCost:VORCHAN_LIBRARY_RECORD.accelerationCost,initiativeBonus:VORCHAN_LIBRARY_RECORD.initiativeBonus,source:VORCHAN_LIBRARY_RECORD.source};const definition=templateById.get(s.template_id);if(definition){visible.library_stats={engineEfficiency:definition.stats.engineEfficiency,accelerationCost:definition.stats.accelerationCost??null,initiativeBonus:definition.stats.initiativeBonus};}}return visible;});const orders=await completedOrders(db,game),completed=orders.map(o=>o.player_id),required=requiredPlayers(phase,members,completed);
   return json({game,phase,members,ships,readiness:members.map(m=>({id:m.user_id,name:m.display_name,submitted:completed.includes(m.user_id),required:required.includes(m.user_id)})),needsAction:required.includes(user.id),myOrder:orders.find(o=>o.player_id===user.id)?JSON.parse(orders.find(o=>o.player_id===user.id).payload_json):null});

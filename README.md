@@ -24,7 +24,7 @@ The Cloudflare Worker is named `babylon5wars`, with D1 `b5w-private` and R2 `b5w
 
 ## Public ship model
 
-The app includes an interactive gallery for three Vorchan STL variants supplied by the project owner. The gallery and tactical board credit Tyrel Lohr and link to the original [Cults3D model listing](https://cults3d.com/en/3d-model/game/centauri-vorchan-attack-cruiser). Public model assets are in `public/models/vorchan/`.
+The app includes an interactive gallery for three Vorchan STL variants supplied by the project owner. The gallery and tactical board credit Tyrel Lohr and link to the original [Cults3D model listing](https://cults3d.com/en/3d-model/game/centauri-vorchan-attack-cruiser). Public model assets are in `public/models/vorchan/`. Battle setup saves the shared board size and public model choice; the 2D/3D view preference and optional STL override are local to each browser. Battle hosts can delete their battles from the lobby.
 
 ## Interface and SCS reference
 

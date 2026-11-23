@@ -2,21 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
-
-const MODELS = [
-  {
-    label: 'Attack Cruiser · RC2',
-    url: '/models/vorchan/centauri-vorchan-rc2.stl',
-  },
-  {
-    label: 'Attack Cruiser · CL Hole',
-    url: '/models/vorchan/centauri-vorchan-cl-hole.stl',
-  },
-  {
-    label: 'Vorchan Redux · RC2',
-    url: '/models/vorchan/centauri-vorchan-redux-rc2.stl',
-  },
-];
+import {VORCHAN_MODELS} from '../shared/vorchan-models.mjs';
 
 function ModelViewport({ model }) {
   const mount = useRef(null);
@@ -143,10 +129,14 @@ function ModelViewport({ model }) {
   );
 }
 
-export default function VorchanShowcase() {
-  const [selected, setSelected] = useState(0);
+export {VORCHAN_MODELS};
+
+export default function VorchanShowcase({selectedModelId, onSelectedModelChange, showSelector = true} = {}) {
+  const [localSelected, setLocalSelected] = useState(VORCHAN_MODELS[0].id);
   const [open, setOpen] = useState(false);
-  const model = MODELS[selected];
+  const selected = selectedModelId || localSelected;
+  const model = VORCHAN_MODELS.find(item => item.id === selected) || VORCHAN_MODELS[0];
+  const setSelected = onSelectedModelChange || setLocalSelected;
 
   return (
     <section className="panel vorchan-showcase" aria-labelledby="vorchan-showcase-title">
@@ -156,12 +146,12 @@ export default function VorchanShowcase() {
       </div>
       <p>Inspect the Vorchan models in an interactive viewer. Drag to rotate and use the scroll wheel or trackpad to zoom.</p>
       <div className="model-showcase-controls">
-        <label htmlFor="vorchan-model-choice">Model variant</label>
-        <select id="vorchan-model-choice" value={selected} onChange={(event) => setSelected(Number(event.target.value))}>
-          {MODELS.map((item, index) => <option key={item.url} value={index}>{item.label}</option>)}
-        </select>
+        {showSelector && <><label htmlFor="vorchan-model-choice">Model variant</label>
+        <select id="vorchan-model-choice" value={model.id} onChange={(event) => setSelected(event.target.value)}>
+          {VORCHAN_MODELS.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+        </select></>}
         <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-          {open ? 'Close 3D viewer' : 'View 3D model'}
+          {open ? 'Close 3D viewer' : `Preview ${model.label}`}
         </button>
       </div>
       {open && <ModelViewport key={model.url} model={model} />}

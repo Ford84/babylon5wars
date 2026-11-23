@@ -2,13 +2,17 @@ import React,{useEffect,useRef,useState} from 'react';
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {STLLoader} from 'three/addons/loaders/STLLoader.js';
-const MODEL='/models/vorchan/centauri-vorchan-rc2.stl';
+import {DEFAULT_VORCHAN_MODEL_ID,vorchanModelById} from '../shared/vorchan-models.mjs';
+const MODEL=vorchanModelById(DEFAULT_VORCHAN_MODEL_ID).url;
 const FALLBACK_MODEL='/models/vorchan.glb';
 const TYREL_CACHE='b5w-tyrel-vorchan-model';
-let publicModelGeometry;
-function cachedPublicGeometry(){if(!publicModelGeometry)publicModelGeometry=new STLLoader().loadAsync(MODEL).catch(error=>{publicModelGeometry=null;throw error;});return publicModelGeometry;}
+const publicModelGeometry=new Map();
+function cachedPublicGeometry(url=MODEL){if(!publicModelGeometry.has(url))publicModelGeometry.set(url,new STLLoader().loadAsync(url).catch(error=>{publicModelGeometry.delete(url);throw error;}));return publicModelGeometry.get(url);}
 function modelStore(){return new Promise((resolve,reject)=>{const request=indexedDB.open(TYREL_CACHE,1);request.onupgradeneeded=()=>request.result.createObjectStore('models');request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});}
 async function storedTyrelModel(value){const db=await modelStore();return new Promise((resolve,reject)=>{const tx=db.transaction('models',value===undefined?'readonly':'readwrite');const request=value===undefined?tx.objectStore('models').get('default'):value===null?tx.objectStore('models').delete('default'):tx.objectStore('models').put(value,'default');request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);tx.oncomplete=()=>db.close();});}
+export async function saveLocalVorchanModel(file){if(!file||file.size>30*1024*1024)throw new RangeError('STL must be smaller than 30 MB');const data=await file.arrayBuffer();await storedTyrelModel(data);return file.name;}
+export async function clearLocalVorchanModel(){await storedTyrelModel(null);}
+export async function hasLocalVorchanModel(){return !!(await storedTyrelModel());}
 
 const hexPoint=(q,r)=>({x:Math.sqrt(3)*12*(q+r/2),z:18*r});
 function makeVorchan(){
@@ -19,7 +23,8 @@ function makeVorchan(){
  for(const sign of [-1,1]){poly([[sign*1.6,-1],[sign*5,3],[sign*4.6,3.6],[sign*1.2,1.5]],gold,.35);const e=new THREE.Mesh(new THREE.CylinderGeometry(.5,.7,1.2,10),dark);e.rotation.x=Math.PI/2;e.position.set(sign*1.4,.5,4.7);g.add(e);const glow=new THREE.Mesh(new THREE.CircleGeometry(.45,12),engine);glow.rotation.x=-Math.PI/2;glow.position.set(sign*1.4,.65,5.36);g.add(glow);}
  g.scale.setScalar(.72);return g;
 }
-export default function Map3D({ships,selected,setSelected,preset='standard'}){
+export default function Map3D({ships,selected,setSelected,preset='standard',modelId=DEFAULT_VORCHAN_MODEL_ID}){
+ const modelUrl=vorchanModelById(modelId).url;
  const mount=useRef(null),engine=useRef(null),[zoom,setZoom]=useState(1),[localModel,setLocalModel]=useState(null),[modelStatus,setModelStatus]=useState('Loading model');
  useEffect(()=>{let alive=true;storedTyrelModel().then(data=>{if(alive&&data){setLocalModel(data);setModelStatus('Tyrel Lohr Vorchan — saved default model');}}).catch(()=>{});return()=>{alive=false}},[]);
  const dims={standard:[20,32],outer:[40,64],inner:[80,128]}[preset]||[20,32];
@@ -40,14 +45,14 @@ export default function Map3D({ships,selected,setSelected,preset='standard'}){
   const useGeometry=(geometry,label)=>{geometry.computeVertexNormals();geometry.computeBoundingBox();const size=geometry.boundingBox.getSize(new THREE.Vector3());const centre=geometry.boundingBox.getCenter(new THREE.Vector3());geometry.translate(-centre.x,-centre.y,-centre.z);const scale=14/Math.max(size.x,size.y,size.z,1);factory=()=>{const group=new THREE.Group();const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:0x77346f,metalness:.48,roughness:.38,side:THREE.DoubleSide}));mesh.scale.setScalar(scale);mesh.rotation.x=-Math.PI/2;group.add(mesh);return group;};setModelStatus(label);redraw(factory);};
   if(localModel){try{useGeometry(new STLLoader().parse(localModel),'Tyrel Lohr STL · this browser');}catch(e){setModelStatus('Unable to read STL: '+e.message);}}
   else {
-  cachedPublicGeometry().then(geometry=>{if(alive)useGeometry(geometry,'Tyrel Lohr Vorchan · public model');}).catch(()=>{if(!alive)return;new GLTFLoader().load(FALLBACK_MODEL,gltf=>{if(!alive)return;const source=gltf.scene;source.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(source),sz=box.getSize(new THREE.Vector3());const factor=14/Math.max(sz.x,sz.y,sz.z,1);factory=()=>{const obj=source.clone(true);obj.scale.setScalar(factor);return obj;};setModelStatus('Coloured Vorchan preview · public model unavailable');redraw(factory);},undefined,()=>{if(alive)setModelStatus('3D Vorchan preview unavailable');});});}
+  cachedPublicGeometry(modelUrl).then(geometry=>{if(alive)useGeometry(geometry,'Tyrel Lohr Vorchan · public model');}).catch(()=>{if(!alive)return;new GLTFLoader().load(FALLBACK_MODEL,gltf=>{if(!alive)return;const source=gltf.scene;source.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(source),sz=box.getSize(new THREE.Vector3());const factor=14/Math.max(sz.x,sz.y,sz.z,1);factory=()=>{const obj=source.clone(true);obj.scale.setScalar(factor);return obj;};setModelStatus('Coloured Vorchan preview · public model unavailable');redraw(factory);},undefined,()=>{if(alive)setModelStatus('3D Vorchan preview unavailable');});});}
 
   const onClick=e=>{const rect=renderer.domElement.getBoundingClientRect();mouse.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(mouse,camera);const hits=ray.intersectObjects(pick,false);if(hits.length)setSelected(hits[0].object.userData.shipId);};
   const onWheel=e=>{e.preventDefault();setZoom(z=>Math.min(12,Math.max(.4,z*(e.deltaY<0?1.15:1/1.15))));};
   renderer.domElement.addEventListener('click',onClick);renderer.domElement.addEventListener('wheel',onWheel,{passive:false});engine.current={updateCamera};
   const resize=new ResizeObserver(updateCamera);resize.observe(host);updateCamera();
   return()=>{alive=false;resize.disconnect();renderer.domElement.removeEventListener('click',onClick);renderer.domElement.removeEventListener('wheel',onWheel);renderer.dispose();host.removeChild(renderer.domElement);engine.current=null;};
- },[preset,ships,selected,setSelected,localModel]);
+ },[preset,ships,selected,setSelected,localModel,modelUrl]);
  useEffect(()=>engine.current?.updateCamera(),[zoom]);
- return <div><div className="map3d-controls"><button type="button" onClick={()=>setZoom(z=>Math.max(.4,z/1.3))}>− Zoom out</button><button type="button" onClick={()=>setZoom(z=>Math.min(12,z*1.3))}>+ Zoom in</button><button type="button" onClick={()=>setZoom(1)}>Reset camera</button><span>{modelStatus}</span></div><div className="map3d-import"><label>Use a different STL model on this browser <input type="file" accept=".stl" onChange={async e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>30*1024*1024){setModelStatus('STL exceeds 30 MB local preview limit');return;}const data=await file.arrayBuffer();setLocalModel(data);storedTyrelModel(data).catch(()=>setModelStatus('Model loaded for this session; browser storage unavailable'));}}/></label><a href="https://cults3d.com/en/3d-model/game/centauri-vorchan-attack-cruiser" target="_blank" rel="noopener noreferrer">Model source: Tyrel Lohr</a><button type="button" onClick={()=>{setLocalModel(null);storedTyrelModel(null).catch(()=>{});}}>Use public Vorchan model</button><small>The public Vorchan model is the default for everyone. A model imported here overrides it only in this browser.</small></div><div ref={mount} className="map3d-viewport" aria-label="Interactive 3D tactical hex battlefield"/></div>;
+ return <div><div className="map3d-controls"><button type="button" onClick={()=>setZoom(z=>Math.max(.4,z/1.3))}>− Zoom out</button><button type="button" onClick={()=>setZoom(z=>Math.min(12,z*1.3))}>+ Zoom in</button><button type="button" onClick={()=>setZoom(1)}>Reset camera</button><span>{modelStatus}</span></div><div ref={mount} className="map3d-viewport" aria-label="Interactive 3D tactical hex battlefield"/></div>;
 }
