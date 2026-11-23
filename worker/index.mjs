@@ -177,7 +177,11 @@ export default {async fetch(req,env){try{
   if(facing.requiresChoice&&!facing.choices?.includes(b.choice?.incoming))return fail('Select a legal incoming boundary direction');
   if(!facing.requiresChoice&&b.choice?.incoming!==facing.direction)return fail('Incoming direction does not match ship geometry');
   const result=resolveVorchanShipFire({turn:game.turn,ships,declarations,defences,rolls,blockingHexes,terrainVerified:true,defenderChoices:{[shooter.id+':'+target.id]:b.choice.incoming}});
-  try{validateVorchanDamageChoice({playerId:user.id,ships,attacks:result.results,rollJournal:rolls,attackId:b.attackId,choice:b.choice})}catch(e){return fail(e.message,409)}
+  try{
+   if(facing.requiresChoice&&result.results.find(a=>a.id===b.attackId)?.hit===null){
+    if(Object.keys(b.choice).some(k=>k!=='incoming'))return fail('Boundary choice may specify only incoming direction');
+   }else validateVorchanDamageChoice({playerId:user.id,ships,attacks:result.results,rollJournal:rolls,attackId:b.attackId,choice:b.choice});
+  }catch(e){return fail(e.message,409)}
   try{await db.prepare('INSERT INTO combat_choices(game_id,turn,attack_id,defender_id,choice_json) VALUES(?,?,?,?,?)').bind(gameId,game.turn,b.attackId,user.id,JSON.stringify(b.choice)).run()}
   catch(e){if(/UNIQUE|constraint/i.test(String(e)))return fail('This damage choice is already locked',409);throw e}
   return json({committed:true,attackId:b.attackId});
