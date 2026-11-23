@@ -28,7 +28,7 @@ export function allocateShipEW({template,privateState,order}){
 }
 export function rollShipInitiative({template,privateState,ship,roll}){
  const {scs}=loadShipRules(template,privateState);
- if(!Number.isInteger(roll)||roll<1||roll>20)throw new RangeError('Server d20 required');
+ if(!Number.isInteger(roll)||roll<1||roll>20)throw new RangeError('Player d20 result required');
  if(scs.initiative?.turn===ship.turn)throw new RangeError('Initiative already rolled this turn');
  if(scs.systems&&Object.values(scs.systems).some(s=>s.criticalEffects?.length))throw new RangeError('Critical initiative modifiers require adjudication');
  const result=unitInitiative({roll,printedBonus:template.stats.initiativeBonus,speed:ship.speed});

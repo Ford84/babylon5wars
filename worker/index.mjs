@@ -1,12 +1,15 @@
 import {commitVorchanPower,commitVorchanEW} from '../shared/vorchan-preturn.mjs';
 import {resolveVorchanOverthrust} from '../shared/vorchan-overthrust-phase.mjs';
+import {overthrustChecksForTurn} from '../shared/thruster-criticals.mjs';
 import {applyVorchanStage} from '../shared/vorchan-stage-server.mjs';
 import {getBuiltinShip,listBuiltinShips} from '../shared/ship-catalog.mjs';
 import {VORCHAN_SCS_IDENTIFICATION,auditVorchanIdentification} from '../shared/vorchan-scs-identification.mjs';
 import {VORCHAN_LIBRARY_RECORD,newVorchanTrialState,vorchanThrustPreview} from '../shared/vorchan-trial-library.mjs';
 import {PHASES,phaseById,validateFacing} from '../shared/phases.mjs';
+import {validateProcedureRecords} from '../shared/procedure-adjudication.mjs';
 import {validateFireDeclaration,validateDefensiveAssignment,publicFireView} from '../shared/fire-orders.mjs';
 import {initialWeaponHistory,resolveVorchanShipFire} from '../shared/weapon-resolution.mjs';
+import {weaponReadiness} from '../shared/weapon-readiness.mjs';
 import {combatAdvancementGuard} from '../shared/combat-advancement.mjs';
 import {adjudicateVorchanShipTier} from '../shared/vorchan-tier-adjudicator.mjs';
 import {validateVorchanDamageChoice} from '../shared/vorchan-defender-choice.mjs';
@@ -31,6 +34,14 @@ async function completedOrders(db,g){return (await db.prepare('SELECT player_id,
 const readBody=async req=>{const b=await req.text();if(b.length>30000)throw Error('Request too large');return JSON.parse(b||'{}');};
 const originOk=req=>{const origin=req.headers.get('origin');return !origin||origin===new URL(req.url).origin;};
 function event(db,game,actor,type,details){return db.prepare('INSERT INTO events(id,game_id,turn,phase_id,actor_id,event_type,public_json) VALUES(?,?,?,?,?,?,?)').bind(uuid(),game.id,game.turn,game.phase_id,actor,type,JSON.stringify(details));}
+function publicProcedureRecords(phaseId,orders){
+ const phase=phaseById(phaseId);
+ return orders.map(order=>{
+  const payload=order.payload??JSON.parse(order.payload_json||'{}');
+  const procedures=(phase?.procedures||[]).map((step,index)=>({step,status:payload.procedureRecords?.[index]?.status||'unrecorded',note:payload.procedureRecords?.[index]?.note||''}));
+  return {playerId:order.playerId??order.player_id,procedures,...(phaseId==='fire_commit'?{}:{orderNotes:payload.notes||''})};
+ });
+}
 export default {async fetch(req,env){try{
  const url=new URL(req.url),db=env.DB,path=url.pathname;
  if(!path.startsWith('/api/'))return env.ASSETS.fetch(req);
@@ -100,10 +111,11 @@ export default {async fetch(req,env){try{
   if(fireRows.length!==members.length||defenceRows.length!==members.length)return fail('Both players must lock fire and defence',409);
   const declarations=fireRows.map(r=>({playerId:r.player_id,fire:JSON.parse(r.payload_json).fire}));
   const defences=defenceRows.map(r=>({playerId:r.player_id,defence:JSON.parse(r.payload_json).defence}));
-  const journalRow=await db.prepare("SELECT public_json FROM events WHERE game_id=? AND turn=? AND event_type='vorchan_fire_roll_journal'").bind(gameId,game.turn).first();
+  const rollRows=(await db.prepare('SELECT attack_id,player_id,rolls_json FROM combat_rolls WHERE game_id=? AND turn=?').bind(gameId,game.turn).all()).results;
   const terrainRow=await db.prepare('SELECT blocking_hexes_json FROM combat_terrain WHERE game_id=? AND turn=?').bind(gameId,game.turn).first();
-  if(!journalRow||!terrainRow)return fail('Server dice and verified terrain required',409);
-  const rolls=JSON.parse(journalRow.public_json).rolls,blockingHexes=JSON.parse(terrainRow.blocking_hexes_json);
+  const expectedAttackCount=declarations.reduce((sum,declaration)=>sum+declaration.fire.shots.filter(shot=>shot.role==='offensive').length,0);
+  if(rollRows.length!==expectedAttackCount||!terrainRow)return fail('Each attacking player must submit their dice and battlefield terrain must be verified',409);
+  const rolls=rollRows.map(row=>({attackId:row.attack_id,playerId:row.player_id,...JSON.parse(row.rolls_json)})),blockingHexes=JSON.parse(terrainRow.blocking_hexes_json);
   const shipRows=(await db.prepare('SELECT * FROM ships WHERE game_id=?').bind(gameId).all()).results;
   const ships=shipRows.map(r=>({...r,public_state:JSON.parse(r.public_state_json||'{}'),private_state:JSON.parse(r.private_state_json||'{}')}));
   if(ships.some(x=>x.public_state?.libraryId!==VORCHAN_LIBRARY_RECORD.id))return fail('Unverified ship class in combat',409);
@@ -137,6 +149,10 @@ export default {async fetch(req,env){try{
   }
   const summary={turn:game.turn,tier:'ship',outcomes:adjudication.outcomes,states:adjudication.states,criticalChecksDeferred:true,rollJournalCommitted:true};
   statements.push(event(db,game,null,'vorchan_damage_committed',summary));
+  const fireOrderRows=(await db.prepare("SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id='fire_commit'").bind(gameId,game.turn).all()).results;
+  const resolutionOrderRows=(await db.prepare("SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id='fire_resolution'").bind(gameId,game.turn).all()).results;
+  const procedureDetails=[...publicProcedureRecords('fire_commit',fireOrderRows).map(record=>({...record,phaseId:'fire_commit'})),...publicProcedureRecords('fire_resolution',resolutionOrderRows).map(record=>({...record,phaseId:'fire_resolution'}))];
+  statements.push(event(db,game,null,'phase_adjudications_revealed',{phaseId:'fire_resolution',turn:game.turn,records:procedureDetails}));
   statements.push(db.prepare("UPDATE games SET phase_id=?,turn=?,revision=revision+1 WHERE id=? AND revision=? AND phase_id='fire_resolution'").bind(next.phase.id,next.turn,gameId,game.revision));
   statements.push(event(db,game,null,'phase_advanced',{from:'fire_resolution',to:next.phase.id,nextTurn:next.turn}));
   try{
@@ -144,6 +160,79 @@ export default {async fetch(req,env){try{
    if(results.slice(0,ships.length).some(r=>r.meta.changes!==1)||results[results.length-2].meta.changes!==1)return fail('Concurrent combat resolution; reload',409);
   }catch(e){if(/UNIQUE|constraint|abort/i.test(String(e)))return fail('Combat already resolved; reload',409);throw e}
   return json({resolved:true,advanced:true,nextPhase:next.phase.id,summary});
+ }
+ if(route==='manual-combat-resolution'&&req.method==='POST'){
+  if(game.status!=='active'||game.phase_id!=='fire_resolution')return fail('Fire phase required',409);
+  if(user.id!==game.host_id)return fail('Only the host may save the manual combat result',403);
+  const b=await readBody(req);
+  if(b.expectedRevision!==game.revision)return fail('Stale game revision',409);
+  if(!b.adjudications||!Array.isArray(b.adjudications.attacks)||!Array.isArray(b.adjudications.interceptions)||b.adjudications.attacks.length>100||b.adjudications.interceptions.length>100)return fail('Attack and interception results are required');
+  const fireRows=(await db.prepare("SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id='fire_commit'").bind(gameId,game.turn).all()).results;
+  const defenceRows=(await db.prepare("SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id='fire_resolution'").bind(gameId,game.turn).all()).results;
+  if(fireRows.length!==members.length||defenceRows.length!==members.length)return fail('Both players must lock fire and defence before recording combat',409);
+  const declarations=fireRows.map(row=>({playerId:row.player_id,fire:JSON.parse(row.payload_json).fire}));
+  const shots=declarations.flatMap(declaration=>declaration.fire.shots.filter(shot=>shot.role==='offensive'));
+  const attackIds=shots.map(shot=>[shot.shipId,shot.mountId,shot.gun].join(':'));
+  if(attackIds.length===0)return fail('There are no offensive attacks requiring manual resolution',409);
+  const rollRows=(await db.prepare('SELECT attack_id,player_id,rolls_json FROM combat_rolls WHERE game_id=? AND turn=?').bind(gameId,game.turn).all()).results;
+  if(rollRows.length!==attackIds.length)return fail('Each attacking player must roll every declared attack before manual adjudication',409);
+  if(new Set(attackIds).size!==attackIds.length||b.adjudications.attacks.length!==attackIds.length)return fail('Record exactly one result for every declared offensive attack');
+  const outcomeById=new Map();
+  for(const item of b.adjudications.attacks){
+   if(!item||typeof item.attackId!=='string'||typeof item.resolution!=='string')return fail('Invalid manual attack result');
+   const resolution=item.resolution.trim();
+   if(resolution.length<12||resolution.length>1000)return fail('Each attack result must include at least 12 characters and no more than 1,000');
+   if(outcomeById.has(item.attackId)||!attackIds.includes(item.attackId))return fail('Attack results do not match the locked declarations');
+   outcomeById.set(item.attackId,resolution);
+  }
+  const assignedInterceptions=defenceRows.flatMap(row=>JSON.parse(row.payload_json).defence?.assignments||[]);
+  const interceptionIds=assignedInterceptions.map(assignment=>[assignment.shipId,assignment.mountId,assignment.gun].join(':'));
+  if(new Set(interceptionIds).size!==interceptionIds.length||b.adjudications.interceptions.length!==interceptionIds.length)return fail('Record exactly one result for every assigned defensive interception');
+  const interceptionOutcomes=new Map();
+  for(const item of b.adjudications.interceptions){
+   if(!item||typeof item.interceptionId!=='string'||typeof item.resolution!=='string')return fail('Invalid manual interception result');
+   const resolution=item.resolution.trim();
+   if(resolution.length<12||resolution.length>1000)return fail('Each interception result must include at least 12 characters and no more than 1,000');
+   if(interceptionOutcomes.has(item.interceptionId)||!interceptionIds.includes(item.interceptionId))return fail('Interception results do not match the locked assignments');
+   interceptionOutcomes.set(item.interceptionId,resolution);
+  }
+  const rollById=new Map(rollRows.map(row=>[row.attack_id,{attackId:row.attack_id,playerId:row.player_id,...JSON.parse(row.rolls_json)}]));
+  const shipRows=(await db.prepare('SELECT * FROM ships WHERE game_id=?').bind(gameId).all()).results;
+  const shipsById=new Map(shipRows.map(row=>[row.id,row]));
+  const next=followingPhase(game.phase_id,game.turn),statements=[],updatedShips=new Map();
+  const gunsFired=[...shots,...assignedInterceptions];
+  for(const shot of gunsFired){
+   const ship=shipsById.get(shot.shipId);
+   const updated=updatedShips.get(shot.shipId)||{ship,privateState:JSON.parse(ship?.private_state_json||'{}')};
+   const privateState=updated.privateState,trial=privateState.trial;
+   if(!ship||trial?.libraryId!==VORCHAN_LIBRARY_RECORD.id)return fail('Manual fire can only be recorded for the two-player Vorchan trial',409);
+   const history=trial.weaponReadiness?.[shot.mountId]?.[shot.gun];
+   if(!history||!Number.isInteger(history.lastFiredTurn))return fail('Weapon readiness history unavailable for '+shot.mountId+' gun '+shot.gun,409);
+   trial.weaponReadiness[shot.mountId][shot.gun].lastFiredTurn=game.turn;
+   updatedShips.set(shot.shipId,updated);
+  }
+  for(const {ship,privateState} of updatedShips.values())statements.push(db.prepare('UPDATE ships SET private_state_json=? WHERE id=? AND game_id=? AND private_state_json=? AND EXISTS(SELECT 1 FROM games WHERE id=? AND revision=? AND phase_id=?)').bind(JSON.stringify(privateState),ship.id,gameId,ship.private_state_json,gameId,game.revision,'fire_resolution'));
+  const manualAttacks=shots.map(shot=>{
+   const attackId=[shot.shipId,shot.mountId,shot.gun].join(':'),target=shipsById.get(shot.targetId),roll=rollById.get(attackId);
+   return {attackId,shipId:shot.shipId,shipLabel:shipsById.get(shot.shipId)?.label||null,targetId:shot.targetId,targetLabel:target?.label||null,mountId:shot.mountId,gun:shot.gun,playerRoll:roll?.roll??null,locationRoll:roll?.locationRoll??null,primaryRoll:roll?.primaryRoll??null,damageDice:roll?.damageDice??[],resolution:outcomeById.get(attackId)};
+  });
+  const manualInterceptions=assignedInterceptions.map(assignment=>{
+   const interceptionId=[assignment.shipId,assignment.mountId,assignment.gun].join(':'),attacker=shots.find(shot=>[shot.shipId,shot.mountId,shot.gun].join(':')===assignment.attackId),ship=shipsById.get(assignment.shipId);
+   return {interceptionId,attackId:assignment.attackId,shipId:assignment.shipId,shipLabel:ship?.label||null,mountId:assignment.mountId,gun:assignment.gun,attackerId:attacker?.shipId||null,resolution:interceptionOutcomes.get(interceptionId)};
+  });
+  const fireProcedureRows=publicProcedureRecords('fire_commit',fireRows).map(record=>({...record,phaseId:'fire_commit'}));
+  const resolutionProcedureRows=publicProcedureRecords('fire_resolution',defenceRows).map(record=>({...record,phaseId:'fire_resolution'}));
+  const records=[...fireProcedureRows,...resolutionProcedureRows];
+  const insertEvent=(type,details)=>db.prepare('INSERT INTO events(id,game_id,turn,phase_id,actor_id,event_type,public_json) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=? AND phase_id=?)').bind(uuid(),gameId,game.turn,game.phase_id,user.id,type,JSON.stringify(details),gameId,game.revision,'fire_resolution');
+  statements.push(insertEvent('manual_combat_resolution',{turn:game.turn,tier:'ship',attacks:manualAttacks,interceptions:manualInterceptions,damageApplied:false,damageMustBeMarkedOnPrintedSCS:true}));
+  statements.push(insertEvent('phase_adjudications_revealed',{phaseId:'fire_resolution',turn:game.turn,records}));
+  statements.push(db.prepare("UPDATE games SET phase_id=?,turn=?,revision=revision+1 WHERE id=? AND revision=? AND phase_id='fire_resolution'").bind(next.phase.id,next.turn,gameId,game.revision));
+  statements.push(db.prepare('INSERT INTO events(id,game_id,turn,phase_id,actor_id,event_type,public_json) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=? AND phase_id=?)').bind(uuid(),gameId,game.turn,game.phase_id,user.id,'phase_advanced',JSON.stringify({from:'fire_resolution',to:next.phase.id,nextTurn:next.turn,combatResolution:'manual'}),gameId,game.revision+1,next.phase.id));
+  try{
+   const results=await db.batch(statements);
+   if(results.slice(0,updatedShips.size).some(result=>result.meta.changes!==1)||results[updatedShips.size+2].meta.changes!==1)return fail('Concurrent manual combat resolution; reload',409);
+  }catch(e){if(/UNIQUE|constraint|abort/i.test(String(e)))return fail('Combat resolution was already saved; reload',409);throw e}
+  return json({resolved:true,mode:'manual',damageApplied:false,advanced:true,nextPhase:next.phase.id});
  }
  if(route==='combat-terrain'&&req.method==='POST'){
   if(game.status!=='active'||game.phase_id!=='fire_resolution')return fail('Fire phase required',409);
@@ -155,14 +244,41 @@ export default {async fetch(req,env){try{
   catch(e){if(/UNIQUE|constraint/i.test(String(e)))return fail('Terrain already confirmed for this turn',409);throw e}
   return json({verified:true,blockingHexes:hexes});
  }
+ if(route==='combat-roll'&&req.method==='POST'){
+  if(game.status!=='active'||game.phase_id!=='fire_resolution')return fail('Fire resolution phase required',409);
+  const b=await readBody(req);
+  if(b.expectedRevision!==game.revision||typeof b.attackId!=='string'||!b.rolls||typeof b.rolls!=='object'||Array.isArray(b.rolls))return fail('Current game revision, attack and dice results are required',409);
+  const fireRows=(await db.prepare("SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id='fire_commit'").bind(gameId,game.turn).all()).results;
+  const defenceRows=(await db.prepare("SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id='fire_resolution'").bind(gameId,game.turn).all()).results;
+  if(fireRows.length!==members.length||defenceRows.length!==members.length)return fail('Both players must lock fire and defensive assignments before rolling',409);
+  const terrain=await db.prepare('SELECT 1 AS confirmed FROM combat_terrain WHERE game_id=? AND turn=?').bind(gameId,game.turn).first();
+  if(!terrain)return fail('Verify battlefield terrain before rolling attacks',409);
+  const declarations=fireRows.map(row=>({playerId:row.player_id,fire:JSON.parse(row.payload_json).fire}));
+  const shot=declarations.flatMap(declaration=>declaration.fire.shots.filter(item=>item.role==='offensive').map(item=>({...item,playerId:declaration.playerId}))).find(item=>[item.shipId,item.mountId,item.gun].join(':')===b.attackId);
+  if(!shot)return fail('Attack is not part of the locked fire orders',409);
+  const shooter=await db.prepare('SELECT owner_id FROM ships WHERE id=? AND game_id=?').bind(shot.shipId,gameId).first();
+  if(!shooter||shot.playerId!==user.id||shooter.owner_id!==user.id)return fail('Only the attacking ship’s player may roll its attack',403);
+  const dice=b.rolls,damageCount=shot.mountId==='plasma_forward'?(shot.chargeTurns===3?4:shot.chargeTurns):1;
+  if(!Number.isInteger(dice.roll)||dice.roll<1||dice.roll>20||!Number.isInteger(dice.locationRoll)||dice.locationRoll<1||dice.locationRoll>20||!Number.isInteger(dice.primaryRoll)||dice.primaryRoll<1||dice.primaryRoll>20||!Array.isArray(dice.damageDice)||dice.damageDice.length!==damageCount||dice.damageDice.some(value=>!Number.isInteger(value)||value<1||value>10))return fail('Roll one attack d20, location d20, primary-chart d20 and the weapon’s exact number of d10 damage dice');
+  const rollJson=JSON.stringify({roll:dice.roll,locationRoll:dice.locationRoll,primaryRoll:dice.primaryRoll,damageDice:dice.damageDice});
+  try{
+   const result=await db.batch([
+    db.prepare('INSERT INTO combat_rolls(game_id,turn,attack_id,player_id,rolls_json) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=? AND phase_id=?)').bind(gameId,game.turn,b.attackId,user.id,rollJson,gameId,game.revision,'fire_resolution'),
+    db.prepare('UPDATE games SET revision=revision+1 WHERE id=? AND revision=? AND phase_id=?').bind(gameId,game.revision,'fire_resolution'),
+    db.prepare('INSERT INTO events(id,game_id,turn,phase_id,actor_id,event_type,public_json) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=? AND phase_id=?)').bind(uuid(),gameId,game.turn,game.phase_id,user.id,'player_combat_roll_submitted',JSON.stringify({attackId:b.attackId,shipId:shot.shipId,mountId:shot.mountId,gun:shot.gun,rolls:dice}),gameId,game.revision+1,'fire_resolution')
+   ]);
+   if(result.some(entry=>entry.meta.changes!==1))return fail('Concurrent game change; refresh before recording this roll',409);
+  }catch(error){if(/UNIQUE|constraint/i.test(String(error)))return fail('This attack already has a recorded roll',409);throw error;}
+  return json({recorded:true,attackId:b.attackId,revision:game.revision+1});
+ }
  if(route==='combat-choice'&&req.method==='POST'){
   if(game.status!=='active'||game.phase_id!=='fire_resolution')return fail('Fire phase required',409);
   const b=await readBody(req);
   if(b.expectedRevision!==game.revision||typeof b.attackId!=='string')return fail('Stale or invalid combat choice',409);
-  const journalRow=await db.prepare("SELECT public_json FROM events WHERE game_id=? AND turn=? AND event_type='vorchan_fire_roll_journal'").bind(gameId,game.turn).first();
+  const rollRows=(await db.prepare('SELECT attack_id,player_id,rolls_json FROM combat_rolls WHERE game_id=? AND turn=?').bind(gameId,game.turn).all()).results;
   const terrainRow=await db.prepare('SELECT blocking_hexes_json FROM combat_terrain WHERE game_id=? AND turn=?').bind(gameId,game.turn).first();
-  if(!journalRow||!terrainRow)return fail('Server rolls and verified terrain required before damage allocation',409);
-  const rolls=JSON.parse(journalRow.public_json).rolls,blockingHexes=JSON.parse(terrainRow.blocking_hexes_json);
+  if(!rollRows.length||!terrainRow)return fail('Player rolls and verified terrain are required before damage allocation',409);
+  const rolls=rollRows.map(row=>({attackId:row.attack_id,playerId:row.player_id,...JSON.parse(row.rolls_json)})),blockingHexes=JSON.parse(terrainRow.blocking_hexes_json);
   const fireRows=(await db.prepare("SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id='fire_commit'").bind(gameId,game.turn).all()).results;
   const defenceRows=(await db.prepare("SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id='fire_resolution'").bind(gameId,game.turn).all()).results;
   if(defenceRows.length!==members.length)return fail('Defensive locks incomplete',409);
@@ -201,8 +317,10 @@ export default {async fetch(req,env){try{
   const defences=defenceRows.map(r=>({playerId:r.player_id,defence:JSON.parse(r.payload_json).defence}));
   const rows=(await db.prepare('SELECT * FROM ships WHERE game_id=?').bind(gameId).all()).results;
   const ships=rows.map(s=>({...s,public_state:JSON.parse(s.public_state_json||'{}'),private_state:JSON.parse(s.private_state_json||'{}')}));
-  const journalRow=await db.prepare("SELECT public_json FROM events WHERE game_id=? AND turn=? AND event_type='vorchan_fire_roll_journal' ORDER BY rowid DESC LIMIT 1").bind(gameId,game.turn).first();
-  const journal=journalRow?JSON.parse(journalRow.public_json):null;
+  const rollRows=(await db.prepare('SELECT attack_id,player_id,rolls_json FROM combat_rolls WHERE game_id=? AND turn=? ORDER BY attack_id').bind(gameId,game.turn).all()).results;
+  const expectedAttackCount=declarations.reduce((sum,declaration)=>sum+declaration.fire.shots.filter(shot=>shot.role==='offensive').length,0);
+  const allRollsCommitted=expectedAttackCount>0&&rollRows.length===expectedAttackCount;
+  const recordedRolls=rollRows.map(row=>({attackId:row.attack_id,playerId:row.player_id,...JSON.parse(row.rolls_json)}));
   const terrainRow=await db.prepare('SELECT blocking_hexes_json FROM combat_terrain WHERE game_id=? AND turn=?').bind(gameId,game.turn).first();
   const blockingHexes=terrainRow?JSON.parse(terrainRow.blocking_hexes_json):[];
   const choiceRows=(await db.prepare('SELECT attack_id,choice_json FROM combat_choices WHERE game_id=? AND turn=?').bind(gameId,game.turn).all()).results;
@@ -212,9 +330,9 @@ export default {async fetch(req,env){try{
    const choice=defenderChoices[shot.shipId+':'+shot.mountId+':'+shot.gun];
    if(choice?.incoming)directionChoices[shot.shipId+':'+shot.targetId]=choice.incoming;
   }
-  const pending=resolveVorchanShipFire({turn:game.turn,ships,declarations,defences,rolls:journal?.rolls||[],blockingHexes,terrainVerified:!!terrainRow,defenderChoices:directionChoices});
+  const pending=resolveVorchanShipFire({turn:game.turn,ships,declarations,defences,rolls:recordedRolls,blockingHexes,terrainVerified:!!terrainRow,defenderChoices:directionChoices});
   const damageRow=await db.prepare("SELECT public_json FROM events WHERE game_id=? AND turn=? AND event_type='vorchan_damage_committed'").bind(gameId,game.turn).first();
-  return json({phase:'fire_resolution',authoritative:true,rollsCommitted:!!journal,rollJournal:journal?.rolls||[],terrainVerified:!!terrainRow,attacks:pending.results,defenderChoices,blockers:pending.results.flatMap(a=>a.blockers),damageApplied:!!damageRow,damageResolution:damageRow?JSON.parse(damageRow.public_json):null});
+  return json({phase:'fire_resolution',turn:game.turn,authoritative:true,rollsCommitted:allRollsCommitted,rollCount:rollRows.length,rollJournal:allRollsCommitted?recordedRolls:[],myRolls:recordedRolls.filter(roll=>roll.playerId===user.id),terrainVerified:!!terrainRow,attacks:pending.results,defenderChoices,blockers:pending.results.flatMap(a=>a.blockers),damageApplied:!!damageRow,damageResolution:damageRow?JSON.parse(damageRow.public_json):null});
  }
  if(route==='fire-orders'&&req.method==='GET'){
   if(game.status!=='active')return fail('Battle has not started',409);
@@ -234,7 +352,7 @@ export default {async fetch(req,env){try{
   if(b.action==='roll-initiative'&&game.phase_id!=='initiative'||b.action==='allocate-ew'&&game.phase_id!=='ew_commit')return fail('Wrong phase',409);
   const ship=await db.prepare('SELECT * FROM ships WHERE id=? AND game_id=?').bind(b.shipId,gameId).first();
   if(!ship||!ship.template_id)return fail('Ship has no SCS template',409);
-  if(ship.owner_id!==user.id&&game.host_id!==user.id)return fail('Not permitted to modify this ship',403);
+  if(ship.owner_id!==user.id)return fail('Only the ship owner may allocate EW or roll initiative',403);
   const record=await db.prepare('SELECT definition_json FROM scs_templates WHERE id=?').bind(ship.template_id).first();
   if(!record)return fail('SCS template missing',409);
   const template=JSON.parse(record.definition_json),oldState=JSON.parse(ship.private_state_json||'{}');
@@ -249,11 +367,11 @@ export default {async fetch(req,env){try{
     nextState.scs.ew.committedTurn=game.turn;
     details={shipId:ship.id,action:'allocate-ew',sealed:true};
    }else{
-    let random;const max=4294967296-(4294967296%20);do{random=crypto.getRandomValues(new Uint32Array(1))[0];}while(random>=max);
-    const roll=random%20+1;
+    const roll=b.roll;
+    if(!Number.isInteger(roll)||roll<1||roll>20)return fail('Submit your d20 result from 1 to 20');
     const result=rollShipInitiative({template,privateState:oldState,ship:{...ship,turn:game.turn},roll});
     nextState=result.privateState;
-    details={shipId:ship.id,action:'roll-initiative',roll:result.result.roll,total:result.result.total};
+    details={shipId:ship.id,action:'roll-initiative',...result.result};
    }
   }catch(e){if(e instanceof RangeError||e instanceof TypeError)return fail(e.message,409);throw e;}
   const oldJson=ship.private_state_json,newJson=JSON.stringify(nextState);
@@ -334,7 +452,7 @@ export default {async fetch(req,env){try{
   const batch=await db.batch([
    db.prepare('UPDATE ships SET private_state_json=? WHERE id=? AND game_id=? AND private_state_json=? AND EXISTS(SELECT 1 FROM games WHERE id=? AND revision=? AND phase_id=?)').bind(next,ship.id,gameId,ship.private_state_json,gameId,game.revision,targetPhase),
    db.prepare('UPDATE games SET revision=revision+1 WHERE id=? AND revision=? AND EXISTS(SELECT 1 FROM ships WHERE id=? AND private_state_json=?)').bind(gameId,game.revision,ship.id,next),
-   db.prepare('INSERT INTO events(id,game_id,turn,phase_id,actor_id,event_type,public_json) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(uuid(),gameId,game.turn,targetPhase,user.id,route==='trial-power'?'trial_power_committed':'trial_ew_committed',JSON.stringify({shipId:ship.id,committed:true}),gameId,game.revision+1)
+   db.prepare('INSERT INTO events(id,game_id,turn,phase_id,actor_id,event_type,public_json) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(uuid(),gameId,game.turn,targetPhase,user.id,route==='trial-power'?'trial_power_committed':'trial_ew_committed',JSON.stringify(route==='trial-power'?{shipId:ship.id,committed:true,allocation:trial.powerAllocation}:{shipId:ship.id,committed:true}),gameId,game.revision+1)
   ]);
   if(batch.some(x=>x.meta.changes!==1))return fail('Concurrent update; reload',409);
   return json({ok:true,shipId:ship.id,revision:game.revision+1,allocation:route==='trial-power'?trial.powerAllocation:{committed:true}});
@@ -348,8 +466,8 @@ export default {async fetch(req,env){try{
   if(ship.owner_id!==user.id)return fail('Only the ship owner can roll initiative',403);
   const privateState=JSON.parse(ship.private_state_json||'{}'),trial=privateState.trial;
   if(!trial||trial.initiative?.turn===game.turn)return fail('Already rolled this turn or missing trial state',409);
-  let number;const max=4294967296-(4294967296%20);do{number=crypto.getRandomValues(new Uint32Array(1))[0];}while(number>=max);
-  const roll=number%20+1;
+  const roll=b.roll;
+  if(!Number.isInteger(roll)||roll<1||roll>20)return fail('Submit your d20 result from 1 to 20');
   const speedPenalty=-2*Math.max(0,5-Math.abs(ship.speed));
   const result={turn:game.turn,roll,printedBonus:VORCHAN_LIBRARY_RECORD.initiativeBonus,speedPenalty,total:roll+VORCHAN_LIBRARY_RECORD.initiativeBonus+speedPenalty};
   const next=JSON.stringify({...privateState,trial:{...trial,initiative:result}});
@@ -464,12 +582,14 @@ export default {async fetch(req,env){try{
   const object=await env.SHIP_IMAGES.get(gameId+'/'+shipId);if(!object)return fail('Image not found',404);
   return new Response(object.body,{headers:{'content-type':object.httpMetadata?.contentType||'application/octet-stream','cache-control':'private, no-store','x-content-type-options':'nosniff'}});
  }
- if(route==='events'&&req.method==='GET'){const rows=await db.prepare('SELECT turn,phase_id,actor_id,event_type,public_json,created_at FROM events WHERE game_id=? ORDER BY rowid DESC LIMIT 100').bind(gameId).all();return json(rows.results.map(e=>({...e,public:JSON.parse(e.public_json),public_json:undefined})));}
+ if(route==='events'&&req.method==='GET'){const rows=await db.prepare('SELECT id,turn,phase_id,actor_id,event_type,public_json,created_at FROM events WHERE game_id=? ORDER BY rowid DESC LIMIT 100').bind(gameId).all();return json(rows.results.map(e=>({...e,public:JSON.parse(e.public_json),public_json:undefined})));}
  if(route==='export'&&req.method==='GET'){if(user.id!==game.host_id)return fail('Host only',403);const ships=(await db.prepare('SELECT * FROM ships WHERE game_id=?').bind(gameId).all()).results;const orders=(await db.prepare('SELECT * FROM orders WHERE game_id=?').bind(gameId).all()).results;const events=(await db.prepare('SELECT * FROM events WHERE game_id=?').bind(gameId).all()).results;return json({format:'b5w-stage1-v1',exportedAt:new Date().toISOString(),game,members,ships,orders,events});}
  if(route==='orders'&&req.method==='POST'){if(game.status!=='active')return fail('Start the battle before issuing orders',409);
   const b=await readBody(req),payload=b.payload??{pass:true};if(!phase||phase.mode==='automatic')return fail('No player order needed');if(b.expectedRevision!==game.revision)return fail('Game state changed; reload',409);
+  if(!payload||typeof payload!=='object'||Array.isArray(payload))return fail('Invalid order payload');
   if(payload.acknowledgedPhase!==game.phase_id||payload.acknowledgedProcedures!==true)return fail('Review and acknowledge the current phase procedures before locking an order',400);
-  if(payload.procedureOutcomes!==undefined&&(!Array.isArray(payload.procedureOutcomes)||payload.procedureOutcomes.length!==phase.procedures.length||payload.procedureOutcomes.some(s=>!['completed','not_required','unavailable'].includes(s))))return fail('Select a valid outcome for every procedure in this phase',400);
+  try{payload.procedureRecords=validateProcedureRecords(phase,payload.procedureRecords)}catch(e){if(e instanceof TypeError)return fail(e.message,400);throw e;}
+  if(payload.notes!==undefined&&(typeof payload.notes!=='string'||payload.notes.length>2000))return fail('Additional phase notes must be 2,000 characters or fewer');
   if(game.phase_id==='fire_commit'||game.phase_id==='fire_resolution'){
    const shipRows=(await db.prepare('SELECT id,owner_id,q,r,facing,public_state_json,private_state_json FROM ships WHERE game_id=?').bind(gameId).all()).results;
    const ships=shipRows.map(row=>({...row,public_state:JSON.parse(row.public_state_json||'{}')}));
@@ -481,6 +601,8 @@ export default {async fetch(req,env){try{
       const own=shipRows.find(s=>s.id===shot.shipId),trial=JSON.parse(own.private_state_json||'{}').trial;
       if(trial?.powerAllocation?.turn===game.turn&&trial.powerAllocation.deactivated?.includes(shot.mountId))return fail('Cannot declare a deactivated weapon');
       if(trial?.destroyedSystems?.includes(shot.mountId))return fail('Cannot declare a destroyed weapon');
+      const readiness=weaponReadiness({mountId:shot.mountId,turn:game.turn,trial,gun:shot.gun,chargeTurns:shot.mountId==='plasma_forward'?shot.chargeTurns:null});
+      if(!readiness.ready)return fail('Cannot declare this gun: '+readiness.reasons.join('; '));
      }
     }else{
      if(!payload.defence)return fail('Explicit defensive assignments required, including an empty assignments array');
@@ -490,9 +612,9 @@ export default {async fetch(req,env){try{
     }
    }catch(e){if(e instanceof RangeError||e instanceof TypeError)return fail(e.message);throw e;}
   }
-  // Defence declarations must be accepted before server dice are generated.
-  // The final defender locks the roll journal, but unresolved attacks keep
-  // the game in fire_resolution until verified damage adjudication exists.
+  // Defence declarations are locked before the attacking players make their
+  // own rolls. Offensive attacks keep the game in fire_resolution until they
+  // have been recorded and adjudicated.
   const serialized=JSON.stringify(payload);if(serialized.length>10000||!payload||typeof payload!=='object'||Array.isArray(payload))return fail('Invalid order payload');
   if(game.phase_id==='power'||game.phase_id==='ew_commit'){
    const owned=(await db.prepare('SELECT id,private_state_json,public_state_json FROM ships WHERE game_id=? AND owner_id=?').bind(gameId,user.id).all()).results.filter(s=>JSON.parse(s.public_state_json||'{}').trial);
@@ -508,6 +630,25 @@ export default {async fetch(req,env){try{
    const missing=shipStates.filter(s=>{const p=JSON.parse(s.public_state_json||'{}'),v=JSON.parse(s.private_state_json||'{}');return p.trial&&v.trial?.initiative?.turn!==game.turn||s.template_id&&v.scs?.initiative?.turn!==game.turn;});
    if(missing.length)return fail('Roll initiative individually for every ship before advancing: '+missing.map(s=>s.id).join(', '),409);
   }
+  if(game.phase_id==='criticals'){
+   const supplied=payload.overthrustRolls??{};
+   if(!supplied||typeof supplied!=='object'||Array.isArray(supplied))return fail('Overthrust dice must be recorded by ship and thruster');
+   const ownedRows=(await db.prepare('SELECT id,private_state_json,public_state_json FROM ships WHERE game_id=? AND owner_id=?').bind(gameId,user.id).all()).results;
+   const expectedShips=new Set();
+   for(const row of ownedRows){
+    if(JSON.parse(row.public_state_json||'{}').libraryId!==VORCHAN_LIBRARY_RECORD.id)continue;
+    const trial=JSON.parse(row.private_state_json||'{}').trial;
+    const checks=trial?.movement?.turn===game.turn?overthrustChecksForTurn(trial.movement.thrusterLedger||{},trial.thrusterDamageBoxes||{}):[];
+    if(!checks.length)continue;
+    expectedShips.add(row.id);
+    const shipRolls=supplied[row.id];
+    if(!shipRolls||typeof shipRolls!=='object'||Array.isArray(shipRolls))return fail('Roll each overthrust check for '+row.id);
+    const expectedIds=new Set(checks.map(check=>check.id));
+    if(Object.keys(shipRolls).length!==expectedIds.size||Object.keys(shipRolls).some(id=>!expectedIds.has(id))||Object.values(shipRolls).some(roll=>!Number.isInteger(roll)||roll<1||roll>20))return fail('Submit one d20 result from 1 to 20 for every overthrusted thruster');
+   }
+   if(Object.keys(supplied).some(shipId=>!expectedShips.has(shipId)))return fail('Overthrust rolls include a ship with no pending check');
+   payload.overthrustRolls=supplied;
+  }
   const previous=await completedOrders(db,game),completed=previous.map(o=>o.player_id);if(!canSubmit(phase,members,completed,user.id))return fail('No action required from this player',409);
   const newCompleted=[...completed,user.id],isFinal=newCompleted.length===members.length;
   const committedFire=game.phase_id==='fire_resolution'?(await db.prepare('SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id=?').bind(gameId,game.turn,'fire_commit').all()).results.map(r=>({playerId:r.player_id,fire:JSON.parse(r.payload_json).fire})):[];
@@ -515,28 +656,50 @@ export default {async fetch(req,env){try{
   const holdsCombat=isFinal&&game.phase_id==='fire_resolution'&&!combatGuard.allowed;
   const next=isFinal&&!holdsCombat?followingPhase(game.phase_id,game.turn):null;
   const inserts=[db.prepare('INSERT INTO orders(id,game_id,turn,phase_id,player_id,payload_json) VALUES(?,?,?,?,?,?)').bind(uuid(),gameId,game.turn,game.phase_id,user.id,serialized),event(db,game,user.id,'order_committed',{playerId:user.id,phaseId:game.phase_id,turn:game.turn})];
-  if(holdsCombat){
-   // Generate all dice on the server only after both defensive choices have
-   // been committed. D1 batch atomically stores this journal with final lock.
-   const shots=committedFire.flatMap(d=>d.fire.shots.filter(s=>s.role==='offensive'));
-   const die=sides=>{const limit=Math.floor(4294967296/sides)*sides;let n;do{n=crypto.getRandomValues(new Uint32Array(1))[0]}while(n>=limit);return n%sides+1};
-   const rolls=shots.map(shot=>({attackId:[shot.shipId,shot.mountId,shot.gun].join(':'),roll:die(20),locationRoll:die(20),primaryRoll:die(20),damageDice:Array.from({length:shot.mountId==='plasma_forward'?(shot.chargeTurns===3?4:shot.chargeTurns):1},()=>die(10))}));
-   inserts.push(event(db,game,null,'vorchan_fire_roll_journal',{turn:game.turn,tier:'ship',rolls,damageApplied:false,requiresAdjudication:true}));
-  }
   if(isFinal&&!holdsCombat){
    if(phase.secret&&game.phase_id!=='fire_commit')inserts.push(event(db,game,null,'orders_revealed',{phaseId:game.phase_id,turn:game.turn,orders:[...previous.map(o=>({playerId:o.player_id,payload:JSON.parse(o.payload_json)})),{playerId:user.id,payload}]}));
+   if(game.phase_id!=='fire_commit'){
+    let recordOrders=[...previous.map(o=>({playerId:o.player_id,payload:JSON.parse(o.payload_json)})),{playerId:user.id,payload}];
+    if(game.phase_id==='fire_resolution'){
+     const fireRows=(await db.prepare("SELECT player_id,payload_json FROM orders WHERE game_id=? AND turn=? AND phase_id='fire_commit'").bind(gameId,game.turn).all()).results;
+     recordOrders=[...fireRows.map(o=>({playerId:o.player_id,payload:JSON.parse(o.payload_json)})),...recordOrders];
+    }
+    const byPhase=game.phase_id==='fire_resolution'?['fire_commit','fire_resolution']:[game.phase_id];
+    const records=byPhase.flatMap(phaseId=>publicProcedureRecords(phaseId,recordOrders.filter(o=>phaseId==='fire_commit'?o.payload.fire!==undefined:o.payload.defence!==undefined||game.phase_id!=='fire_resolution'))
+      .map(record=>({...record,phaseId})));
+    inserts.push(event(db,game,null,'phase_adjudications_revealed',{phaseId:game.phase_id,turn:game.turn,records}));
+   }
    if(game.phase_id==='criticals'){
-    const shipRows=(await db.prepare('SELECT id,private_state_json FROM ships WHERE game_id=?').bind(gameId).all()).results;
+    const shipRows=(await db.prepare('SELECT id,owner_id,private_state_json FROM ships WHERE game_id=?').bind(gameId).all()).results;
+    const criticalOrders=[...previous.map(row=>({playerId:row.player_id,payload:JSON.parse(row.payload_json)})),{playerId:user.id,payload}];
+    const orderByPlayer=new Map(criticalOrders.map(row=>[row.playerId,row.payload]));
     for(const shipRow of shipRows){
      const oldPrivate=JSON.parse(shipRow.private_state_json||'{}');
      if(!oldPrivate.trial||oldPrivate.trial.libraryId!==VORCHAN_LIBRARY_RECORD.id)continue;
-     const resolved=resolveVorchanOverthrust(oldPrivate.trial,game.turn,()=>crypto.getRandomValues(new Uint32Array(1))[0]%20+1);
+     const playerRolls=orderByPlayer.get(shipRow.owner_id)?.overthrustRolls?.[shipRow.id]||{};
+     const resolved=resolveVorchanOverthrust(oldPrivate.trial,game.turn,check=>{
+      const roll=playerRolls[check.id];
+      if(!Number.isInteger(roll)||roll<1||roll>20)throw new RangeError('Player overthrust die missing for '+check.id);
+      return roll;
+     });
      if(!resolved.results.length)continue;
      const newPrivate=JSON.stringify({...oldPrivate,trial:resolved.trial});
      inserts.push(db.prepare('UPDATE ships SET private_state_json=? WHERE id=? AND game_id=? AND private_state_json=?').bind(newPrivate,shipRow.id,gameId,shipRow.private_state_json));
      inserts.push(event(db,game,null,'vorchan_overthrust_resolved',{shipId:shipRow.id,results:resolved.results}));
     }
    }
+  if(game.phase_id==='ew_commit'){
+   const ships=(await db.prepare('SELECT id,owner_id,label,public_state_json,private_state_json FROM ships WHERE game_id=?').bind(gameId).all()).results;
+   const allocations=ships.flatMap(shipRow=>{
+    const publicState=JSON.parse(shipRow.public_state_json||'{}'),privateState=JSON.parse(shipRow.private_state_json||'{}');
+    const trial=privateState.trial;
+    if(trial?.ewAllocation?.turn===game.turn)return [{shipId:shipRow.id,ownerId:shipRow.owner_id,shipLabel:shipRow.label,defensive:trial.ewAllocation.defensive,offensive:trial.ewAllocation.offensive||{}}];
+    const scsEW=privateState.scs?.ew;
+    if(scsEW?.committedTurn===game.turn)return [{shipId:shipRow.id,ownerId:shipRow.owner_id,shipLabel:shipRow.label,defensive:scsEW.defensive||0,offensive:scsEW.offensive||{}}];
+    return [];
+   });
+   inserts.push(event(db,game,null,'ew_allocations_revealed',{turn:game.turn,allocations}));
+  }
    inserts.push(db.prepare('UPDATE games SET phase_id=?,turn=?,revision=revision+1 WHERE id=? AND revision=?').bind(next.phase.id,next.turn,gameId,game.revision));
    inserts.push(event(db,game,null,'phase_advanced',{from:game.phase_id,to:next.phase.id,nextTurn:next.turn}));
   }

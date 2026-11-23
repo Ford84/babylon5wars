@@ -21,6 +21,13 @@ test('W4 fails closed without verified terrain or per-gun history',()=>{
  const result=resolveVorchanShipFire({...args,ships:noHistory});
  assert.equal(result.complete,false);assert.match(result.results[0].blockers.join(' '),/arming history/);
 });
+test('W4 refuses to apply Vorchan defence values to an unverified target SCS',()=>{
+ const unknown=structuredClone(ships);
+ unknown[1].public_state={libraryId:'unverified-scs',hullClass:'heavy_combat'};
+ const result=resolveVorchanShipFire({...args,ships:unknown});
+ assert.equal(result.complete,false);
+ assert.match(result.results[0].blockers.join(' '),/target SCS defence and hull class are not verified/i);
+});
 test('W4 defensive interception applies a -2 penalty to the hit threshold',()=>{
  const blocked=resolveVorchanShipFire({...args,declarations:[...fire,{playerId:'p2',fire:{shots:[{shipId:'b',mountId:'twin_nose_port',gun:1,role:'defensive'}]}}],defences:[{playerId:'p2',defence:{assignments:[{shipId:'b',mountId:'twin_nose_port',gun:1,attackId:'a:twin_nose_port:1'}]}}]});
  assert.equal(blocked.complete,true);assert.equal(blocked.results[0].intercept.total,-2);assert.equal(blocked.results[0].targetNumber,args.terrainVerified?resolveVorchanShipFire(args).results[0].targetNumber-2:null);

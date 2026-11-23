@@ -14,7 +14,7 @@ export function adjudicateVorchanShipTier({ships,attacks,rollJournal,defenderCho
  const shots=attacks.filter(a=>a.hit===true).sort((a,b)=>a.order-b.order||a.id.localeCompare(b.id));
  for(const shot of shots){
   const shooter=byId.get(shot.shipId),target=byId.get(shot.targetId),rolled=dice.get(shot.id);
-  if(!shooter||!target||!rolled)throw new RangeError('Missing immutable tier snapshot or server dice');
+  if(!shooter||!target||!rolled)throw new RangeError('Missing immutable tier snapshot or player dice');
   if(states[target.id].shipDestroyed){outcomes.push({attackId:shot.id,alreadyDestroyed:true});continue}
   const direction=facingDirections(shooter,target);
   const choice=defenderChoices[shot.id]||{};

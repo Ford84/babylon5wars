@@ -1,6 +1,6 @@
 import {overthrustChecksForTurn,resolveOverthrustCritical} from './thruster-criticals.mjs';
 // Called exactly once on the transition out of the Critical Hits phase.
-// Uses an injected d20 source for deterministic tests; server supplies crypto RNG.
+// The callback supplies d20 results that the owning players rolled and saved.
 export function resolveVorchanOverthrust(trial,turn,rollD20){
  if(!trial?.movement||trial.movement.turn!==turn||typeof rollD20!=='function')return {trial,results:[]};
  if(trial.overthrustResolvedTurn===turn)return {trial,results:[]};

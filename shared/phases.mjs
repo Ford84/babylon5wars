@@ -9,15 +9,18 @@ export const PHASE_PROCEDURES = Object.freeze({
     "Announce inactive systems and shields"
   ],
   "initiative": [
-    "Complete hangar reloading preparations",
+    "Complete fighter reloading preparations",
     "Roll initiative for each unit and resolve opposing ties"
   ],
   "ew_commit": [
-    "Secretly allocate electronic warfare and ballistic launches",
-    "Declare fighter missions, defensive modes and special sensor functions"
+    "Secretly allocate electronic warfare",
+    "Declare ballistic weapon launches and targets",
+    "Declare fighter missions and defensive modes"
   ],
   "ew_reveal": [
-    "Reveal committed EW, ballistic launch targets and fighter missions after all players lock"
+    "Reveal committed electronic warfare after all players lock",
+    "Reveal ballistic launch targets after all players lock",
+    "Reveal fighter missions after all players lock"
   ],
   "jump": [
     "Declare jump point formation and phasing-drive activation"
@@ -40,7 +43,8 @@ export const PHASE_PROCEDURES = Object.freeze({
     "Perform fighter combat pivots and base rotation"
   ],
   "recovery": [
-    "Recover escape pods and derelict fighters; attach breaching pods"
+    "Recover escape pods and attach breaching pods",
+    "Recover derelict fighter flights"
   ],
   "ccew_commit": [
     "Secretly assign close-combat EW targets"
@@ -74,7 +78,8 @@ export const PHASE_PROCEDURES = Object.freeze({
     "Activate or close jump points and resolve expiring field effects"
   ],
   "hangar": [
-    "Resolve fighter and shuttle launch, landing and recovery",
+    "Resolve fighter launch, landing and recovery",
+    "Resolve shuttle launch, landing and recovery",
     "Complete remaining hangar operations"
   ],
   "links": [
@@ -95,9 +100,10 @@ export const PHASES = [
   {id:'movement',group:'movement',label:'Movement',mode:'ordered',secret:false},
   {id:'terrain_post',group:'movement',label:'Post-Movement Terrain Effects',mode:'all',secret:false},
   {id:'weapon_movement',group:'movement',label:'Weapon-Based Movement',mode:'all',secret:false},
-  {id:'combat_pivot',group:'movement',label:'Combat Pivot',mode:'all',secret:false},
+  // Fighter-flight units are not part of the current ship-only prototype.
+  {id:'combat_pivot',group:'movement',label:'Combat Pivot',mode:'automatic',secret:false},
   {id:'recovery',group:'movement',label:'Recovery',mode:'all',secret:false},
-  {id:'ccew_commit',group:'movement',label:'Close Combat EW — Secret Commit',mode:'all',secret:true},
+  {id:'ccew_commit',group:'movement',label:'Close Combat EW — Secret Commit',mode:'automatic',secret:true},
   {id:'ccew_reveal',group:'movement',label:'Close Combat EW — Reveal',mode:'automatic',secret:false},
   {id:'ramming',group:'movement',label:'Ramming',mode:'all',secret:false},
   {id:'fire_commit',group:'combat',label:'Fire Determination — Secret Commit',mode:'all',secret:true},

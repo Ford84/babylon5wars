@@ -10,5 +10,5 @@ export function combatAdvancementGuard({declarations=[],resolution=null}={}){
  if(shots.length===0)return {allowed:true,reason:null,offensiveShots:0};
  // A caller cannot mark an attack resolved by supplying arbitrary client data.
  // Only a future server-side, durable and verified combat journal can unlock this.
- return {allowed:false,reason:'Combat resolution pending: offensive attacks require authoritative server rolls, interception and persisted SCS damage before advancing.',offensiveShots:shots.length};
+ return {allowed:false,reason:'Combat resolution pending: offensive attacks require saved player rolls, interception and persisted SCS damage before advancing.',offensiveShots:shots.length};
 }

@@ -67,6 +67,7 @@ export function targetFireControlIndex(hullClass){
 }
 export function vorchanTargetingPreview({shooter,target,mountId,arc,blockingHexes=[],sameHexPrevious=null,defenderDirection=null,attackerOffensiveEW=0,targetDefensiveEW=0,otherModifiers=[],verifiedTerrain=true}){
  if(!shooter||!target||shooter.id===target.id)throw new RangeError('Distinct ships required');
+ if(shooter.libraryId!==VORCHAN.id||shooter.hullClass!==VORCHAN.class)throw new RangeError('Shooter SCS weapon profile is not verified');
  const mount=VORCHAN.weaponMounts.find(m=>m.id===mountId);
  if(!mount)throw new RangeError('Unknown Vorchan mount');
  const weapon=VORCHAN.weapons.find(w=>w.id===mount.weaponId);
@@ -75,9 +76,9 @@ export function vorchanTargetingPreview({shooter,target,mountId,arc,blockingHexe
  const incoming=facingDirections(shooter,target,{sameHexPrevious});
  const direction=incoming.requiresChoice?(incoming.choices?.includes(defenderDirection)?defenderDirection:null):incoming.direction;
  const los=verifiedTerrain?lineOfSight({shooter,target,blockingHexes}):{clear:false,reason:'Terrain and LOS not verified'};
- if(target.libraryId&&target.libraryId!==VORCHAN.id)throw new RangeError('Target SCS defence not verified for this class'); 
+ if(target.libraryId!==VORCHAN.id||target.hullClass!==VORCHAN.class)throw new RangeError('Target SCS defence and hull class are not verified');
  const defence=direction?VORCHAN.defence[direction]:null;
- const fireControl=weapon.fireControl[targetFireControlIndex(target.hullClass||'heavy_combat')];
+ const fireControl=weapon.fireControl[targetFireControlIndex(target.hullClass)];
  const rangePenalty=weaponRangePenalty({range:distance,penaltyPerStep:weapon.rangePenaltyPerHex});
  const ew=ewAttackModifier({attackerOffensive:attackerOffensiveEW,targetDefensive:targetDefensiveEW,rangePenalty});
  if(!Array.isArray(otherModifiers)||otherModifiers.some(x=>!x||!int(x.value)||x.verified!==true||typeof x.reason!=='string'))throw new RangeError('Unverified additional modifier');

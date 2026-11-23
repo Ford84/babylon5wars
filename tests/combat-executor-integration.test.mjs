@@ -13,7 +13,7 @@ test('only defending player may choose system for verified server hit',()=>{
  assert.throws(()=>validateVorchanDamageChoice({...args,choice:{incoming:'forward',damage:999}}),/Unknown/);
  assert.throws(()=>validateVorchanDamageChoice({...args,attacks:[{...attack,hit:false}],choice:{incoming:'forward'}}),/not a verified hit/);
 });
-test('two ships may fire in same tier and accumulate deterministic damage from server dice',()=>{
+test('two ships may fire in same tier and resolve from their recorded player dice',()=>{
  const opposite={...attack,id:'b:twin_nose_starboard:1',shipId:'b',targetId:'a',mountId:'twin_nose_starboard'};
  const rolls=[{...dice[0],locationRoll:4},{attackId:opposite.id,roll:2,locationRoll:4,primaryRoll:3,damageDice:[7]}];
  const input={ships,attacks:[attack,opposite],rollJournal:rolls};

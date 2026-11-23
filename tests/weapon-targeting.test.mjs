@@ -48,6 +48,11 @@ test('Vorchan preview uses confirmed mount arcs and transparent EW and d20 resul
  const noLock=vorchanTargetingPreview({shooter,target,mountId:'plasma_forward',arc});
  assert.equal(noLock.breakdown.rangePenalty,-6);
 });
+test('Vorchan targeting refuses to guess an unverified target class or defence profile',()=>{
+ assert.throws(()=>vorchanTargetingPreview({shooter,target:{...target,libraryId:'unknown-scs',hullClass:'heavy_combat'},mountId:'plasma_forward'}),/not verified/);
+ assert.throws(()=>vorchanTargetingPreview({shooter,target:{...target,hullClass:undefined},mountId:'plasma_forward'}),/not verified/);
+ assert.throws(()=>vorchanTargetingPreview({shooter:{...shooter,libraryId:'unknown-scs'},target,mountId:'plasma_forward'}),/shooter SCS weapon profile is not verified/i);
+});
 test('same-hex and defender direction choices must be resolved explicitly',()=>{
  const same=vorchanTargetingPreview({shooter,target:{...target,q:0,r:0},mountId:'plasma_forward'});
  assert.equal(same.readyForHitRoll,false);

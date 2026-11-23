@@ -6,7 +6,7 @@ import {initialWeaponHistory,resolveVorchanShipFire} from '../shared/weapon-reso
 import {initialVorchanDamage,vorchanHitToken,rollVorchanDamage,applyVorchanStandardVolley} from '../shared/vorchan-damage.mjs';
 import {criticalCandidatesForTurn,weaponCritical} from '../shared/vorchan-criticals.mjs';
 import {VORCHAN_LIBRARY_RECORD as LIB} from '../shared/vorchan-trial-library.mjs';
-const make=(id,owner,q,facing)=>({id,owner_id:owner,q,r:0,facing,public_state:{libraryId:LIB.id},private_state:{trial:{libraryId:LIB.id,weaponReadiness:initialWeaponHistory(1),powerAllocation:{turn:1,deactivated:[]},ewAllocation:{turn:1,offensive:{},defensive:2}}}});
+const make=(id,owner,q,facing)=>({id,owner_id:owner,q,r:0,facing,libraryId:LIB.id,hullClass:LIB.class,public_state:{libraryId:LIB.id},private_state:{trial:{libraryId:LIB.id,weaponReadiness:initialWeaponHistory(1),powerAllocation:{turn:1,deactivated:[]},ewAllocation:{turn:1,offensive:{},defensive:2}}}});
 const ships=[make('a','p1',0,1),make('b','p2',4,4)];
 const attack={shipId:'a',mountId:'twin_nose_port',gun:1,role:'offensive',targetId:'b',order:1};
 const reserve={shipId:'b',mountId:'twin_nose_starboard',gun:2,role:'defensive'};
