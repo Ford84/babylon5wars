@@ -19,7 +19,7 @@ import {validateSCS,initialSCSState} from '../shared/scs.mjs';
 import {allocateShipEW,rollShipInitiative,verifiedUndamagedThrust} from '../shared/server-rules.mjs';
 import {powerBudget,ewAllocation,initiative,initiativeOrder} from '../shared/preturn.mjs';
 import {requiredPlayers,followingPhase,canSubmit,safeShip} from '../shared/coordinator.mjs';
-import {isMapPreset} from '../shared/battle-setup.mjs';
+import {isMapPreset,MAP_PRESETS} from '../shared/battle-setup.mjs';
 import {isVorchanModelId} from '../shared/vorchan-models.mjs';
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'}});
 const fail=(msg,status=400)=>json({error:msg},status);
@@ -439,7 +439,9 @@ export default {async fetch(req,env){try{
   const b=await readBody(req);
   if(b.shipCatalogId!==VORCHAN_LIBRARY_RECORD.id||!getBuiltinShip(b.shipCatalogId)?.selectable)return fail('Select a supported ship from the catalogue',400);
   if(b.expectedRevision!==game.revision)return fail('Game changed; reload',409);
-  const positions=[{q:3,r:10,facing:0},{q:15,r:10,facing:3}];
+  const map=MAP_PRESETS[game.map_preset]||MAP_PRESETS.standard;
+  const positions=Array.isArray(b.positions)?b.positions:[{q:3,r:10,facing:0},{q:15,r:10,facing:3}];
+  if(positions.length!==2||positions.some(p=>!p||!Number.isInteger(p.q)||!Number.isInteger(p.r)||!Number.isInteger(p.facing)||p.q<0||p.q>=map.columns||p.r<0||p.r>=map.rows||p.facing<0||p.facing>5)||positions[0].q===positions[1].q&&positions[0].r===positions[1].r)return fail('Choose two distinct starting hexes on the selected map and a facing from 0 to 5',400);
   const ids=[uuid(),uuid()];
   const inserts=members.map((m,i)=>{
    const p=positions[i],trial=newVorchanTrialState(ids[i],m.user_id,p.q,p.r,p.facing);
@@ -450,7 +452,7 @@ export default {async fetch(req,env){try{
   const result=await db.batch([
    db.prepare('UPDATE games SET revision=revision+1 WHERE id=? AND revision=? AND phase_id=? AND NOT EXISTS(SELECT 1 FROM ships WHERE game_id=?)').bind(gameId,game.revision,'power',gameId),
    ...members.map((m,i)=>{const p=positions[i],trial=newVorchanTrialState(ids[i],m.user_id,p.q,p.r,p.facing);trial.weaponReadiness=initialWeaponHistory(1);return db.prepare('INSERT INTO ships(id,game_id,owner_id,label,q,r,facing,public_state_json,private_state_json) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(ids[i],gameId,m.user_id,'Vorchan Warship '+(i+1),p.q,p.r,p.facing,JSON.stringify({libraryId:trial.libraryId,trial:true}),JSON.stringify({trial}),gameId,game.revision+1);}),
-   db.prepare('INSERT INTO events(id,game_id,turn,phase_id,actor_id,event_type,public_json) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(uuid(),gameId,game.turn,game.phase_id,user.id,'vorchan_trial_created',JSON.stringify({shipIds:ids,libraryId:VORCHAN_LIBRARY_RECORD.id,limitations:'SCS damage diagram not verified; combat manual only'}),gameId,game.revision+1)
+   db.prepare('INSERT INTO events(id,game_id,turn,phase_id,actor_id,event_type,public_json) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(uuid(),gameId,game.turn,game.phase_id,user.id,'vorchan_trial_created',JSON.stringify({shipIds:ids,positions,libraryId:VORCHAN_LIBRARY_RECORD.id,limitations:'SCS damage diagram not verified; combat manual only'}),gameId,game.revision+1)
   ]);
   if(result.some(x=>x.meta.changes!==1))return fail('Concurrent trial setup; reload',409);
   return json({created:true,shipIds:ids,libraryId:VORCHAN_LIBRARY_RECORD.id,automaticCombatReady:false},201);

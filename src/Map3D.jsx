@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {STLLoader} from 'three/addons/loaders/STLLoader.js';
 import {DEFAULT_VORCHAN_MODEL_ID,vorchanModelById} from '../shared/vorchan-models.mjs';
+import {applyVorchanReferenceUv,getVorchanReferenceMaterial} from './vorchanTexture.js';
 const MODEL=vorchanModelById(DEFAULT_VORCHAN_MODEL_ID).url;
 const FALLBACK_MODEL='/models/vorchan.glb';
 const TYREL_CACHE='b5w-tyrel-vorchan-model';
@@ -16,10 +17,10 @@ export async function hasLocalVorchanModel(){return !!(await storedTyrelModel())
 
 const hexPoint=(q,r)=>({x:Math.sqrt(3)*12*(q+r/2),z:18*r});
 function makeVorchan(){
- const g=new THREE.Group(),purple=new THREE.MeshStandardMaterial({color:0x69316f,metalness:.45,roughness:.42}),gold=new THREE.MeshStandardMaterial({color:0xc6a66c,metalness:.6,roughness:.3}),dark=new THREE.MeshStandardMaterial({color:0x292039,metalness:.5}),engine=new THREE.MeshBasicMaterial({color:0x69c7ff});
+ const g=new THREE.Group(),purple=new THREE.MeshStandardMaterial({color:0x735b70,metalness:.22,roughness:.62}),gold=new THREE.MeshStandardMaterial({color:0xb99d69,metalness:.48,roughness:.42}),hull=new THREE.MeshStandardMaterial({color:0x9b9ca0,metalness:.28,roughness:.58}),dark=new THREE.MeshStandardMaterial({color:0x333039,metalness:.35,roughness:.58}),engine=new THREE.MeshBasicMaterial({color:0x69c7ff});
  const poly=(pts,material,height=.6)=>{const s=new THREE.Shape();s.moveTo(pts[0][0],pts[0][1]);pts.slice(1).forEach(p=>s.lineTo(...p));s.closePath();const geo=new THREE.ExtrudeGeometry(s,{depth:height,bevelEnabled:true,bevelSize:.12,bevelThickness:.08,bevelSegments:1});geo.rotateX(-Math.PI/2);const m=new THREE.Mesh(geo,material);g.add(m);return m;};
  poly([[0,-8],[-1.4,-4],[-2,-1],[-5.7,3],[-4.8,5],[-1.3,3.4],[0,7],[1.3,3.4],[4.8,5],[5.7,3],[2,-1],[1.4,-4]],purple,1);
- poly([[0,-7],[-.55,-3.3],[-1.1,1],[0,4.2],[1.1,1],[.55,-3.3]],gold,1.2);
+ poly([[0,-7],[-.55,-3.3],[-1.1,1],[0,4.2],[1.1,1],[.55,-3.3]],hull,1.2);
  for(const sign of [-1,1]){poly([[sign*1.6,-1],[sign*5,3],[sign*4.6,3.6],[sign*1.2,1.5]],gold,.35);const e=new THREE.Mesh(new THREE.CylinderGeometry(.5,.7,1.2,10),dark);e.rotation.x=Math.PI/2;e.position.set(sign*1.4,.5,4.7);g.add(e);const glow=new THREE.Mesh(new THREE.CircleGeometry(.45,12),engine);glow.rotation.x=-Math.PI/2;glow.position.set(sign*1.4,.65,5.36);g.add(glow);}
  g.scale.setScalar(.72);return g;
 }
@@ -42,7 +43,7 @@ export default function Map3D({ships,selected,setSelected,preset='standard',mode
   const updateCamera=()=>{const aspect=host.clientWidth/Math.max(360,host.clientHeight),scale=base/zoom;camera.left=-scale*aspect/2;camera.right=scale*aspect/2;camera.top=scale/2;camera.bottom=-scale/2;camera.position.set(centre.x+scale*.12,scale*.8,centre.z+scale*.9);camera.lookAt(centre.x,0,centre.z);camera.updateProjectionMatrix();renderer.setSize(host.clientWidth,Math.max(360,host.clientHeight));renderer.render(scene,camera);};
   const redraw=(modelFactory)=>{for(const item of models)scene.remove(item);models.length=0;pick.length=0;ships.forEach((s,i)=>{if(!Number.isInteger(s.q)||!Number.isInteger(s.r)||s.q<0||s.r<0||s.q>=cols||s.r>=rows)return;const p=hexPoint(s.q,s.r),model=modelFactory();model.position.set(p.x,1,p.z);model.rotation.y=(s.facing||0)*Math.PI/3;scene.add(model);models.push(model);model.traverse(o=>{if(o.isMesh){o.userData.shipId=s.id??i;pick.push(o);}});const ring=new THREE.Mesh(new THREE.RingGeometry(8,9,32),new THREE.MeshBasicMaterial({color:selected===(s.id??i)?0x8bdcff:0x446c9c,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.set(p.x,.1,p.z);scene.add(ring);models.push(ring);});updateCamera();};
   let factory=()=>makeVorchan(),alive=true;redraw(factory);
-  const useGeometry=(geometry,label)=>{geometry.computeVertexNormals();geometry.computeBoundingBox();const size=geometry.boundingBox.getSize(new THREE.Vector3());const centre=geometry.boundingBox.getCenter(new THREE.Vector3());geometry.translate(-centre.x,-centre.y,-centre.z);const scale=14/Math.max(size.x,size.y,size.z,1);factory=()=>{const group=new THREE.Group();const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:0x77346f,metalness:.48,roughness:.38,side:THREE.DoubleSide}));mesh.scale.setScalar(scale);mesh.rotation.x=-Math.PI/2;group.add(mesh);return group;};setModelStatus(label);redraw(factory);};
+  const useGeometry=(geometry,label)=>{geometry.computeVertexNormals();geometry.computeBoundingBox();const size=geometry.boundingBox.getSize(new THREE.Vector3());const centre=geometry.boundingBox.getCenter(new THREE.Vector3());geometry.translate(-centre.x,-centre.y,-centre.z);applyVorchanReferenceUv(geometry);const scale=14/Math.max(size.x,size.y,size.z,1);const material=getVorchanReferenceMaterial();factory=()=>{const group=new THREE.Group();const mesh=new THREE.Mesh(geometry,material);mesh.scale.setScalar(scale);mesh.rotation.x=-Math.PI/2;group.add(mesh);return group;};setModelStatus(label);redraw(factory);};
   if(localModel){try{useGeometry(new STLLoader().parse(localModel),'Tyrel Lohr STL · this browser');}catch(e){setModelStatus('Unable to read STL: '+e.message);}}
   else {
   cachedPublicGeometry(modelUrl).then(geometry=>{if(alive)useGeometry(geometry,'Tyrel Lohr Vorchan · public model');}).catch(()=>{if(!alive)return;new GLTFLoader().load(FALLBACK_MODEL,gltf=>{if(!alive)return;const source=gltf.scene;source.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(source),sz=box.getSize(new THREE.Vector3());const factor=14/Math.max(sz.x,sz.y,sz.z,1);factory=()=>{const obj=source.clone(true);obj.scale.setScalar(factor);return obj;};setModelStatus('Coloured Vorchan preview · public model unavailable');redraw(factory);},undefined,()=>{if(alive)setModelStatus('3D Vorchan preview unavailable');});});}

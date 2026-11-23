@@ -1,0 +1,6 @@
+Vorchan reference texture
+
+Reference artwork: Bob Sternberg, “Vorchan Cruiser (Reimagination Series – Babylon 5)”, Behance, 2017.
+https://www.behance.net/gallery/50032227/Vorchan-Cruiser-%28Reimagination-Series-Babylon-5%29
+
+The in-game texture maps the reference render onto the supplied STL geometry. The visible hull pixels use the cropped reference; areas outside that single view continue its plum armour, pale metal and dark machinery palette. Original artwork remains the property of its creator.
