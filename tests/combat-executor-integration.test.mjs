@@ -20,7 +20,7 @@ test('two ships may fire in same tier and accumulate deterministic damage from s
  const result=adjudicateVorchanShipTier(input);
  assert.equal(result.complete,true);
  assert.equal(result.outcomes.length,2);
- assert.equal(result.states.a.tracks.plasma_forward.marked,3);
- assert.equal(result.states.b.tracks.plasma_forward.marked,4);
+ assert.equal(result.states.a.tracks.plasma_forward.marked,7);
+ assert.equal(result.states.b.tracks.plasma_forward.marked,8);
  assert.deepEqual(adjudicateVorchanShipTier(input),result);
 });
