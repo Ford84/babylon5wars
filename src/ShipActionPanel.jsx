@@ -33,7 +33,6 @@ export default function ShipActionPanel({ship, detail, userId, onAction, onError
   const already = phase === 'power' ? trial?.powerAllocation?.turn === detail.game.turn
     : phase === 'ew_commit' ? (trial?.ewAllocation?.turn === detail.game.turn || ship.private_state?.scs?.ew?.committedTurn === detail.game.turn)
       : (trial?.initiative?.turn === detail.game.turn || ship.private_state?.scs?.initiative?.turn === detail.game.turn);
-  if (!detail.needsAction && !already) return null;
   const enemyShips = detail.ships.filter(candidate => candidate.owner_id !== userId);
   const availableEW = 2 + (trial?.powerAllocation?.turn === detail.game.turn ? trial.powerAllocation.extraEW : 0);
   const selectedTargetId = enemyShips.some(candidate => candidate.id === targetId) ? targetId : enemyShips[0]?.id || '';
@@ -71,7 +70,7 @@ export default function ShipActionPanel({ship, detail, userId, onAction, onError
 
   return <section className="panel ship-action-panel">
     <h2>{ship.label} — {phase === 'power' ? 'Power allocation' : phase === 'initiative' ? 'Initiative roll' : 'Electronic warfare'}</h2>
-    {already ? <p className="success">This ship’s {phase === 'ew_commit' ? 'EW allocation' : phase === 'initiative' ? 'initiative roll' : 'power allocation'} is recorded for turn {detail.game.turn}.</p> : <>
+    {already ? <p className="success">This ship’s {phase === 'ew_commit' ? 'EW allocation' : phase === 'initiative' ? 'initiative roll' : 'power allocation'} is recorded for turn {detail.game.turn}.</p> : !detail.needsAction ? <p className="hint">This ship’s {phase === 'power' ? 'power allocation' : phase === 'initiative' ? 'initiative roll' : 'EW allocation'} is waiting for your turn to act.</p> : <>
       {!trialShip && phase === 'power' && <p>This SCS power budget is not yet executable in the prototype. Record the ruling in the phase notes; the server will not claim to validate an allocation it cannot calculate.</p>}
       {!trialShip && phase === 'ew_commit' && <p>EW points and opposing targets are checked against this ship’s imported SCS on submission.</p>}
       {phase === 'initiative' && <>
