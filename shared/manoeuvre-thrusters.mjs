@@ -2,7 +2,7 @@
 // pivots and rolls. Validate *which* physical thrusters channel manoeuvre thrust.
 // IDs describe ship positions; no capacity is inferred from damage boxes.
 const aft=['aft_port_thrust','aft_starboard_thrust'];
-const forward=['retro','forward_port_thrust','forward_starboard_thrust'];
+const forward=['forward_port_thrust','forward_starboard_thrust'];
 const port=['port_thrust'],starboard=['starboard_thrust'];
 const sum=(a,ids)=>ids.reduce((n,id)=>n+(a[id]||0),0);
 const total=a=>Object.values(a).reduce((n,v)=>n+v,0);

@@ -34,7 +34,7 @@ export default function ShipActionPanel({ship, detail, userId, onAction, onError
     : phase === 'ew_commit' ? (trial?.ewAllocation?.turn === detail.game.turn || ship.private_state?.scs?.ew?.committedTurn === detail.game.turn)
       : (trial?.initiative?.turn === detail.game.turn || ship.private_state?.scs?.initiative?.turn === detail.game.turn);
   const enemyShips = detail.ships.filter(candidate => candidate.owner_id !== userId);
-  const availableEW = 2 + (trial?.powerAllocation?.turn === detail.game.turn ? trial.powerAllocation.extraEW : 0);
+  const availableEW = VORCHAN.sensorStrength + (trial?.powerAllocation?.turn === detail.game.turn ? trial.powerAllocation.extraEW : 0);
   const selectedTargetId = enemyShips.some(candidate => candidate.id === targetId) ? targetId : enemyShips[0]?.id || '';
   const ewSpend = (defensive ? defensivePoints : 0) + (offensive && selectedTargetId ? offensivePoints : 0);
   const completedPrompt = phase === 'power' ? purchaseThrust !== null && extraEW !== null && deactivate !== null
@@ -85,7 +85,7 @@ export default function ShipActionPanel({ship, detail, userId, onAction, onError
         <YesNo question="Do you want to purchase extra thrust?" value={purchaseThrust} onChange={value => {setPurchaseThrust(value); if (!value) setPurchased(0);}} />
         {purchaseThrust && <label>Extra thrust to purchase <input type="number" min="0" max="20" value={purchased} onChange={event => setPurchased(Math.max(0, Math.floor(Number(event.target.value) || 0)))}/><small>Power cost: {purchased * VORCHAN.engineEfficiency.power}. The server checks the remaining reactor budget.</small></label>}
         <YesNo question="Do you want to purchase additional sensor EW?" value={extraEW} onChange={value => {setExtraEW(value); if (!value) setEwPurchase(0); else setEwPurchase(1);}} />
-        {extraEW && <label>Additional EW purchased <input type="number" min="1" max="1" value={ewPurchase} onChange={event => setEwPurchase(Math.max(1, Math.min(1, Number(event.target.value) || 1)))}/><small>The first extra EW point costs 3 power. The Vorchan library currently supports one purchasable point.</small></label>}
+        {extraEW && <label>Additional EW purchased <input type="number" min="1" max="1" value={ewPurchase} onChange={event => setEwPurchase(Math.max(1, Math.min(1, Number(event.target.value) || 1)))}/><small>The first extra EW point costs {VORCHAN.sensorStrength + 1} power. The Vorchan library currently supports one purchasable point.</small></label>}
         <YesNo question="Do you wish to deactivate weapon systems for power?" value={deactivate} onChange={value => {setDeactivate(value); if (!value) setDeactivated([]);}} />
         {deactivate && <fieldset><legend>Systems to deactivate</legend>{VORCHAN.weaponMounts.map(mount => {
           const weapon = VORCHAN.weapons.find(item => item.id === mount.weaponId);
@@ -96,7 +96,7 @@ export default function ShipActionPanel({ship, detail, userId, onAction, onError
         <button type="button" disabled={busy || !detail.needsAction || !completedPrompt} onClick={commitPower}>{busy ? 'Saving allocation…' : 'Commit power allocation'}</button>
       </>}
       {phase === 'ew_commit' && <>
-        {trialShip && <p>Available EW: {availableEW} (2 free from the Vorchan sensors{trial?.powerAllocation?.turn === detail.game.turn && trial.powerAllocation.extraEW ? ' + 1 purchased' : ''}). Total allocations cannot exceed this pool.</p>}
+        {trialShip && <p>Available EW: {availableEW} ({VORCHAN.sensorStrength} free from the Vorchan sensors{trial?.powerAllocation?.turn === detail.game.turn && trial.powerAllocation.extraEW ? ' + 1 purchased' : ''}). Total allocations cannot exceed this pool.</p>}
         <YesNo question="Do you want to assign defensive EW?" value={defensive} onChange={value => {setDefensive(value); if (!value) setDefensivePoints(0); else setDefensivePoints(1);}} />
         {defensive && <label>Defensive EW points <input type="number" min="0" max={trialShip ? availableEW : undefined} value={defensivePoints} onChange={event => setDefensivePoints(Math.max(0, Math.floor(Number(event.target.value) || 0)))}/></label>}
         <YesNo question="Do you want to assign offensive EW to an enemy?" value={offensive} onChange={value => {setOffensive(value); if (!value) setOffensivePoints(0); else setOffensivePoints(1);}} />

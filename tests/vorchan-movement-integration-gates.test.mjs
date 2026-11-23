@@ -5,19 +5,20 @@ import {adjudicateVorchanMovementDamage} from '../shared/vorchan-movement-damage
 import {newVorchanTrialState} from '../shared/vorchan-trial-library.mjs';
 import {VORCHAN_SCS_IDENTIFICATION as SCS} from '../shared/vorchan-scs-identification.mjs';
 const trial=()=>newVorchanTrialState('s','o',4,10,0);
-test('provisional forward outer icon values are preserved without claiming verified tracks',()=>{
- assert.equal(VORCHAN_THRUSTER_RATINGS.retro,1);
- assert.equal(VORCHAN_THRUSTER_RATINGS.forward_port_thrust,2);
- assert.equal(VORCHAN_THRUSTER_RATINGS.forward_starboard_thrust,3);
+test('only the six physical thrusters provide channel capacity',()=>{
+ assert.equal(VORCHAN_THRUSTER_RATINGS.retro,undefined);
+ assert.deepEqual(Object.values(VORCHAN_THRUSTER_RATINGS),[3,3,5,5,5,5]);
  for(const id of ['forward_port_thrust','forward_starboard_thrust']){
   const system=SCS.systems.find(s=>s.id===id);
-  assert.equal(system.boxes,null);assert.equal(system.armour,null);assert.equal(system.verified,false);
+  assert.equal(system.boxes,10);assert.equal(system.armour,5);assert.equal(system.verified,true);
  }
  assert.equal(SCS.systems.find(s=>s.id==='twin_nose_port').kind,'weapon');
 });
-test('unverified forward-thruster damage tracks are not guessed',()=>{
- assert.throws(()=>adjudicateVorchanMovementDamage(trial(),{systemId:'forward_port_thrust',markedBoxes:1}),/Unverified SCS/);
- assert.throws(()=>adjudicateVorchanMovementDamage(trial(),{systemId:'forward_starboard_thrust',markedBoxes:1}),/Unverified SCS/);
+test('physical forward thrusters have damage tracks; the spurious retro icon is rejected',()=>{
+ for(const id of ['forward_port_thrust','forward_starboard_thrust']){
+  assert.equal(adjudicateVorchanMovementDamage(trial(),{systemId:id,markedBoxes:1}).thrusterDamageBoxes[id],1);
+ }
+ assert.throws(()=>adjudicateVorchanMovementDamage(trial(),{systemId:'retro',markedBoxes:1}),/Unknown/);
 });
 test('damage boxes cannot exceed printed track and destruction requires full track',()=>{
  assert.throws(()=>adjudicateVorchanMovementDamage(trial(),{systemId:'engine',markedBoxes:12}),/Damage exceeds/);

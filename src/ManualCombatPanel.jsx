@@ -14,7 +14,7 @@ export default function ManualCombatPanel({detail, fireView, preflight, isHost, 
   const ready = attacks.every(attack => (resolutions[attack.attackId] || '').trim().length >= 12) && interceptions.every(assignment => (resolutions[assignment.interceptionId] || '').trim().length >= 12);
   return <section className="panel manual-combat">
     <h2>Manual fire adjudication</h2>
-    <p>The Vorchan damage diagram is still incomplete, so the automatic damage path may be blocked. The host can record each declared attack here and continue the turn. These notes are saved for both players; they do not mark damage boxes on the digital SCS.</p>
+    <p>The Vorchan ship data is verified, but automatic combat integration remains incomplete. The host can record each declared attack here and continue the turn. These notes are saved for both players; they do not mark damage boxes on the digital SCS.</p>
     {(preflight?.blockers || []).length > 0 && <details><summary>{preflight.blockers.length} automatic-resolution blocker(s)</summary><ul>{preflight.blockers.map((blocker, index) => <li key={index}>{blocker.attackId}: {(blocker.blockers || []).join('; ')}</li>)}</ul></details>}
     {attacks.map(attack => {
       const shooter = ships.get(attack.shipId);

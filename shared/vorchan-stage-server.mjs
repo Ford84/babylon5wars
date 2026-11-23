@@ -9,11 +9,8 @@ import {effectiveThrusterRating,overthrustChecksForTurn,manoeuvreIncrementalEngi
 import {validateManoeuvreThrusters} from './manoeuvre-thrusters.mjs';
 import {createThrusterLedger,allocateThrusterThrust} from './thruster-ledger.mjs';
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
-// Ratings refer to channel capacity, not damage boxes or armour.
-// Forward outer icon values are retained provisionally; their damage tracks
-// and exact movement mapping are not certified by the supplied SCS.
-// The two aft flanking channels remain provisional pending jump-engine review.
-export const VORCHAN_THRUSTER_RATINGS=Object.freeze({retro:1,forward_port_thrust:2,forward_starboard_thrust:3,port_thrust:5,starboard_thrust:5,aft_port_thrust:5,aft_starboard_thrust:5});
+import {VORCHAN_THRUSTER_RATINGS} from './vorchan-scs-identification.mjs';
+export {VORCHAN_THRUSTER_RATINGS};
 export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]}){
  if(!Number.isInteger(turn)||turn<1)throw new RangeError('Invalid battle turn');
  const trial=privateState?.trial;

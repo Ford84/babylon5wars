@@ -1,9 +1,9 @@
 import {vorchanPowerBudget} from './vorchan-power-economy.mjs';
 import {ewAllocation} from './preturn.mjs';
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
-// Verified from the printed Vorchan SCS: one sensor array, strength 2.
+// The central 20-box sensor icon prints strength 8 and a 4-power diamond.
 // This adapter intentionally refuses damage conditions until critical effects are mapped.
-export const VORCHAN_SENSOR_STRENGTH=2;
+export const VORCHAN_SENSOR_STRENGTH=LIB.sensorStrength;
 export function commitVorchanPower({trial,turn,purchasedThrust=0,extraEW=0,deactivated=[]}){
  if(!Number.isInteger(turn)||turn<1||trial?.libraryId!==LIB.id)throw new RangeError('Invalid Vorchan power state');
  if(trial.powerAllocation?.turn===turn)throw new RangeError('Power already committed this turn');
