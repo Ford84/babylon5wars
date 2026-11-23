@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import {VORCHAN_MODELS} from '../shared/vorchan-models.mjs';
-import {applyVorchanReferenceUv, getVorchanReferenceMaterial} from './vorchanTexture.js';
+import {applyVorchanColourScheme, getVorchanMaterial} from './vorchanMaterial.js';
 
 function ModelViewport({ model }) {
   const mount = useRef(null);
@@ -39,7 +39,7 @@ function ModelViewport({ model }) {
     grid.position.y = -12;
     scene.add(grid);
 
-    const material = getVorchanReferenceMaterial();
+    const material = getVorchanMaterial();
     const group = new THREE.Group();
     scene.add(group);
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -90,7 +90,7 @@ function ModelViewport({ model }) {
         const size = bounds.getSize(new THREE.Vector3());
         const centre = bounds.getCenter(new THREE.Vector3());
         geometry.translate(-centre.x, -centre.y, -centre.z);
-        applyVorchanReferenceUv(geometry);
+        applyVorchanColourScheme(geometry);
         const mesh = new THREE.Mesh(geometry, material);
         mesh.rotation.x = -Math.PI / 2;
         mesh.scale.setScalar(28 / Math.max(size.x, size.y, size.z, 1));
@@ -152,7 +152,7 @@ export default function VorchanShowcase({selectedModelId, onSelectedModelChange,
       </div>
       {open && <ModelViewport key={model.url} model={model} />}
       <p className="model-credit">
-        Model by Tyrel Lohr. Texture reference: Bob Sternberg’s <a href="https://www.behance.net/gallery/50032227/Vorchan-Cruiser-%28Reimagination-Series-Babylon-5%29" target="_blank" rel="noopener noreferrer">Vorchan Cruiser reimagination</a>. <a href="https://cults3d.com/en/3d-model/game/centauri-vorchan-attack-cruiser" target="_blank" rel="noopener noreferrer">View the original model listing</a>.
+        Model by Tyrel Lohr. Colour palette inspired by Bob Sternberg’s <a href="https://www.behance.net/gallery/50032227/Vorchan-Cruiser-%28Reimagination-Series-Babylon-5%29" target="_blank" rel="noopener noreferrer">Vorchan Cruiser reimagination</a>. <a href="https://cults3d.com/en/3d-model/game/centauri-vorchan-attack-cruiser" target="_blank" rel="noopener noreferrer">View the original model listing</a>.
       </p>
     </section>
   );
