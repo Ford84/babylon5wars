@@ -1,4 +1,5 @@
 import {commitMovement} from './movement-commit.mjs';
+import {beginGuidedCombat,advanceGuidedCombat,guidedCombatView} from './guided-combat.mjs';
 import {movementOptions} from './movement-options.mjs';
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
 import {MAP_PRESETS} from './battle-setup.mjs';
@@ -26,7 +27,7 @@ const trial=x=>x.private_state.trial;
 const live=(x,t)=>!x.withdrawn&&!effectiveCondition(trial(x),t).shipDestroyed;
 const members=s=>[...new Set(s.ships.filter(x=>live(x,s.turn)).map(x=>x.owner_id))];
 const record=(s,type,details)=>{s.journal.push({turn:s.turn,phase:s.phase,type,...details});};
-export function createBattle(rows,players,mapPreset='standard',{passivePlayerId=null}={}){
+export function createBattle(rows,players,mapPreset='standard',{passivePlayerId=null,combatFlow='guided'}={}){
  if(passivePlayerId&&!players.some(p=>p.user_id===passivePlayerId&&p.role==='passive'))fail('Invalid passive opponent');
  if(rows.length!==2||players.length!==2||players.some(p=>rows.filter(x=>x.owner_id===p.user_id).length!==1))fail('Assign one Vorchan to each of two players');
  const ships=rows.map(row=>{
@@ -38,12 +39,13 @@ export function createBattle(rows,players,mapPreset='standard',{passivePlayerId=
   for(const guns of Object.values(n.weaponReadiness))for(const h of Object.values(guns)){h.lastFiredTurn=-2;h.lastActivatedTurn=-1;}
   return {id:row.id,owner_id:row.owner_id,label:row.label,q:row.q,r:row.r,facing:row.facing,speed:0,public_state:{libraryId:LIB.id,trial:true},private_state:{trial:projectTrial(n,1)}};
  });
- return completePassiveActions({passivePlayerId,schema:RULES_REVISION,phase:'power',turn:1,status:'active',mapPreset,ships,locks:{},declarations:[],defences:[],dice:[],choices:{},approaches:{},journal:[],scenario:SCENARIO_RULES});
+ return completePassiveActions({passivePlayerId,combatFlow,schema:RULES_REVISION,phase:'power',turn:1,status:'active',mapPreset,ships,locks:{},declarations:[],defences:[],dice:[],choices:{},approaches:{},journal:[],scenario:SCENARIO_RULES});
 }
 export function requiredActors(s){
  if(s.status!=='active')return [];
  const players=members(s);
  if(s.phase==='movement')return (s.moveOrder||[]).filter(id=>!s.locks[id]&&live(s.ships.find(x=>x.owner_id===id),s.turn)).slice(0,1);
+ if(s.phase==='fire_resolution'&&s.resolution)return [s.resolution.actorId];
  if(s.phase==='fire_resolution'&&s.combatStarted)return [...new Set((s.pending||[]).map(x=>s.ships.find(y=>y.id===x.targetId)?.owner_id).filter(Boolean))];
  return players.filter(id=>!s.locks[id]);
 }
@@ -88,10 +90,14 @@ function attackShips(s){return s.ships.map(x=>({...x,private_state:{trial:projec
 function endTurn(s,die){
  for(const ship of s.ships){const resolved=finishShipTurn(trial(ship),s.turn,die);ship.private_state.trial=resolved.trial;record(s,'critical_checks',{shipId:ship.id,results:resolved.results});}
  if(checkVictory(s))return;
- s.turn++;s.attacks=[];s.declarations=[];s.defences=[];s.dice=[];s.choices={};s.pending=[];s.combatStarted=false;s.damageRolled=false;s.fireSnapshot=null;
+ s.turn++;s.attacks=[];s.declarations=[];s.defences=[];s.dice=[];s.choices={};s.pending=[];s.combatStarted=false;s.resolution=null;s.damageRolled=false;s.fireSnapshot=null;
  next(s,'power');
 }
 function combat(s,die){
+ if(s.combatFlow==='guided'&&!s.combatStarted&&beginGuidedCombat(s,attackShips(s)))return;
+ resolveTier(s,die);
+}
+function resolveTier(s,die){
  if(!members(s).every(p=>s.locks[p]))return;
  const ships=attackShips(s);
  if(!s.combatStarted){
@@ -174,6 +180,7 @@ function settleAutomaticActions(s,die){
 }
 function executeCommand(state,playerId,command,die=rollDie){
  const s=structuredClone(state);s.journal=[];
+ if(s.combatFlow===undefined&&!s.combatStarted)s.combatFlow='guided';
  if(s.status!=='active')fail('This battle has finished');
  if(!command||typeof command.type!=='string')fail('Choose an available action');
  if(!requiredActors(s).includes(playerId))fail('Wait for your required action');
@@ -242,6 +249,8 @@ function executeCommand(state,playerId,command,die=rollDie){
   for(const shot of s.declarations.flatMap(d=>d.fire.shots.filter(x=>x.role==='offensive'&&x.targetId===ship.id))){const shooter=ships.find(x=>x.id===shot.shipId),f=facingDirections(shooter,ship,{sameHexPrevious:shooter.sameHexPrevious[ship.id]});if(f.requiresChoice)expected.set(shooter.id+':'+ship.id,f.choices);}
   if(Object.keys(directions).some(id=>!expected.has(id))||[...expected].some(([id,choices])=>!choices?.includes(directions[id])))fail('Select each legal incoming boundary aspect before rolling');
   s.defences.push({playerId,defence,directions});lock();record(s,'defence_committed',{playerId});combat(s,die);
+ }else if(['combat-roll','combat-ok','combat-choice'].includes(command.type)&&s.phase==='fire_resolution'&&s.resolution){
+  if(advanceGuidedCombat(s,playerId,command,die))resolveTier(s,die);
  }else if(command.type==='damage-choice'&&s.phase==='fire_resolution'&&s.combatStarted){
   const pending=s.pending[0];if(!pending||s.ships.find(x=>x.id===pending.targetId).owner_id!==playerId||command.attackId!==pending.attackId||!pending.choices.includes(command.value))fail('Select a currently eligible defender choice');
   const key={system:'systemChoice',hitChart:'sideChoice',incoming:'incoming'}[pending.type];if(!key)fail('Unsupported damage decision');
@@ -263,7 +272,9 @@ export function completePassiveActions(state,die=rollDie){
   else if(s.phase==='ew_commit')command={type:'ew',defensive:0,offensive:{}};
   else if(s.phase==='movement')command=trial(ship).movement.state.remaining?{type:'move',action:{type:'advance',hexes:trial(ship).movement.state.remaining}}:{type:'movement-done'};
   else if(s.phase==='fire_commit')command={type:'fire',fire:{shots:[]}};
-  else if(s.phase==='fire_resolution'&&s.combatStarted){
+  else if(s.phase==='fire_resolution'&&s.resolution){
+   const r=s.resolution;command={type:r.stage.endsWith('_roll')?'combat-roll':r.stage.endsWith('_result')?'combat-ok':'combat-choice',stage:r.stage,attackId:r.attack.id,...(r.candidates?.length?{value:r.candidates[0]}:{})};
+  }else if(s.phase==='fire_resolution'&&s.combatStarted){
    const pending=s.pending[0];command={type:'damage-choice',attackId:pending.attackId,value:pending.choices[0]};
   }else if(s.phase==='fire_resolution'){
    const ships=attackShips(s),directions={};
@@ -286,7 +297,7 @@ export function battleView(s,playerId){
  const required=requiredActors(s),enemyEWRevealed=['movement','fire_commit','fire_resolution'].includes(s.phase)||s.status==='finished';
  const ships=s.ships.map(ship=>{
   const t=trial(ship),c=effectiveCondition(t,s.turn),own=ship.owner_id===playerId;
-  return {...ship,private_state:own?ship.private_state:undefined,public_state:{...ship.public_state,rolled:!!t.movement?.state?.rolled,condition:{...c,weapons:undefined},damage:t.condition.damage,ew:enemyEWRevealed?t.ewAllocation:undefined,deactivated:t.powerAllocation?.turn===s.turn?t.powerAllocation.deactivated:[],shipDataRevision:t.shipDataRevision},sameHexPrevious:s.approaches[ship.id]||{}};
+  return {...ship,private_state:own?ship.private_state:undefined,public_state:{...ship.public_state,rolled:!!t.movement?.state?.rolled,condition:{...c,weapons:undefined},damage:s.resolution?.states?.[ship.id]||t.condition.damage,ew:enemyEWRevealed?t.ewAllocation:undefined,deactivated:t.powerAllocation?.turn===s.turn?t.powerAllocation.deactivated:[],shipDataRevision:t.shipDataRevision},sameHexPrevious:s.approaches[ship.id]||{}};
  });
- return {ships,phase:PLAY_PHASES.find(p=>p.id===s.phase),phases:PLAY_PHASES,scenario:s.scenario,needsAction:required.includes(playerId),required,locked:!!s.locks[playerId],declarations:s.phase==='fire_commit'?s.declarations.filter(d=>d.playerId===playerId):['fire_resolution'].includes(s.phase)?s.declarations:[],defences:s.phase==='fire_resolution'?s.defences.filter(d=>s.combatStarted||d.playerId===playerId):[],pending:s.pending||[],dice:s.combatStarted?s.dice:[],attacks:s.attacks||[],winner:s.winner};
+ return {ships,resolution:guidedCombatView(s),phase:PLAY_PHASES.find(p=>p.id===s.phase),phases:PLAY_PHASES,scenario:s.scenario,needsAction:required.includes(playerId),required,locked:!!s.locks[playerId],declarations:s.phase==='fire_commit'?s.declarations.filter(d=>d.playerId===playerId):['fire_resolution'].includes(s.phase)?s.declarations:[],defences:s.phase==='fire_resolution'?s.defences.filter(d=>s.combatStarted||d.playerId===playerId):[],pending:s.pending||[],dice:s.combatStarted?s.dice:[],attacks:s.attacks||[],winner:s.winner};
 }

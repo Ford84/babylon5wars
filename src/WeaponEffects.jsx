@@ -16,7 +16,7 @@ export function useWeaponPlayback(events,gameId,ready=true){
 }
 export function ShotResults({event,replay}){
  if(!event)return null;
- return <section className="panel"><h2>Latest Weapon Fire · Turn {event.turn}</h2>{event.public.attacks.map(a=><div key={a.id} className="server-dice"><p><strong>Attack d20 {a.roll} · Needs {a.targetNumber} Or Less · {a.hit?'Hit':'Miss'}</strong></p>{a.hit?<p>Damage: {a.damageDice.join(' + ')} · Total {a.damage} Before Armour · {a.mode||'Standard'}</p>:<p>No Damage Roll</p>}</div>)}<button className="secondary" onClick={replay}>Replay Weapon Effects</button></section>;
+ return <section className="panel"><h2>Latest Weapon Fire · Turn {event.turn}</h2>{event.public.attacks.map(a=><div key={a.id} className="server-dice"><p><strong>Attack d20 {a.roll} · Needs {a.targetNumber} Or Less · {a.hit?'Hit':'Miss'}</strong></p>{a.hit&&!a.damageDiscarded?<p>Damage: {a.damageDice.join(' + ')} · Total {a.damage} Before Armour · {a.mode||'Standard'}</p>:<p>{a.damageDiscarded?'Target Already Destroyed · No Further Damage':'No Damage Roll'}</p>}</div>)}<button className="secondary" onClick={replay}>Replay Weapon Effects</button></section>;
 }
 export default function WeaponEffects2D({volley,xy}){
  const [elapsed,setElapsed]=useState(0);
