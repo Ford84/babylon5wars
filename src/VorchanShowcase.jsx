@@ -109,6 +109,7 @@ function ModelViewport({ model }) {
       observer.disconnect();
       controls.dispose();
       geometry?.dispose();
+      material.dispose();
       grid.geometry.dispose();
       if (Array.isArray(grid.material)) grid.material.forEach((item) => item.dispose());
       else grid.material.dispose();
@@ -152,7 +153,7 @@ export default function VorchanShowcase({selectedModelId, onSelectedModelChange,
       </div>
       {open && <ModelViewport key={model.url} model={model} />}
       <p className="model-credit">
-        Model by Tyrel Lohr. Colour palette inspired by Bob Sternberg’s <a href="https://www.behance.net/gallery/50032227/Vorchan-Cruiser-%28Reimagination-Series-Babylon-5%29" target="_blank" rel="noopener noreferrer">Vorchan Cruiser reimagination</a>. <a href="https://cults3d.com/en/3d-model/game/centauri-vorchan-attack-cruiser" target="_blank" rel="noopener noreferrer">View the original model listing</a>.
+        Model by Tyrel Lohr. Simple purple hull finish. <a href="https://cults3d.com/en/3d-model/game/centauri-vorchan-attack-cruiser" target="_blank" rel="noopener noreferrer">View the original model listing</a>.
       </p>
     </section>
   );
