@@ -29,7 +29,7 @@ export function movementOptions(ship,turn,mapPreset='standard'){
   const name=d===-1?'Port':'Starboard';
   add('Slide '+name,{type:'slide',direction:d},Math.ceil(Math.abs(speed)/5),[[side(d)]]);
   const delay=vorchanTurnDelayAtSpeed(speed,LIB.turnDelay),cost=turnCostAtSpeed(speed,LIB.turnCost);
-  for(let shorter=0;shorter<=Math.max(0,delay-1);shorter++)add('Turn '+name+(shorter?' · Shorten Delay '+shorter:''),{type:'turn',direction:d,shortenBy:shorter},cost+shorter,[reverse?forward:aft,[side(d)]]);
+  for(let shorter=0;shorter<=Math.max(0,delay-1);shorter++)add((state.pivotActive?'Turn Into Pivot · ':'Turn ')+name+(shorter?' · Shorten Delay '+shorter:''),{type:'turn',direction:d,shortenBy:shorter},cost+shorter,[reverse?forward:aft,[side(d)]]);
   if(!state.extendedTurn)for(let initial=Math.ceil(cost/4);initial<cost;initial++)add('Begin Extended Turn '+name+' · Pay '+initial,{type:'extended-start',direction:d,initialThrust:initial},initial,[reverse?forward:aft,[side(d)]]);
  }
  if(state.extendedTurn){const ext=state.extendedTurn;add('Complete Extended Turn',{type:'extended-complete',shortenBy:0},ext.totalCost-ext.initialThrust,[reverse?forward:aft,[side(ext.direction)]]);add('Cancel Impossible Extended Turn',{type:'extended-cancel'},0,[]);}

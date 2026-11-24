@@ -25,3 +25,13 @@ test('public travel direction is derived from authoritative inertial heading, in
  const moved=act(s.ships[0],{type:'advance',hexes:1});assert.deepEqual([moved.q,moved.r],[2,11]);
  s.ships[0].speed=0;assert.equal(heading(),null);
 });
+
+test('halting a one-hexside pivot exposes the turn towards the hull and redirects normal travel without another facing change',()=>{
+ for(const direction of [1,-1]){
+  let s=ship();const start=movementOptions(s,1).find(o=>o.choices[0].action.type==='pivot-start'&&o.choices[0].action.direction===direction);s=act(s,start.choices[0].action);
+  assert.equal(pick(s,'Turn'),undefined);s=act(s,pick(s,'Halt Pivot'));
+  const turns=movementOptions(s,1).filter(o=>o.choices[0].action.type==='turn');assert.ok(turns.length);assert.ok(turns.every(o=>o.choices[0].action.direction===direction));
+  const facing=s.facing;s=act(s,turns[0].choices[0].action);assert.equal(s.facing,facing);assert.equal(s.private_state.trial.movement.state.motionFacing,facing);assert.equal(s.private_state.trial.movement.state.pivotActive,false);
+  s=act(s,{type:'advance',hexes:1});assert.deepEqual([s.q,s.r],direction===1?[4,10]:[3,9]);
+ }
+});

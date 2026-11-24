@@ -13,7 +13,7 @@ import {weaponReadiness} from './weapon-readiness.mjs';
 import {facingDirections,checkMountArc as __arc} from './weapon-targeting.mjs';
 import {unitInitiative} from './initiative-sequence.mjs';
 import {newStagedMovement} from './staged-movement.mjs';
-import {orientationAtMovementStart} from './orientation-stage.mjs';
+import {orientationAtMovementStart,normaliseHaltedPivot} from './orientation-stage.mjs';
 import {extraEWCost} from './preturn.mjs';
 import {newCondition,effectiveCondition,projectTrial,SYSTEMS,SYSTEM_POWER,rollDie,finishShipTurn,finishCriticalUpkeep} from './ship-condition.mjs';
 export const PLAY_PHASES=Object.freeze([
@@ -62,7 +62,7 @@ function startMovement(s){
  for(const ship of s.ships){
   const t=trial(ship),old=t.movement?.state;
   const state=old?{...orientationAtMovementStart({...old,turn:s.turn-1},s.turn),q:ship.q,r:ship.r,speed:ship.speed,remaining:Math.abs(ship.speed),moved:0,thrustSpent:0,started:false,history:[],slideDirection:null,normalSinceSlide:true,version:0}:newStagedMovement(ship);
-  state.turn=s.turn;ship.facing=state.facing;
+  Object.assign(state,normaliseHaltedPivot(state));state.turn=s.turn;ship.facing=state.facing;ship.speed=state.speed;
   t.movement={turn:s.turn,purchasedThrust:t.powerAllocation.purchasedThrust,engineThrustSpent:0,thrusterLedger:{},state};
   const e=effectiveCondition(t,s.turn);
   if(e.engineShort==='runaway'&&!e.powerOff){
