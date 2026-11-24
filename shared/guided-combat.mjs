@@ -20,12 +20,13 @@ export function beginGuidedCombat(s,ships){
  const queue=s.declarations.flatMap(d=>d.fire.shots.filter(x=>x.role==='offensive')).sort((a,b)=>a.order-b.order||attackId(a).localeCompare(attackId(b)));
  if(!queue.length)return false;
  s.combatStarted=true;s.fireSnapshot=structuredClone(ships);s.dice=[];s.choices={};s.pending=[];s.attacks=[];
- s.resolution={queue,index:-1,states:Object.fromEntries(ships.map(x=>[x.id,structuredClone(x.private_state.trial.condition.damage)]))};nextAttack(s);return true;
+ s.resolution={queue,index:-1,states:Object.fromEntries(ships.map(x=>[x.id,structuredClone(x.kind==='shuttle'?{shuttleDamage:x.damage,shipDestroyed:x.damage>=10}:x.private_state.trial.condition.damage)]))};nextAttack(s);return true;
 }
 function prepareLocation(s){
  const r=s.resolution,source=s.fireSnapshot.find(x=>x.id===r.attack.shipId),target=s.fireSnapshot.find(x=>x.id===r.attack.targetId),direction=facingDirections(source,target,{sameHexPrevious:source.sameHexPrevious?.[target.id]});
  const directions=Object.assign({},...s.defences.map(d=>d.directions||{}));r.incoming=direction.requiresChoice?directions[source.id+':'+target.id]:direction.direction;
  s.choices[r.attack.id]={incoming:r.incoming};
+ if(target.kind==='shuttle'){r.chart=null;r.stage='damage_roll';r.actorId=source.owner_id;return;}
  const side=['port','starboard'].includes(r.incoming),beam=Math.abs(direction.relative-90)<1e-8||Math.abs(direction.relative-270)<1e-8;
  if(side&&beam){r.stage='hull_choice';r.actorId=target.owner_id;r.candidates=['forward','aft'];return;}
  r.sideChoice=side?(direction.relative<90||direction.relative>270?'forward':'aft'):null;prepareChart(s);
@@ -63,6 +64,7 @@ export function advanceGuidedCombat(s,playerId,command,die){
    d.damageDice=Array.from({length:option.damageDice.count},()=>die(option.damageDice.sides));
    const source=s.fireSnapshot.find(x=>x.id===a.shipId),target=s.fireSnapshot.find(x=>x.id===a.targetId),range=Math.max(Math.abs(source.q-target.q),Math.abs(source.r-target.r),Math.abs(source.q+source.r-target.q-target.r));
    r.damage=rollVorchanDamage({mountId:a.mountId,chargeTurns:a.chargeTurns||1,dice:d.damageDice,range,mode:a.mode,damageLoss:source.private_state.trial.condition.effects.weapons[a.mountId]?.damageLoss||0});
+   if(target.kind==='shuttle'){const old=r.states[a.targetId].shuttleDamage,marked=Math.min(10,old+r.damage.damage);r.states[a.targetId]={shuttleDamage:marked,shipDestroyed:marked===10};r.trace=[{systemId:'shuttle_hull',armour:0,marked:marked-old,destroyed:marked===10}];r.stage='damage_result';record(s,'damage_rolled',{attackId:a.id,...r.damage,trace:r.trace});emit(s);return false;}
    const result=applyVorchanStandardVolley({state:r.states[a.targetId],damage:r.damage.damage,plasma:r.damage.plasma,incoming:r.incoming,locationRoll:d.locationRoll,primaryRoll:d.primaryRoll??null,sideChoice:r.sideChoice,systemChoice:r.selected,eligibleSystemIds:r.token==='side_thrust'&&['port','starboard'].includes(r.incoming)?[r.incoming==='port'?'port_thrust':'starboard_thrust']:null});
    if(result.requiresChoice)fail('Location selection is incomplete');r.states[a.targetId]=result.state;r.trace=result.trace;r.stage='damage_result';
    record(s,'damage_rolled',{attackId:a.id,...r.damage,trace:r.trace});emit(s);

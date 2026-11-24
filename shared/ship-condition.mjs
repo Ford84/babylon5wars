@@ -23,7 +23,7 @@ export function effectiveCondition(trial,turn){
  fireModifier:-e.fireControlLoss-(trial.movement?.state?.rollInProgress?3:0)-(trial.movement?.state?.pivotTurn===turn?3:0),
  offensiveLimited:e.offensiveLimited,ewLock:e.ewLock?.turn===turn?e.ewLock:null,
  thrusterRatings:Object.fromEntries(Object.entries(VORCHAN_THRUSTER_RATINGS).map(([id,r])=>[id,dead(id)?0:effectiveThrusterRating(r,e.thrusters[id])])),
- hangarCapacity:dead('hangar')?0:Math.max(0,2-(d.tracks.hangar?.marked||0)),weapons:e.weapons};
+ hangarCapacity:dead('hangar')?0:Math.max(0,SYSTEMS.get('hangar').boxes-(d.tracks.hangar?.marked||0)),weapons:e.weapons};
 }
 // Compatibility projection is derived exclusively from the canonical condition.
 // The existing movement reducer consumes this projection, never editable fields.

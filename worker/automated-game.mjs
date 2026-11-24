@@ -1,3 +1,4 @@
+import {enableOperations} from '../shared/vorchan-operations.mjs';
 import {createBattle,executeBattle,battleView,PLAY_PHASES} from '../shared/automated-battle.mjs';
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
 const error=(message,status=409)=>json({error:message},status);
@@ -6,7 +7,7 @@ export async function automatedGame({req,db,game,members,user,route}){
  // Staging and account flows continue to use their existing routes.
  if(game.status==='setup'&&route!=='start')return null;
  const stored=await db.prepare('SELECT revision,state_json FROM battle_states WHERE game_id=?').bind(game.id).first();
- let s=stored?JSON.parse(stored.state_json):null;
+ let s=stored?JSON.parse(stored.state_json):null;if(s&&s.operations!==false)enableOperations(s);
  if(req.method==='GET'){
   if(!s){if(!route)return json({game,members,ships:[],automated:false,legacy:true,phases:PLAY_PHASES,readiness:[],needsAction:false});return null;}
   const view=battleView(s,user.id);
@@ -26,7 +27,7 @@ export async function automatedGame({req,db,game,members,user,route}){
    if(game.status!=='setup'||stored)return error('Battle already started');
    if(game.mode==='solo-test'&&(members.length!==2||members.filter(m=>m.role==='passive').length!==1))return error('Solo test requires its passive opponent');
    const rows=(await db.prepare('SELECT * FROM ships WHERE game_id=?').bind(game.id).all()).results;
-   s=createBattle(rows,members,game.map_preset,{passivePlayerId:game.mode==='solo-test'?members.find(m=>m.role==='passive')?.user_id:null});s.journal=[{turn:1,phase:'power',type:'battle_started',scenario:s.scenario,mode:game.mode},...s.journal];
+   s=createBattle(rows,members,game.map_preset,{operations:true,passivePlayerId:game.mode==='solo-test'?members.find(m=>m.role==='passive')?.user_id:null});s.journal=[{turn:1,phase:'power',type:'battle_started',scenario:s.scenario,mode:game.mode},...s.journal];
   }else{
    if(!s)return error('Start a new battle to use automated condition and rules; existing records are preserved.');
    s=executeBattle(s,user.id,body.command);
