@@ -188,3 +188,21 @@ test('an extended-turn thrust commitment also executes its legal first travel se
  assert.ok(option);s=command(s,'p1',{type:'move',action:option.choices[0].action,advanceAfter:1});
  const movement=s.ships[0].private_state.trial.movement.state;assert.equal(movement.remaining,5);assert.ok(movement.extendedTurn);assert.notDeepEqual([s.ships[0].q,s.ships[0].r],[3,10]);
 });
+
+test('passive test opponent automatically makes a deterministic eligible damage choice',()=>{
+ let s=createBattle([{id:'a',owner_id:'p1',label:'Alpha',q:3,r:10,facing:0},{id:'b',owner_id:'bot',label:'Passive',q:6,r:7,facing:3}].map(x=>({...x,private_state:{trial:newVorchanTrialState(x.id,x.owner_id,x.q,x.r,x.facing)}})),[{user_id:'p1',role:'host'},{user_id:'bot',role:'passive'}],'standard',{passivePlayerId:'bot'});
+ assert.equal(s.locks.bot,true);assert.throws(()=>command(s,'bot',{type:'power'}),/controlled/);
+ s=command(s,'p1',{type:'power'});s=command(s,'p1',{type:'initiative'},sequence([2,1,20]));s=command(s,'p1',{type:'ew',offensive:{b:8}});
+ if(s.phase==='movement')s=command(s,'p1',{type:'movement-done'});
+ s=command(s,'p1',{type:'fire',fire:{shots:[{shipId:'a',targetId:'b',mountId:'twin_nose_port',gun:1,role:'offensive',order:1}]}},sequence([1,6,1,8]));
+ assert.equal(s.turn,2);assert.equal(s.phase,'power');assert.equal(s.locks.bot,true);
+ assert.equal(s.ships[1].private_state.trial.condition.damage.tracks.twin_nose_port.marked,6);
+ assert.equal(s.journal.some(e=>e.type==='defender_choice'),true);
+});
+
+test('passive opponent also chooses boundary aspects before the server rolls attacks',()=>{
+ let s=createBattle([{id:'a',owner_id:'p1',label:'Alpha',q:3,r:10,facing:1},{id:'b',owner_id:'bot',label:'Passive',q:6,r:13,facing:2}].map(x=>({...x,private_state:{trial:newVorchanTrialState(x.id,x.owner_id,x.q,x.r,x.facing)}})),[{user_id:'p1',role:'host'},{user_id:'bot',role:'passive'}],'standard',{passivePlayerId:'bot'});
+ s=command(s,'p1',{type:'power'});s=command(s,'p1',{type:'initiative'},()=>1);s=command(s,'p1',{type:'ew',offensive:{b:8}});s=command(s,'p1',{type:'movement-done'});
+ s=command(s,'p1',{type:'fire',fire:{shots:[{shipId:'a',targetId:'b',mountId:'plasma_forward',gun:1,chargeTurns:3,role:'offensive',order:1}]}},sequence([1,10,1,3,3,3,3]));
+ assert.equal(s.turn,2);assert.equal(s.phase,'power');assert.ok(s.journal.some(e=>e.type==='passive_action_completed'&&e.action==='defence'));
+});

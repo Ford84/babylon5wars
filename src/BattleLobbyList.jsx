@@ -6,7 +6,7 @@ export default function BattleLobbyList({games = [], userId, currentGameId, dele
   return <div className="battle-lobby-list">
     {games.map(game => <div className="battle-lobby-row" key={game.id}>
       <button type="button" className="secondary battle-lobby-open" aria-current={currentGameId === game.id ? 'true' : undefined} onClick={() => onOpen(game)}>
-        <span>{game.title}</span><small>{game.status === 'setup' ? 'Preparing' : `Turn ${game.turn}`}</small>
+        <span>{game.title}</span><small>{game.mode==='solo-test'?'Solo Test · ':''}{game.status === 'setup' ? 'Preparing' : `Turn ${game.turn}`}</small>
       </button>
       {game.host_id === userId && <button type="button" className="danger battle-lobby-delete" disabled={deletingGameId === game.id} onClick={() => onDelete(game)}>
         {deletingGameId === game.id ? 'Deleting…' : 'Delete'}

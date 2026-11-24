@@ -26,7 +26,8 @@ const trial=x=>x.private_state.trial;
 const live=(x,t)=>!x.withdrawn&&!effectiveCondition(trial(x),t).shipDestroyed;
 const members=s=>[...new Set(s.ships.filter(x=>live(x,s.turn)).map(x=>x.owner_id))];
 const record=(s,type,details)=>{s.journal.push({turn:s.turn,phase:s.phase,type,...details});};
-export function createBattle(rows,players,mapPreset='standard'){
+export function createBattle(rows,players,mapPreset='standard',{passivePlayerId=null}={}){
+ if(passivePlayerId&&!players.some(p=>p.user_id===passivePlayerId&&p.role==='passive'))fail('Invalid passive opponent');
  if(rows.length!==2||players.length!==2||players.some(p=>rows.filter(x=>x.owner_id===p.user_id).length!==1))fail('Assign one Vorchan to each of two players');
  const ships=rows.map(row=>{
   const t=typeof row.private_state_json==='string'?JSON.parse(row.private_state_json).trial:row.private_state?.trial;
@@ -37,7 +38,7 @@ export function createBattle(rows,players,mapPreset='standard'){
   for(const guns of Object.values(n.weaponReadiness))for(const h of Object.values(guns)){h.lastFiredTurn=-2;h.lastActivatedTurn=-1;}
   return {id:row.id,owner_id:row.owner_id,label:row.label,q:row.q,r:row.r,facing:row.facing,speed:0,public_state:{libraryId:LIB.id,trial:true},private_state:{trial:projectTrial(n,1)}};
  });
- return {schema:RULES_REVISION,phase:'power',turn:1,status:'active',mapPreset,ships,locks:{},declarations:[],defences:[],dice:[],choices:{},approaches:{},journal:[],scenario:SCENARIO_RULES};
+ return completePassiveActions({passivePlayerId,schema:RULES_REVISION,phase:'power',turn:1,status:'active',mapPreset,ships,locks:{},declarations:[],defences:[],dice:[],choices:{},approaches:{},journal:[],scenario:SCENARIO_RULES});
 }
 export function requiredActors(s){
  if(s.status!=='active')return [];
@@ -171,7 +172,7 @@ function settleAutomaticActions(s,die){
   if(!changed||s.combatStarted)break;
  }
 }
-export function executeBattle(state,playerId,command,die=rollDie){
+function executeCommand(state,playerId,command,die=rollDie){
  const s=structuredClone(state);s.journal=[];
  if(s.status!=='active')fail('This battle has finished');
  if(!command||typeof command.type!=='string')fail('Choose an available action');
@@ -248,6 +249,38 @@ export function executeBattle(state,playerId,command,die=rollDie){
  }else fail('This action is not available in the current phase');
  settleAutomaticActions(s,die);
  return s;
+}
+// The passive opponent uses the same validated commands and rules as a player.
+// Only the server sets passivePlayerId, when creating an explicit solo test.
+export function completePassiveActions(state,die=rollDie){
+ let s=state;const journal=[...(s.journal||[])];
+ for(let i=0;i<50;i++){
+  const id=s.passivePlayerId;
+  if(!id||!requiredActors(s).includes(id)){s.journal=journal;return s;}
+  const ship=s.ships.find(x=>x.owner_id===id);let command;
+  if(s.phase==='power')command={type:'power'};
+  else if(s.phase==='initiative')command={type:'initiative'};
+  else if(s.phase==='ew_commit')command={type:'ew',defensive:0,offensive:{}};
+  else if(s.phase==='movement')command=trial(ship).movement.state.remaining?{type:'move',action:{type:'advance',hexes:trial(ship).movement.state.remaining}}:{type:'movement-done'};
+  else if(s.phase==='fire_commit')command={type:'fire',fire:{shots:[]}};
+  else if(s.phase==='fire_resolution'&&s.combatStarted){
+   const pending=s.pending[0];command={type:'damage-choice',attackId:pending.attackId,value:pending.choices[0]};
+  }else if(s.phase==='fire_resolution'){
+   const ships=attackShips(s),directions={};
+   for(const shot of s.declarations.flatMap(d=>d.fire.shots.filter(x=>x.role==='offensive'&&x.targetId===ship.id))){
+    const source=ships.find(x=>x.id===shot.shipId),target=ships.find(x=>x.id===ship.id),aspect=facingDirections(source,target,{sameHexPrevious:source.sameHexPrevious[target.id]});
+    if(aspect.requiresChoice)directions[source.id+':'+target.id]=aspect.choices[0];
+   }
+   command={type:'defence',assignments:[],directions};
+  }else fail('Passive opponent reached an unsupported phase');
+  s=executeCommand(s,id,command,die);journal.push(...s.journal);
+  journal.push({turn:s.turn,phase:s.phase,type:'passive_action_completed',playerId:id,action:command.type});
+ }
+ fail('Passive opponent action limit reached');
+}
+export function executeBattle(state,playerId,command,die=rollDie){
+ if(playerId===state.passivePlayerId)fail('The passive opponent is controlled by the server');
+ return completePassiveActions(executeCommand(state,playerId,command,die),die);
 }
 export function battleView(s,playerId){
  const required=requiredActors(s),enemyEWRevealed=['movement','fire_commit','fire_resolution'].includes(s.phase)||s.status==='finished';

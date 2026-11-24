@@ -19,7 +19,7 @@ async function hashPassword(password,salt=hex(bytes(16))){const key=await crypto
 async function verifyPassword(password,stored){if(!stored?.startsWith('pbkdf2:100000:'))return false;const parts=stored.split(':');const candidate=await hashPassword(password,parts[2]);const a=new TextEncoder().encode(candidate),b=new TextEncoder().encode(stored);let difference=a.length^b.length;for(let i=0;i<Math.max(a.length,b.length);i++)difference|=(a[i]||0)^(b[i]||0);return difference===0;}
 async function currentUser(req,db){const token=req.headers.get('authorization')?.match(/^Bearer (.+)$/)?.[1];if(!token)return null;return db.prepare("SELECT u.id,u.display_name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>datetime('now')").bind(await sha(token)).first();}
 async function member(db,g,u){return db.prepare('SELECT role FROM memberships WHERE game_id=? AND user_id=?').bind(g,u).first();}
-async function memberships(db,g){return (await db.prepare('SELECT m.user_id,m.role,m.faction,m.initiative_rank,u.display_name FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.game_id=? ORDER BY m.initiative_rank,m.user_id').bind(g).all()).results;}
+async function memberships(db,g){return (await db.prepare("SELECT m.user_id,m.role,m.faction,m.initiative_rank,CASE WHEN m.role='passive' THEN 'Passive Opponent' ELSE u.display_name END AS display_name FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.game_id=? ORDER BY CASE WHEN m.role='host' THEN 0 ELSE 1 END,m.initiative_rank,m.user_id").bind(g).all()).results;}
 async function completedOrders(db,g){return (await db.prepare('SELECT player_id,payload_json,submitted_at FROM orders WHERE game_id=? AND turn=? AND phase_id=? ORDER BY submitted_at,player_id').bind(g.id,g.turn,g.phase_id).all()).results;}
 const readBody=async req=>{const b=await req.text();if(b.length>30000)throw Error('Request too large');return JSON.parse(b||'{}');};
 const originOk=req=>{const origin=req.headers.get('origin');return !origin||origin===new URL(req.url).origin;};
@@ -74,8 +74,19 @@ export default {async fetch(req,env){try{
  if(path==='/api/logout'&&req.method==='POST'){const token=req.headers.get('authorization').slice(7);await db.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await sha(token)).run();return json({ok:true});}
  if(path==='/api/me')return json(user);
  if(path==='/api/games'&&req.method==='GET'){const rows=await db.prepare('SELECT g.* FROM games g JOIN memberships m ON m.game_id=g.id WHERE m.user_id=? ORDER BY g.created_at DESC').bind(user.id).all();return json(rows.results);}
- if(path==='/api/games'&&req.method==='POST'){const b=await readBody(req),id=uuid(),title=String(b.title||'New battle').trim().slice(0,100),mapPreset=b.mapPreset??'standard',modelId=b.modelId??'attack-cruiser-rc2';if(!isMapPreset(mapPreset)||!isVorchanModelId(modelId))return fail('Invalid battlefield setup choice');await db.batch([db.prepare("INSERT INTO games(id,title,host_id,status,map_preset,model_id) VALUES(?,?,?,'setup',?,?)").bind(id,title,user.id,mapPreset,modelId),db.prepare('INSERT INTO memberships(game_id,user_id,role) VALUES(?,?,?)').bind(id,user.id,'host')]);return json({id},201);}
- if(path==='/api/invitations/redeem'&&req.method==='POST'){const b=await readBody(req);if(typeof b.token!=='string'||b.token.length>200)return fail('Invalid invitation');const key=await sha(b.token);const invite=await db.prepare("SELECT * FROM invitations WHERE token_hash=? AND used_by IS NULL AND expires_at>datetime('now')").bind(key).first();if(!invite)return fail('Invitation expired or already used',404);const invitedGame=await db.prepare('SELECT status FROM games WHERE id=?').bind(invite.game_id).first();if(invitedGame?.status!=='setup')return fail('This battle has already started',409);const result=await db.batch([db.prepare('UPDATE invitations SET used_by=? WHERE token_hash=? AND used_by IS NULL').bind(user.id,key),db.prepare('INSERT OR IGNORE INTO memberships(game_id,user_id) VALUES(?,?)').bind(invite.game_id,user.id)]);if(result[0].meta.changes!==1)return fail('Invitation already used',409);return json({gameId:invite.game_id});}
+ if(path==='/api/games'&&req.method==='POST'){
+  const b=await readBody(req),id=uuid(),title=String(b.title||'New battle').trim().slice(0,100),mapPreset=b.mapPreset??'standard',modelId=b.modelId??'attack-cruiser-rc2',mode=b.mode??'multiplayer';
+  if(!isMapPreset(mapPreset)||!isVorchanModelId(modelId)||!['multiplayer','solo-test'].includes(mode))return fail('Invalid battlefield setup choice');
+  const statements=[db.prepare("INSERT INTO games(id,title,host_id,status,map_preset,model_id,mode) VALUES(?,?,?,'setup',?,?,?)").bind(id,title,user.id,mapPreset,modelId,mode),db.prepare('INSERT INTO memberships(game_id,user_id,role) VALUES(?,?,?)').bind(id,user.id,'host')];
+  if(mode==='solo-test'){
+   const passiveId='passive:'+id;
+   // No password can authenticate this internal per-battle identity.
+   statements.push(db.prepare('INSERT INTO users(id,display_name,password_hash) VALUES(?,?,?)').bind(passiveId,'Passive Opponent ('+id+')','disabled:passive'));
+   statements.push(db.prepare('INSERT INTO memberships(game_id,user_id,role) VALUES(?,?,?)').bind(id,passiveId,'passive'));
+  }
+  await db.batch(statements);return json({id,mode},201);
+ }
+ if(path==='/api/invitations/redeem'&&req.method==='POST'){const b=await readBody(req);if(typeof b.token!=='string'||b.token.length>200)return fail('Invalid invitation');const key=await sha(b.token);const invite=await db.prepare("SELECT * FROM invitations WHERE token_hash=? AND used_by IS NULL AND expires_at>datetime('now')").bind(key).first();if(!invite)return fail('Invitation expired or already used',404);const invitedGame=await db.prepare('SELECT status,mode FROM games WHERE id=?').bind(invite.game_id).first();if(invitedGame?.mode==='solo-test')return fail('Solo tests do not accept other players',409);if(invitedGame?.status!=='setup')return fail('This battle has already started',409);const result=await db.batch([db.prepare('UPDATE invitations SET used_by=? WHERE token_hash=? AND used_by IS NULL').bind(user.id,key),db.prepare('INSERT OR IGNORE INTO memberships(game_id,user_id) VALUES(?,?)').bind(invite.game_id,user.id)]);if(result[0].meta.changes!==1)return fail('Invitation already used',409);return json({gameId:invite.game_id});}
  const match=path.match(/^\/api\/games\/([^/]+)(?:\/([a-z-]+))?$/);if(!match)return fail('Not found',404);
  const [,gameId,route]=match;
  if(!route&&req.method==='DELETE'){
@@ -92,6 +103,7 @@ export default {async fetch(req,env){try{
    db.prepare('DELETE FROM invitations WHERE game_id=?').bind(gameId),
    db.prepare('DELETE FROM memberships WHERE game_id=?').bind(gameId),
    db.prepare('DELETE FROM games WHERE id=? AND host_id=?').bind(gameId,user.id),
+   db.prepare("DELETE FROM users WHERE id=? AND password_hash='disabled:passive'").bind('passive:'+gameId),
   ]);
   return json({deleted:true});
  }
@@ -140,7 +152,7 @@ export default {async fetch(req,env){try{
   if(result.some(x=>x.meta.changes!==1))return fail('Concurrent trial setup; reload',409);
   return json({created:true,shipIds:ids,libraryId:VORCHAN_LIBRARY_RECORD.id,automaticCombatReady:true},201);
  }
- if(route==='invite'&&req.method==='POST'){if(game.status!=='setup')return fail('Invitations are closed after battle start',409);if(user.id!==game.host_id)return fail('Host only',403);const token=hex(bytes(24));await db.prepare("INSERT INTO invitations(token_hash,game_id,created_by,expires_at) VALUES(?,?,?,datetime('now','+7 days'))").bind(await sha(token),gameId,user.id).run();return json({token,expiresInDays:7});}
+ if(route==='invite'&&req.method==='POST'){if(game.mode==='solo-test')return fail('Solo tests do not need invitations',409);if(game.status!=='setup')return fail('Invitations are closed after battle start',409);if(user.id!==game.host_id)return fail('Host only',403);const token=hex(bytes(24));await db.prepare("INSERT INTO invitations(token_hash,game_id,created_by,expires_at) VALUES(?,?,?,datetime('now','+7 days'))").bind(await sha(token),gameId,user.id).run();return json({token,expiresInDays:7});}
  if(route==='ship-image'&&req.method==='PUT'){
   if(!env.SHIP_IMAGES)return fail('Image storage unavailable',503);
   const shipId=url.searchParams.get('shipId');
