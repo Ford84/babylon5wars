@@ -1,4 +1,4 @@
-import {hullProfile,hullSystems} from './vorchar.mjs';
+import {hullProfile,hullSystems,hullThrusters,hullWeapon} from './vorchar.mjs';
 import {VORCHAN_SCS_IDENTIFICATION as SCS,VORCHAN_THRUSTER_RATINGS} from './vorchan-scs-identification.mjs';
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
 import {initialVorchanDamage,vorchanPostTurnStructureLoss} from './vorchan-damage.mjs';
@@ -14,7 +14,7 @@ export function systemPowerForHull(id){
   return power?[[system.id,power]]:[];
  }));
 }
-export const labelSystem=id=>(id==='twin_nose_centre'?'Twin Array · Mount 1 (Nose)':SYSTEMS.get(id)?.displayName)||id.replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase());
+export const labelSystem=id=>({plasma_stream:'Plasma Stream · Mount 1',matter_port:'Matter Cannon · Mount 2 (Port)',matter_starboard:'Matter Cannon · Mount 3 (Starboard)',twin_port:'Twin Array · Mount 4 (Port)',twin_starboard:'Twin Array · Mount 5 (Starboard)',guardian:'Guardian Array · Mount 6',twin_nose_centre:'Twin Array · Mount 1 (Nose)'}[id]||SYSTEMS.get(id)?.displayName)||id.replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase());
 export function newCondition(libraryId){return {damage:initialVorchanDamage(libraryId),effects:{weapons:{},thrusters:{},engineLoss:0,sensorLoss:0,reactorLoss:0,initiativeLoss:0,fireControlLoss:0,offensiveLimited:false,hangarSlow:0,hangarCollapse:0},lastCriticalTurn:0};}
 export function effectiveCondition(trial,turn){
  const c=trial.condition||newCondition(trial.libraryId),e=c.effects,d=c.damage;
@@ -30,9 +30,9 @@ export function effectiveCondition(trial,turn){
  engineShort,
  sensorStrength:dead('sensors')||commandDisabled||powerOff||trial.powerAllocation?.turn===turn&&trial.powerAllocation.deactivated?.includes('sensors')?0:Math.max(0,(hullProfile(trial.libraryId)||LIB).sensorStrength-e.sensorLoss),
  reactorLoss:e.reactorLoss,initiativeModifier:-e.initiativeLoss-(e.majorInitiativeTurn===turn?2:0),
- fireModifier:-e.fireControlLoss-(trial.movement?.state?.rollInProgress?3:0)-(trial.movement?.state?.pivotTurn===turn?3:0),
+ fireModifier:-e.fireControlLoss-(trial.movement?.state?.rollInProgress||trial.movement?.state?.agileRollTurn===turn?3:0)-(trial.movement?.state?.pivotTurn===turn?3:0),
  offensiveLimited:e.offensiveLimited,ewLock:e.ewLock?.turn===turn?e.ewLock:null,
- thrusterRatings:Object.fromEntries(Object.entries(VORCHAN_THRUSTER_RATINGS).map(([id,r])=>[id,dead(id)?0:effectiveThrusterRating(r,e.thrusters[id])])),
+ thrusterRatings:Object.fromEntries(Object.entries(hullThrusters(trial.libraryId)).map(([id,r])=>[id,dead(id)?0:effectiveThrusterRating(r,e.thrusters[id])])),
  hangarCapacity:dead('hangar')?0:Math.max(0,systems.find(system=>system.id==='hangar').boxes-(d.tracks.hangar?.marked||0)),weapons:e.weapons};
 }
 // Compatibility projection is derived exclusively from the canonical condition.
@@ -41,7 +41,7 @@ export function projectTrial(trial,turn){
  const n=structuredClone(trial),c=effectiveCondition(n,turn);
  n.destroyedSystems=c.destroyedSystems;
  n.systemDamage=Object.fromEntries(Object.entries(n.condition.damage.tracks).filter(([,v])=>v.marked).map(([id,v])=>[id,v.marked]));
- n.thrusterDamageBoxes=Object.fromEntries(Object.keys(VORCHAN_THRUSTER_RATINGS).map(id=>[id,n.condition.damage.tracks[id].marked]));
+ n.thrusterDamageBoxes=Object.fromEntries(Object.keys(hullThrusters(trial.libraryId)).map(id=>[id,n.condition.damage.tracks[id].marked]));
  n.thrusterCriticalEffects=n.condition.effects.thrusters;
  n.verifiedEngineThrustLoss=10-c.freeThrust;n.verifiedReactorPowerLoss=c.reactorLoss;n.criticalDamageAdjudicated=true;
  return n;
@@ -64,15 +64,15 @@ export function resolveShipCritical(trial,turn,check,roll,secondaryRoll=null){
    const total=m+(overthrust?.excess||0),outlet=total>=15&&total<=19||total>=25,efficiency=total>=20;
    const previous=e.thrusters[id]||{};
    e.thrusters[id]={outletFailures:(previous.outletFailures||0)+(outlet?1:0),efficiencyLosses:(previous.efficiencyLosses||0)+(efficiency?1:0)};
-   if(effectiveThrusterRating(VORCHAN_THRUSTER_RATINGS[id],e.thrusters[id])===0)c.damage.tracks[id].marked=sys.boxes;
+   if(effectiveThrusterRating(hullThrusters(trial.libraryId)[id],e.thrusters[id])===0)c.damage.tracks[id].marked=sys.boxes;
    entry.modifier+=overthrust?.excess||0;entry.total=total;entry.effects=[...(outlet?['Outlet Failure']:[]),...(efficiency?['Reduced Efficiency']:[])];
   }else if(sys.kind==='weapon'){
    const crit=weaponCritical({systemId:id,roll,marked,libraryId:trial.libraryId});
    const w=e.weapons[id]||{rangeLoss:0,damageLoss:0};
-   if(!(id.startsWith('twin_nose_')&&m>=20)&&crit.effects.includes('range_penalty_worsened'))w.rangeLoss++;
-   if(!(id.startsWith('twin_nose_')&&m>=20)&&crit.effects.includes('damage_minus_2_per_die_minimum_1'))w.damageLoss+=2;
+   if(!(hullWeapon(trial.libraryId,id)?.id==='twin-array'&&m>=20)&&crit.effects.includes('range_penalty_worsened'))w.rangeLoss++;
+   if(!(hullWeapon(trial.libraryId,id)?.id==='twin-array'&&m>=20)&&crit.effects.includes('damage_minus_2_per_die_minimum_1'))w.damageLoss+=2;
    e.weapons[id]=w;entry.effects=crit.effects;
-   if(id.startsWith('twin_nose_')&&m>=20){const lost=w.destroyedGuns||[];const gun=lost.includes(2)?1:2;w.destroyedGuns=[...lost,gun];entry.effects=['Gun '+gun+' Destroyed'];if(w.destroyedGuns.length>=2){c.damage.tracks[id].marked=sys.boxes;entry.effects.push('Twin Array Destroyed');}}
+   if(hullWeapon(trial.libraryId,id)?.id==='twin-array'&&m>=20){const lost=w.destroyedGuns||[];const gun=lost.includes(2)?1:2;w.destroyedGuns=[...lost,gun];entry.effects=['Gun '+gun+' Destroyed'];if(w.destroyedGuns.length>=2){c.damage.tracks[id].marked=sys.boxes;entry.effects.push('Twin Array Destroyed');}}
    if(crit.requiresRuleClarification)entry.clarification='Printed weapon chart omits 13. This scenario treats 13 as no additional effect.';
   }else if(sys.kind==='engine'){
    if(m>=15&&m<=20||m>=28){e.engineLoss+=2;entry.effects.push('Free Thrust Reduced By 2');}

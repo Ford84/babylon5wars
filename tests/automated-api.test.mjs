@@ -276,3 +276,19 @@ test('Vorchar fleet and ELINT disruption persist through authenticated API reloa
  assert.equal((await send('p1',command,rev)).status,409);const after=await get('p2');assert.deepEqual(after.elintContext.disruptions[0].removed,{[a.id]:1});
  const event=sqlite.prepare("SELECT public_json FROM events WHERE game_id=? AND event_type='elint_disruption_selected'").get(gameId);assert.equal(JSON.parse(event.public_json).scoutId,scout.id);
 });
+test('Mograth fleet starts through API with one shuttle, no jump prompts and persisted guided plasma sub-volleys',async()=>{
+ const {get,send,call,gameId,sqlite}=await fixture({start:false,autoReview:false,autoOperations:false});let d=await get();
+ const entries=[{ownerId:'p1',catalogId:'centauri-mograth-v2-2e-sf',q:4,r:10,facing:0,speed:0},{ownerId:'p2',catalogId:'centauri-vorchan-v3-2e-sf',q:7,r:7,facing:3,speed:0}];
+ const setup=await call('/games/'+gameId+'/fleet-setup','p1','POST',{expectedRevision:d.game.revision,entries,deploymentMode:'free'});assert.equal(setup.status,201);assert.equal(setup.body.fleets.find(x=>x.ownerId==='p1')?.points??setup.body.fleets[0].points,450);
+ d=await get();assert.equal((await call('/games/'+gameId+'/start','p1','POST',{expectedRevision:d.game.revision})).status,200);d=await get();const m=d.ships.find(x=>x.owner_id==='p1'),v=d.ships.find(x=>x.owner_id==='p2');
+ assert.equal(d.shuttles.filter(x=>x.carrierId===m.id).length,1);assert.equal(d.jumpStatus[m.id].ready,false);
+ assert.equal((await send('p1',{type:'power',deactivated:['matter_port','matter_starboard','guardian'],extraEW:1})).status,200);await send('p2',{type:'power'});for(const p of ['p1','p2'])await send(p,{type:'initiative'});
+ await send('p1',{type:'ew',offensive:{[v.id]:9}});await send('p2',{type:'ew'});d=await get();assert.equal(d.game.phase_id,'jump_formation');assert.deepEqual(d.required,['p2']);await send('p2',{type:'jump',open:false});
+ while((d=await get()).game.phase_id==='movement')await send(d.required[0],{type:'movement-done'});
+ await send('p1',{type:'fire',fire:{shots:[{shipId:m.id,targetId:v.id,mountId:'plasma_stream',gun:1,role:'offensive',order:1}]}});await send('p2',{type:'fire',fire:{shots:[]}});
+ d=await get();assert.equal(d.resolution.stage,'attack_roll');await send('p1',{type:'combat-roll',stage:'attack_roll',attackId:d.resolution.attack.id});d=await get();assert.equal(d.resolution.attack.hit,true);await send('p1',{type:'combat-ok',stage:'attack_result',attackId:d.resolution.attack.id});d=await get();assert.equal(d.resolution.stage,'damage_roll');
+ await send('p1',{type:'combat-roll',stage:'damage_roll',attackId:d.resolution.attack.id});d=await get();assert.equal(d.resolution.dice.damageDice.length,3);const revision=d.game.revision,dice=structuredClone(d.resolution.dice.damageDice);
+ assert.equal((await send('p1',{type:'combat-roll',stage:'damage_roll',attackId:d.resolution.attack.id},revision-1)).status,409);assert.deepEqual((await get()).resolution.dice.damageDice,dice);
+ for(let i=0;(d=await get()).resolution&&i<150;i++){const r=d.resolution;const response=await send(r.actorId,{type:r.stage.endsWith('_roll')?'combat-roll':r.stage.endsWith('_result')?'combat-ok':'combat-choice',stage:r.stage,attackId:r.attack.id,...(r.candidates.length?{value:r.candidates[0]}:{})});assert.equal(response.status,200,JSON.stringify(response));}
+ const stored=JSON.parse(sqlite.prepare('SELECT state_json FROM battle_states WHERE game_id=?').get(gameId).state_json);assert.ok(stored.dice[0].subVolleys.length>=1);assert.equal(stored.dice[0].subVolleys.length,Math.ceil(Math.max(0,dice.reduce((a,b)=>a+b,1))/5));assert.equal(stored.ships.find(x=>x.id===m.id).private_state.trial.weaponReadiness.plasma_stream[1].lastFiredTurn,1);
+});

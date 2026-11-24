@@ -6,7 +6,7 @@ export function attackCalculation(attack){
  let total=b.baseDefence;
  const steps=[`Defence (${total})`];
  const add=(label,value)=>{total+=value;steps.push(`${label} (${total})`);};
- const rangeLabel=Number.isFinite(b.rangePerHex)?`${signed(b.rangePerHex)} Per Hex × ${b.distance}${b.lockedOn===false?' · No Lock-On':''}`:`Range ${signed(b.rangePenalty)}`;
+ const rangeLabel=b.rangeStepHexes>1?`${signed(b.rangeStepPenalty)} Per ${b.rangeStepHexes} Hexes × ${Math.ceil(b.distance/b.rangeStepHexes)}${b.lockedOn===false?' · No Lock-On':''}`:Number.isFinite(b.rangePerHex)?`${signed(b.rangePerHex)} Per Hex × ${b.distance}${b.lockedOn===false?' · No Lock-On':''}`:`Range ${signed(b.rangePenalty)}`;
  add(rangeLabel,b.rangePenalty);
  add(`OEW ${signed(b.offensiveEW)}${b.disruptedEW?` · ${b.disruptedEW} Disrupted`:``}`,b.offensiveEW);
  if(b.elintOffensive)add(`ELINT OEW ${signed(b.elintOffensive)}`,b.elintOffensive);

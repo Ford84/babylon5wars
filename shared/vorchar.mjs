@@ -1,3 +1,4 @@
+import {MOGRATH} from './mograth.mjs';
 import {VORCHAN_LIBRARY_RECORD as base} from './vorchan-trial-library.mjs';
 import {VORCHAN_SCS_IDENTIFICATION} from './vorchan-scs-identification.mjs';
 import {VORCHAR_VECTOR_TRACKS} from './vorchar-vector-tracks.mjs';
@@ -33,6 +34,7 @@ export const VORCHAR = {
 
 const vorchan = {...base,scs:VORCHAN_SCS_IDENTIFICATION};
 export function hullProfile(id){
+ if(id===MOGRATH.id)return MOGRATH;
  if(id===VORCHAR_ID)return VORCHAR;
  if(id===base.id)return vorchan;
  return null;
@@ -52,3 +54,6 @@ export function auditVorcharIdentification(){
  if(seen.size!==281)issues.push('Original sheet has 281 damage squares');
  return {systems:scs.systems.length,damageBoxes:seen.size,issues,shipDataVerified:!issues.length,readyForCombat:!issues.length};
 }
+
+export const hullThrusters=id=>Object.fromEntries(hullSystems(id).filter(s=>s.kind==='thruster').map(s=>[s.id,s.iconValue]));
+export const hullWeapon=(libraryId,mountId)=>{const h=hullProfile(libraryId)||vorchan,m=h.weaponMounts.find(x=>x.id===mountId);return h.weapons.find(w=>w.id===m?.weaponId);};
