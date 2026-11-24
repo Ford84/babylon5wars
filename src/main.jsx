@@ -83,7 +83,7 @@ function App(){
     <div className="ship-status-grid">{ships.map(s=><button className="secondary" key={s.id} onClick={()=>{setSelected(s.id);setSCS(true);}}><strong>{s.label}</strong><span>{s.public_state.condition.shipDestroyed?'Destroyed':s.withdrawn?'Withdrawn':'Speed '+s.speed+' · '+(s.public_state.condition.commandDisabled?'Command Disabled':'Hex '+s.q+', '+s.r)}</span><span>Open Live SCS</span></button>)}</div>
    </section><aside>
     <BattleActions key={gameId+':'+detail.game.turn+':'+detail.game.phase_id} detail={detail} userId={user?.id} send={send} busy={busy}/>
-    <ShotResults event={latest} replay={replay}/>
+    {!detail.resolution&&<ShotResults event={latest} replay={replay}/>}
     <BattleJournal events={events} ships={ships} members={detail.members}/>
    </aside></div>
    {scs&&current&&<ShipSystems ship={current} onClose={()=>setSCS(false)}/>}

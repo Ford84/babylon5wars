@@ -41,3 +41,5 @@ export function movementOptions(ship,turn,mapPreset='standard'){
  add('Start Roll',{type:'roll-start'},1,[Object.keys(e.thrusterRatings)]);add('Halt Roll',{type:'roll-halt'},1,[Object.keys(e.thrusterRatings)]);
  return templates;
 }
+
+export const movementOptionGroup=option=>['advance','speed'].includes(option.choices[0]?.action.type)?'movement':'manoeuvre';

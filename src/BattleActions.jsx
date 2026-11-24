@@ -2,7 +2,8 @@ import React,{useState} from 'react';
 import {SYSTEM_POWER,effectiveCondition,labelSystem} from '../shared/ship-condition.mjs';
 import {extraEWCost} from '../shared/preturn.mjs';
 import {commitMovement} from '../shared/movement-commit.mjs';
-import {movementOptions} from '../shared/movement-options.mjs';
+import GuidedCombat from './GuidedCombat.jsx';
+import {movementOptions,movementOptionGroup} from '../shared/movement-options.mjs';
 import {VORCHAN_LIBRARY_RECORD as LIB} from '../shared/vorchan-trial-library.mjs';
 import {weaponReadiness} from '../shared/weapon-readiness.mjs';
 import {vorchanTargetingPreview,facingDirections,checkMountArc} from '../shared/weapon-targeting.mjs';
@@ -12,6 +13,7 @@ export default function BattleActions({detail,userId,send,busy}){
  const ship=detail.ships.find(x=>x.owner_id===userId),t=ship?.private_state?.trial;
  if(!t||!detail.automated||detail.game.status!=='active')return null;
  const phase=detail.game.phase_id,turn=detail.game.turn;
+ if(phase==='fire_resolution'&&detail.resolution)return <GuidedCombat detail={detail} userId={userId} send={send} busy={busy}/>;
  if(!detail.needsAction)return <section className="panel"><h2>{detail.locked?'Orders Locked':'Waiting For Opponent'}</h2><p>{detail.locked?'Your choices are saved. The next step opens when both players are ready.':'The other player has the next required action.'}</p></section>;
  const props={ship,detail,send,busy,turn,t};
  return <section className="panel battle-actions" id="battle-actions"><h2>{detail.phase.label}</h2>
@@ -48,19 +50,22 @@ function EW({t,turn,detail,send,busy}){
  </>;
 }
 function Movement({t,ship,turn,detail,send,busy}){
- const options=movementOptions(ship,turn,detail.game.map_preset),[selected,setSelected]=useState(''),[choice,setChoice]=useState(0),[travel,setTravel]=useState(1);
+ const [category,setCategory]=useState('movement');
+ const options=movementOptions(ship,turn,detail.game.map_preset).filter(o=>movementOptionGroup(o)===category),[selected,setSelected]=useState(''),[choice,setChoice]=useState(0),[travel,setTravel]=useState(1);
  const current=options.find(x=>x.name===selected)||options[0],pick=current?.choices[Math.min(choice,current.choices.length-1)],e=effectiveCondition(t,turn),spent=t.movement.engineThrustSpent||0;
  const canTravel=pick&&!['advance','slide','extended-cancel'].includes(pick.action.type),advanceAfter=canTravel?Math.min(travel,pick.remaining):0;
  let destination=pick?.position;try{if(advanceAfter)destination=commitMovement({ship,turn,action:pick.action,advanceAfter,mapPreset:detail.game.map_preset}).nextShip;}catch{}
  return <><p>Speed <strong>{ship.speed}</strong> · {t.movement.state.remaining} Hexes Remaining · Thrust <strong>{spent}/{e.freeThrust+t.powerAllocation.purchasedThrust}</strong> · Turn Delay {t.movement.state.turnDelayRemaining}</p>
+  <p>Speed Sets This Turn’s Total Travel. Normal Movement Uses Remaining Hexes; Extra Thrust Is For Manoeuvres.</p>
   {e.commandDisabled&&<p>Command Systems Disabled: Inertial Movement Only</p>}
-  {current?<><label>Legal Manoeuvre<select value={current.name} onChange={e=>{setSelected(e.target.value);setChoice(0);}}>{options.map(o=><option key={o.name} value={o.name}>{o.name}</option>)}</select></label>
+  <label>Movement Type<select value={category} onChange={e=>{setCategory(e.target.value);setSelected('');setChoice(0);}}><option value="movement">Movement</option><option value="manoeuvre">Manoeuvre</option></select></label>
+  {current?<><label>{category==='movement'?'Movement Action':'Legal Manoeuvre'}<select value={current.name} onChange={e=>{setSelected(e.target.value);setChoice(0);}}>{options.map(o=><option key={o.name} value={o.name}>{o.name}</option>)}</select></label>
    {current.choices.length>1&&<label>Thruster Distribution<select value={Math.min(choice,current.choices.length-1)} onChange={e=>setChoice(Number(e.target.value))}>{current.choices.map((c,i)=><option key={i} value={i}>{Object.entries(c.action.thrusters||{}).map(([id,n])=>labelSystem(id)+' '+n).join(', ')}{c.overthrust.length?' · Overthrust Risk':''}</option>)}</select></label>}
-   {canTravel&&pick.remaining>0&&<Amount label="Move Automatically After Manoeuvre · Hexes" value={advanceAfter} max={pick.remaining} onChange={setTravel}/>}
+   {canTravel&&pick.remaining>0&&<Amount label="Travel After This Action · Hexes" value={advanceAfter} max={pick.remaining} onChange={setTravel}/>}
    <p>{pick.cost} Engine Thrust · Destination ({destination.q}, {destination.r}) · Speed {destination.speed}</p>
    {!!pick.overthrust.length&&<p className="error">End-Of-Turn Critical Checks: {pick.overthrust.map(x=>labelSystem(x.id)+' +'+x.excess+' Overthrust').join(', ')}</p>}
-   <button disabled={busy} onClick={()=>send({type:'move',action:pick.action,advanceAfter})}>Commit Thrust And Move</button>
-  </>:<p>No powered manoeuvre is currently available.</p>}
+   <button disabled={busy} onClick={()=>send({type:'move',action:pick.action,advanceAfter})}>{pick.action.type==='advance'?'Move Selected Segment':'Commit Thrust And Move'}</button>
+  </>:<p>{category==='movement'?`No normal movement remains at speed ${ship.speed}. Choose Manoeuvre to use remaining thrust, or finish movement.`:'No legal manoeuvre is currently available.'}</p>}
   <button disabled={busy||t.movement.state.remaining!==0} className="secondary" onClick={()=>send({type:'movement-done'})}>Finish Movement</button>
  </>;
 }
@@ -75,7 +80,7 @@ function Weapons({ship,t,turn,detail,send,busy}){
    const w=LIB.weapons.find(x=>x.id===m.weaponId),weaponEffect=e.weapons[m.id]||{};
    let preview;try{preview=vorchanTargetingPreview({shooter:{...ship,libraryId:LIB.id,hullClass:LIB.class},target:{...target,libraryId:LIB.id,hullClass:LIB.class},mountId:m.id,rangePenaltyAdjustment:weaponEffect.rangeLoss||0,attackerOffensiveEW:t.ewAllocation?.offensive?.[target?.id]||0,targetDefensiveEW:target?.public_state.ew?.defensive||0,otherModifiers:e.fireModifier?[{value:e.fireModifier,reason:'Condition',verified:true}]:[]});}catch{}
    const arc=target&&checkMountArc({shooter:ship,target,arc:m.arc}).allowed;
-   return <article className="weapon-datacard" key={m.id}><h3>{w.name} · Mount {m.mountNumber}</h3>
+   return <article className="weapon-datacard" key={m.id}><h3>{w.name} · Mount {m.mountNumber}</h3>{m.weaponId==='twin-array'&&<p>Two Independent Guns · Separate Attack And Location Rolls</p>}
     <p>{preview?.distance??'—'} Hexes · {m.arc.coverageDegrees}° Arc · {arc?'Target In Arc':'Target Outside Arc'}{preview?.readyForHitRoll?' · Hit On '+preview.hitOnD20AtOrBelow+' Or Less':''}</p>
     <p>Standard Damage · One Hit Location{w.class==='Plasma'?' · Half Armour':''}</p>
     <p>{m.weaponId==='plasma-accelerator'&&chosen?w.firingOptions.find(o=>o.turns===chosen).damageDice.count+'d10 + '+w.firingOptions.find(o=>o.turns===chosen).damageDice.bonus+' − Range':w.damage}{weaponEffect.damageLoss?' · −'+weaponEffect.damageLoss+' Per Die (Minimum 1)':''}</p>

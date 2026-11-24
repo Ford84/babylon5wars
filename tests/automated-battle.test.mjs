@@ -4,7 +4,7 @@ import {weaponReadiness} from '../shared/weapon-readiness.mjs';
 import {newVorchanTrialState} from '../shared/vorchan-trial-library.mjs';
 import {newCondition,effectiveCondition,finishShipTurn,projectTrial} from '../shared/ship-condition.mjs';
 const players=[{user_id:'p1'},{user_id:'p2'}];
-function fresh(){return createBattle([{id:'a',owner_id:'p1',label:'Alpha',q:3,r:10,facing:0},{id:'b',owner_id:'p2',label:'Beta',q:6,r:7,facing:3}].map(x=>({...x,private_state:{trial:newVorchanTrialState(x.id,x.owner_id,x.q,x.r,x.facing)}})),players);}
+function fresh(){return createBattle([{id:'a',owner_id:'p1',label:'Alpha',q:3,r:10,facing:0},{id:'b',owner_id:'p2',label:'Beta',q:6,r:7,facing:3}].map(x=>({...x,private_state:{trial:newVorchanTrialState(x.id,x.owner_id,x.q,x.r,x.facing)}})),players,'standard',{combatFlow:'automatic'});}
 const command=(s,p,c,die=()=>5)=>executeBattle(s,p,c,die);
 function readyForFire(die=()=>5){let s=fresh();for(const p of ['p1','p2'])s=command(s,p,{type:'power'});for(const p of ['p1','p2'])s=command(s,p,{type:'initiative'},die);for(const p of ['p1','p2'])s=command(s,p,{type:'ew',defensive:0,offensive:{[p==='p1'?'b':'a']:8}});for(const p of s.moveOrder)s=command(s,p,{type:'movement-done'});return s;}
 // A distinct pair of dice is essential for the opposing tie; deterministic RNG never silently sorts IDs.
@@ -190,7 +190,7 @@ test('an extended-turn thrust commitment also executes its legal first travel se
 });
 
 test('passive test opponent automatically makes a deterministic eligible damage choice',()=>{
- let s=createBattle([{id:'a',owner_id:'p1',label:'Alpha',q:3,r:10,facing:0},{id:'b',owner_id:'bot',label:'Passive',q:6,r:7,facing:3}].map(x=>({...x,private_state:{trial:newVorchanTrialState(x.id,x.owner_id,x.q,x.r,x.facing)}})),[{user_id:'p1',role:'host'},{user_id:'bot',role:'passive'}],'standard',{passivePlayerId:'bot'});
+ let s=createBattle([{id:'a',owner_id:'p1',label:'Alpha',q:3,r:10,facing:0},{id:'b',owner_id:'bot',label:'Passive',q:6,r:7,facing:3}].map(x=>({...x,private_state:{trial:newVorchanTrialState(x.id,x.owner_id,x.q,x.r,x.facing)}})),[{user_id:'p1',role:'host'},{user_id:'bot',role:'passive'}],'standard',{passivePlayerId:'bot',combatFlow:'automatic'});
  assert.equal(s.locks.bot,true);assert.throws(()=>command(s,'bot',{type:'power'}),/controlled/);
  s=command(s,'p1',{type:'power'});s=command(s,'p1',{type:'initiative'},sequence([2,1,20]));s=command(s,'p1',{type:'ew',offensive:{b:8}});
  if(s.phase==='movement')s=command(s,'p1',{type:'movement-done'});
@@ -201,7 +201,7 @@ test('passive test opponent automatically makes a deterministic eligible damage 
 });
 
 test('passive opponent also chooses boundary aspects before the server rolls attacks',()=>{
- let s=createBattle([{id:'a',owner_id:'p1',label:'Alpha',q:3,r:10,facing:1},{id:'b',owner_id:'bot',label:'Passive',q:6,r:13,facing:2}].map(x=>({...x,private_state:{trial:newVorchanTrialState(x.id,x.owner_id,x.q,x.r,x.facing)}})),[{user_id:'p1',role:'host'},{user_id:'bot',role:'passive'}],'standard',{passivePlayerId:'bot'});
+ let s=createBattle([{id:'a',owner_id:'p1',label:'Alpha',q:3,r:10,facing:1},{id:'b',owner_id:'bot',label:'Passive',q:6,r:13,facing:2}].map(x=>({...x,private_state:{trial:newVorchanTrialState(x.id,x.owner_id,x.q,x.r,x.facing)}})),[{user_id:'p1',role:'host'},{user_id:'bot',role:'passive'}],'standard',{passivePlayerId:'bot',combatFlow:'automatic'});
  s=command(s,'p1',{type:'power'});s=command(s,'p1',{type:'initiative'},()=>1);s=command(s,'p1',{type:'ew',offensive:{b:8}});s=command(s,'p1',{type:'movement-done'});
  s=command(s,'p1',{type:'fire',fire:{shots:[{shipId:'a',targetId:'b',mountId:'plasma_forward',gun:1,chargeTurns:3,role:'offensive',order:1}]}},sequence([1,10,1,3,3,3,3]));
  assert.equal(s.turn,2);assert.equal(s.phase,'power');assert.ok(s.journal.some(e=>e.type==='passive_action_completed'&&e.action==='defence'));

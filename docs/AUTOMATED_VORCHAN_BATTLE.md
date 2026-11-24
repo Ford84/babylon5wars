@@ -2,6 +2,8 @@
 
 Implemented 24 November 2026. This replaces the former manual trial workflow for newly created battles.
 
+See [Guided Combat And SCS](GUIDED_COMBAT_AND_SCS.md) for the current roll/result/OK flow, font correction and movement categories.
+
 See [Combat Flow Audit — 24 November 2026](COMBAT_FLOW_AUDIT_2026_11_24.md) for subsequent corrections, automatic movement segments and weapon animation.
 
 ## Connected condition and rules
@@ -22,7 +24,7 @@ EW and weapon commitments are hidden from the opponent until reveal. Commands re
 
 ## Simplified presentation
 
-The current-action panel shows tracked choices and their costs. The phase strip, map, concise ship status and battle log show the resulting state. The live SCS uses its original colours and crosses individual boxes directly from the saved damage tracks; weapon mounts and the component register remain available on demand. Starting hexes are chosen on the minimap, with facing selected alongside them.
+The current-action panel shows tracked choices and their costs. The phase strip, map, concise ship status and battle log show the resulting state. The live SCS uses its original colours and crosses individual boxes directly from the saved damage tracks; weapon mounts remain on the ship display and the component register remains available on demand. Starting hexes are chosen on the minimap, with facing selected alongside them.
 
 ## Explicit scenario limits
 

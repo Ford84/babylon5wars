@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readdirSync,readFileSync} from 'node:fs';
 import worker from '../worker/index.mjs';
-async function fixture({solo=false,start=true}={}){
+async function fixture({solo=false,start=true,autoReview=true}={}){
  const sqlite=new DatabaseSync(':memory:');
  for(const file of readdirSync(new URL('../migrations/',import.meta.url)).sort())sqlite.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
  const adapt=sql=>{
@@ -43,7 +43,15 @@ async function fixture({solo=false,start=true}={}){
  detail=(await call('/games/'+gameId)).body;
  if(start){const started=await call('/games/'+gameId+'/start','p1','POST',{expectedRevision:detail.game.revision});assert.equal(started.status,200,JSON.stringify(started));}
  async function get(who='p1'){return (await call('/games/'+gameId,who)).body;}
- async function send(who,command,expected){const d=await get(who);return call('/games/'+gameId+'/battle-command',who,'POST',{expectedRevision:expected??d.game.revision,command});}
+ async function send(who,command,expected){
+  const d=await get(who),result=await call('/games/'+gameId+'/battle-command',who,'POST',{expectedRevision:expected??d.game.revision,command});
+  if(result.status===200&&autoReview)for(let i=0;i<100;i++){
+   const now=await get(),r=now.resolution;if(!r)break;
+   const c={type:r.stage.endsWith('_roll')?'combat-roll':r.stage.endsWith('_result')?'combat-ok':'combat-choice',stage:r.stage,attackId:r.attack.id,...(r.candidates?.length?{value:r.candidates[0]}:{})};
+   const response=await call('/games/'+gameId+'/battle-command',r.actorId,'POST',{expectedRevision:now.game.revision,command:c});assert.equal(response.status,200,JSON.stringify(response));
+  }
+  return result;
+ }
  return {sqlite,call,get,send,gameId};
 }
 test('authenticated staging through two turns: no manual acknowledgements, no terrain entry, persistent server dice and private EW',async()=>{
@@ -186,4 +194,27 @@ test('solo setup adds exactly one internal opponent, blocks invitations and reje
  const bot=d.members[1].user_id;assert.equal((await call('/games/'+gameId,bot)).status,401);
  assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM sessions WHERE user_id=?').get(bot).n,0);
  sqlite.close();
+});
+
+test('guided API preserves prompts through reload and rejects repeat rolls and the wrong player',async()=>{
+ const {get,send,call,gameId,sqlite}=await fixture({autoReview:false});
+ for(const p of ['p1','p2'])assert.equal((await send(p,{type:'power'})).status,200);
+ for(const p of ['p1','p2'])assert.equal((await send(p,{type:'initiative'})).status,200);
+ const ships=(await get()).ships,a=ships.find(s=>s.owner_id==='p1'),b=ships.find(s=>s.owner_id==='p2');
+ assert.equal((await send('p1',{type:'ew',offensive:{[b.id]:8}})).status,200);assert.equal((await send('p2',{type:'ew'})).status,200);
+ for(let i=0;i<2;i++){const d=await get();assert.equal((await send(d.required[0],{type:'movement-done'})).status,200);}
+ assert.equal((await send('p1',{type:'fire',fire:{shots:[{shipId:a.id,targetId:b.id,mountId:'plasma_forward',gun:1,chargeTurns:3,role:'offensive',order:1}]}})).status,200);assert.equal((await send('p2',{type:'fire',fire:{shots:[]}})).status,200);
+ let d=await get(),r=d.resolution;assert.equal(r.stage,'attack_roll');assert.equal(r.dice.roll,undefined);
+ const cmd={type:'combat-roll',stage:r.stage,attackId:r.attack.id};
+ assert.equal((await send('p2',cmd)).status,400);
+ assert.equal((await send('p1',cmd,d.game.revision)).status,200);
+ const rolled=(await get()).resolution;assert.equal(rolled.stage,'attack_result');assert.ok(rolled.attack.hit);
+ assert.equal((await send('p1',cmd,d.game.revision)).status,409);assert.deepEqual((await get()).resolution,rolled);
+ for(let i=0;i<30;i++){
+  d=await get();r=d.resolution;if(!r)break;
+  if(r.stage.endsWith('_roll'))assert.equal(r.actorId,'p1');else if(r.stage.endsWith('_choice'))assert.equal(r.actorId,'p2');
+  const c={type:r.stage.endsWith('_roll')?'combat-roll':r.stage.endsWith('_result')?'combat-ok':'combat-choice',stage:r.stage,attackId:r.attack.id,...(r.candidates.length?{value:r.candidates[0]}:{})};
+  assert.equal((await send(r.actorId,c)).status,200);
+ }
+ d=await get();assert.equal(d.resolution,null);assert.ok(d.game.turn===2||d.game.status==='finished');sqlite.close();
 });
