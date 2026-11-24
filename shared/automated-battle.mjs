@@ -127,8 +127,8 @@ function resolveTier(s,die){
   record(s,'weapons_fired',{attacks:fire.results.map(attack=>{
    const source=ships.find(x=>x.id===attack.shipId),target=ships.find(x=>x.id===attack.targetId),dice=s.dice.find(r=>r.attackId===attack.id);
    const range=Math.max(Math.abs(source.q-target.q),Math.abs(source.r-target.r),Math.abs(source.q+source.r-target.q-target.r));
-   const damage=attack.hit?rollVorchanDamage({mountId:attack.mountId,chargeTurns:attack.chargeTurns||1,dice:dice.damageDice,range,mode:attack.mode,damageLoss:trial(source).condition.effects.weapons[attack.mountId]?.damageLoss||0}).damage:null;
-   return {...attack,from:{q:source.q,r:source.r},to:{q:target.q,r:target.r},effect:attack.mountId==='plasma_forward'?'plasma':'pulse',damageDice:dice.damageDice,damage};
+   const damage=attack.hit?rollVorchanDamage({mountId:attack.mountId,chargeTurns:attack.chargeTurns||1,dice:dice.damageDice,range,mode:attack.mode,damageLoss:trial(source).condition.effects.weapons[attack.mountId]?.damageLoss||0}):null;
+   return {...attack,from:{q:source.q,r:source.r},to:{q:target.q,r:target.r},effect:attack.mountId==='plasma_forward'?'plasma':'pulse',damageDice:dice.damageDice,damageResult:damage,damage:damage?.damage??null};
   })});
  }
  const choices=structuredClone(s.choices);

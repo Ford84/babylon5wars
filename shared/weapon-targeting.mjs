@@ -91,6 +91,6 @@ export function vorchanTargetingPreview({shooter,target,mountId,arc,blockingHexe
  if(!attackArc.allowed)blockers.push(attackArc.reason||'Arc decision pending');
  if(!los.clear)blockers.push(los.reason||'Line of sight blocked');
  if(!direction)blockers.push('Defender must choose incoming boundary direction');
- return {readyForHitRoll:blockers.length===0,blockers,mountId,weaponId:weapon.id,distance,attackArc,incoming,chosenDirection:direction,los,breakdown:{baseDefence:defence,offensiveEW:ew.offensiveBonus,defensiveEW:ew.defensivePenalty,fireControl,rangePenalty:ew.adjustedRangePenalty,extra,total},hitOnD20AtOrBelow:total};
+ return {readyForHitRoll:blockers.length===0,blockers,mountId,weaponId:weapon.id,distance,attackArc,incoming,chosenDirection:direction,los,breakdown:{baseDefence:defence,distance,rangePerHex:distance?ew.adjustedRangePenalty/distance:weapon.rangePenaltyPerHex-rangePenaltyAdjustment,lockedOn:ew.lockedOn,offensiveEW:ew.offensiveBonus,defensiveEW:ew.defensivePenalty,fireControl,rangePenalty:ew.adjustedRangePenalty,extra,total},hitOnD20AtOrBelow:total};
 }
 export function resolveToHit(preview,roll){if(!preview?.readyForHitRoll)throw new RangeError('Targeting preview not validated');if(!int(roll)||roll<1||roll>20)throw new RangeError('d20 must be 1–20');return {roll,hit:roll<=preview.hitOnD20AtOrBelow,targetNumber:preview.hitOnD20AtOrBelow,breakdown:preview.breakdown};}

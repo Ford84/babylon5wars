@@ -63,3 +63,13 @@ Halting a 180° pivot now converts speed to reverse and makes the current facing
 Turn options remain under Manoeuvre. A Choose Turn shortcut appears only when a turn is legal. Otherwise the panel explains the block: ongoing pivot/roll, turn delay, pivot angle, extended turn, power/command restrictions or insufficient physical thrust capacity.
 
 Validation: 268 tests pass, including both turn-into-pivot directions and resulting hex paths, reverse-facing pivot halt, and restarting stopped pivots only on later turns. Updated the old regression that encoded the incorrect turn-back behaviour. Browser validation covered the blocked-turn explanation, halt, shortcut, correct facing/travel alignment and turn delay. Production build passes.
+
+### Movement Destination And Roll Calculations (24 November 2026)
+
+The movement destination preview runs the selected legal action and optional following travel through `commitMovement`. It displays the resulting hull facing and inertial travel direction (or Stationary), including pivot and reverse movement.
+
+The to-hit result includes a running calculation inside the result box: target defence, effective per-hex range penalty, OEW, DEW, fire control, condition/other modifiers and interception where applicable. No-lock-on range doubling is labelled explicitly. These figures come from the authoritative saved attack breakdown.
+
+Damage results retain the weapon's dice count, die size, fixed bonus, range modifier and critical damage loss in the saved result. The animated dice label and result show the formula; the result also shows the arithmetic before armour. Critical damage losses apply per die with a minimum of one, while the fixed bonus remains intact. Completed weapon-fire summaries use the same presentation. Older saved results without formula metadata remain readable without inventing missing modifiers.
+
+Validation: 271 Node tests pass, production build succeeds, and browser checks cover the destination preview during a pivot, the animated attack calculation and the full-charge plasma damage calculation.

@@ -1,3 +1,4 @@
+import {AttackRollResult,DamageRollResult} from './RollResults.jsx';
 import React,{useEffect,useRef,useState} from 'react';
 import {weaponEffects,sampleWeaponEffect,weaponPlaybackDuration} from '../shared/weapon-effects.mjs';
 export function useWeaponPlayback(events,gameId,ready=true,paused=false){
@@ -17,7 +18,7 @@ export function useWeaponPlayback(events,gameId,ready=true,paused=false){
 }
 export function ShotResults({event,replay}){
  if(!event)return null;
- return <section className="panel"><h2>Latest Weapon Fire · Turn {event.turn}</h2>{event.public.attacks.map(a=><div key={a.id} className="server-dice"><p><strong>Attack d20 {a.roll} · Needs {a.targetNumber} Or Less · {a.hit?'Hit':'Miss'}</strong></p>{a.hit&&!a.damageDiscarded?<p>Damage: {a.damageDice.join(' + ')} · Total {a.damage} Before Armour · {a.mode||'Standard'}</p>:<p>{a.damageDiscarded?'Target Already Destroyed · No Further Damage':'No Damage Roll'}</p>}</div>)}<button className="secondary" onClick={replay}>Replay Weapon Effects</button></section>;
+ return <section className="panel"><h2>Latest Weapon Fire · Turn {event.turn}</h2>{event.public.attacks.map(a=><div key={a.id}><AttackRollResult attack={a}/>{a.hit&&!a.damageDiscarded?<DamageRollResult result={a.damageResult||{dice:a.damageDice,damage:a.damage}}/>:<p>{a.damageDiscarded?'Target Already Destroyed · No Further Damage':'No Damage Roll'}</p>}</div>)}<button className="secondary" onClick={replay}>Replay Weapon Effects</button></section>;
 }
 export default function WeaponEffects2D({volley,xy}){
  const [elapsed,setElapsed]=useState(0);
