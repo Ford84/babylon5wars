@@ -24,8 +24,9 @@ export async function automatedGame({req,db,game,members,user,route}){
   if(route==='start'){
    if(user.id!==game.host_id)return error('Only the host can start the battle',403);
    if(game.status!=='setup'||stored)return error('Battle already started');
+   if(game.mode==='solo-test'&&(members.length!==2||members.filter(m=>m.role==='passive').length!==1))return error('Solo test requires its passive opponent');
    const rows=(await db.prepare('SELECT * FROM ships WHERE game_id=?').bind(game.id).all()).results;
-   s=createBattle(rows,members,game.map_preset);s.journal=[{turn:1,phase:'power',type:'battle_started',scenario:s.scenario}];
+   s=createBattle(rows,members,game.map_preset,{passivePlayerId:game.mode==='solo-test'?members.find(m=>m.role==='passive')?.user_id:null});s.journal=[{turn:1,phase:'power',type:'battle_started',scenario:s.scenario,mode:game.mode},...s.journal];
   }else{
    if(!s)return error('Start a new battle to use automated condition and rules; existing records are preserved.');
    s=executeBattle(s,user.id,body.command);
