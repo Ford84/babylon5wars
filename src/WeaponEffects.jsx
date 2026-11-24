@@ -1,16 +1,17 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {weaponEffects,sampleWeaponEffect,weaponPlaybackDuration} from '../shared/weapon-effects.mjs';
-export function useWeaponPlayback(events,gameId,ready=true){
+export function useWeaponPlayback(events,gameId,ready=true,paused=false){
  const seen=useRef({gameId:null,ids:new Set()}),[volley,setVolley]=useState(null);
  const latest=ready&&events.find(e=>e.event_type==='weapons_fired'&&e.public?.attacks?.length);
  useEffect(()=>{
   if(!ready){seen.current={gameId:null,ids:new Set()};setVolley(null);return;}
+  if(paused)return;
   const shots=events.filter(e=>e.event_type==='weapons_fired');
   if(seen.current.gameId!==gameId){seen.current={gameId,ids:new Set(shots.map(e=>e.id))};setVolley(null);return;}
   const fresh=shots.filter(e=>!seen.current.ids.has(e.id));
   for(const e of shots)seen.current.ids.add(e.id);
   if(fresh.length){const e=fresh[0];setVolley({id:e.id,startedAt:performance.now(),effects:weaponEffects(e)});}
- },[events,gameId,ready]);
+ },[events,gameId,ready,paused]);
  useEffect(()=>{if(!volley)return;const timeout=setTimeout(()=>setVolley(null),weaponPlaybackDuration(volley.effects)+100);return()=>clearTimeout(timeout);},[volley]);
  return {volley,latest,replay:()=>latest&&setVolley({id:latest.id,startedAt:performance.now(),effects:weaponEffects(latest)})};
 }

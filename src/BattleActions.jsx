@@ -9,15 +9,15 @@ import {weaponReadiness} from '../shared/weapon-readiness.mjs';
 import {vorchanTargetingPreview,facingDirections,checkMountArc} from '../shared/weapon-targeting.mjs';
 const numbers=(max)=>Array.from({length:Math.max(0,Math.floor(max))+1},(_,i)=>i);
 function Amount({label,value,max,onChange}){return <label>{label}<select value={value} onChange={e=>onChange(Number(e.target.value))}>{numbers(max).map(n=><option key={n} value={n}>{n}</option>)}</select></label>;}
-export default function BattleActions({detail,userId,send,busy}){
+export default function BattleActions({detail,userId,send,busy,onInitiative,onAttackRevealed}){
  const ship=detail.ships.find(x=>x.owner_id===userId),t=ship?.private_state?.trial;
  if(!t||!detail.automated||detail.game.status!=='active')return null;
  const phase=detail.game.phase_id,turn=detail.game.turn;
- if(phase==='fire_resolution'&&detail.resolution)return <GuidedCombat detail={detail} userId={userId} send={send} busy={busy}/>;
+ if(phase==='fire_resolution'&&detail.resolution)return <GuidedCombat detail={detail} userId={userId} send={send} busy={busy} onAttackRevealed={onAttackRevealed}/>;
  if(!detail.needsAction)return <section className="panel"><h2>{detail.locked?'Orders Locked':'Waiting For Opponent'}</h2><p>{detail.locked?'Your choices are saved. The next step opens when both players are ready.':'The other player has the next required action.'}</p></section>;
  const props={ship,detail,send,busy,turn,t};
  return <section className="panel battle-actions" id="battle-actions"><h2>{detail.phase.label}</h2>
-  {phase==='power'&&<Power {...props}/>}{phase==='initiative'&&<><p>Roll this ship’s initiative. The server applies speed and command modifiers and resolves opposing ties.</p><button disabled={busy} onClick={()=>send({type:'initiative'})}>Roll Initiative</button></>}
+  {phase==='power'&&<Power {...props}/>}{phase==='initiative'&&<><p>Roll this ship’s initiative. The server applies speed and command modifiers and resolves opposing ties.</p><button disabled={busy} onClick={onInitiative}>Roll Initiative</button></>}
   {phase==='ew_commit'&&<EW {...props}/>}{phase==='movement'&&<Movement {...props}/>}
   {phase==='fire_commit'&&<Weapons {...props}/>}{phase==='fire_resolution'&&<Defence {...props}/>}
  </section>;
@@ -32,7 +32,7 @@ function Power({t,ship,turn,send,busy}){
   {e.reactorLoss>0&&<p>Reactor Criticals: −{e.reactorLoss} Power</p>}
   <fieldset><legend>Deactivate Systems To Release Power</legend>{Object.entries(SYSTEM_POWER).filter(([id])=>!e.destroyedSystems.includes(id)).map(([id,power])=><label className="check-row" key={id}><input type="checkbox" checked={deactivated.includes(id)} onChange={event=>setDeactivated(old=>event.target.checked?[...old,id]:old.filter(x=>x!==id))}/>{labelSystem(id)} · {power} Power</label>)}</fieldset>
   {t.condition.effects.containmentBreach&&<label className="check-row"><input type="checkbox" checked={shutdown} onChange={e=>setShutdown(e.target.checked)}/>Shut Down Reactor To Avoid Detonation ({t.condition.damage.tracks.reactor.marked}% Risk)</label>}
-  {off?<p className="error">Reactor Shutdown: No Powered Systems Or Purchased Thrust This Turn.{forced?' Deactivate more systems to cover the shortage, or commit shutdown.':''}</p>:<>{maxThrust>0&&<Amount label="Extra Thrust · 2 Power Each" value={thrust} max={maxThrust} onChange={setThrust}/>}{maxEW>0&&<Amount label="Extra EW · 9 Power For The First Point" value={ew} max={maxEW} onChange={setEW}/>}</>}
+  {off?<p className="error">Reactor Shutdown: No Powered Systems Or Purchased Thrust This Turn.{forced?' Deactivate more systems to cover the shortage, or commit shutdown.':''}</p>:<><div className="thrust-purchase"><Amount label="Extra Thrust · 2 Power Each" value={thrust} max={maxThrust} onChange={setThrust}/><p><strong>Current Thrust: {e.freeThrust+thrust}</strong><br/>{e.freeThrust} Available + {thrust} Extra</p></div>{maxEW>0&&<Amount label="Extra EW · 9 Power For The First Point" value={ew} max={maxEW} onChange={setEW}/>}</>}
   <button disabled={busy} onClick={()=>send({type:'power',deactivated,purchasedThrust:off?0:thrust,extraEW:off?0:ew,shutdown})}>Commit Power</button>
  </>;
 }

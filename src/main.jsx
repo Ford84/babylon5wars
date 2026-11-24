@@ -1,3 +1,5 @@
+import {facingLabel} from '../shared/ship-facing.mjs';
+import InitiativeDialog from './InitiativeDialog.jsx';
 import React,{useCallback,useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import Map3D,{saveLocalVorchanModel,clearLocalVorchanModel,hasLocalVorchanModel} from './Map3D.jsx';
@@ -18,8 +20,8 @@ function App(){
  const [token,setToken]=useState(()=>sessionStorage.getItem('b5w_token')||''),[user,setUser]=useState(null),[games,setGames]=useState([]),[gameId,setGame]=useState(''),[detail,setDetail]=useState(null),[events,setEvents]=useState([]);
  const [name,setName]=useState(''),[password,setPassword]=useState(''),[title,setTitle]=useState('New Battle'),[joinCode,setJoin]=useState(''),[invite,setInvite]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [mapPreset,setMap]=useState('standard'),[mapMode,setMode]=useState('3d'),[modelId,setModel]=useState('attack-cruiser-rc2'),[localModel,setLocal]=useState(false),[positions,setPositions]=useState([{q:3,r:10,facing:0},{q:15,r:10,facing:3}]);
- const [selected,setSelected]=useState(''),[scs,setSCS]=useState(false);
- const {volley,latest,replay}=useWeaponPlayback(events,gameId,detail?.game.id===gameId);
+ const [selected,setSelected]=useState(''),[scs,setSCS]=useState(false),[initiativeOpen,setInitiativeOpen]=useState(false),[revealedAttack,setRevealedAttack]=useState(null);
+ const {volley,latest,replay}=useWeaponPlayback(events,gameId,detail?.game.id===gameId,detail?.resolution?.stage==='attack_result'&&revealedAttack!==detail.game.turn+':'+detail.resolution.attack.id);
  const requestScope=useRef(''),loadNumber=useRef(0);requestScope.current=token+':'+gameId;
  const api=useCallback(async(path,method='GET',body)=>{
   const response=await fetch('/api'+path,{method,headers:{'content-type':'application/json',...(token?{authorization:'Bearer '+token}:{})},...(body?{body:JSON.stringify(body)}:{})});
@@ -43,7 +45,7 @@ function App(){
  const login=register=>action(async()=>{if(register)await api('/register','POST',{name,password});const result=await api('/login','POST',{name,password});sessionStorage.setItem('b5w_token',result.token);setToken(result.token);setPassword('');});
  const setup=patch=>action(async()=>{const map=patch.mapPreset??mapPreset,model=patch.modelId??modelId;if(detail?.game.status==='setup')await api('/games/'+gameId+'/setup','POST',{expectedRevision:detail.game.revision,mapPreset:map,modelId:model});setMap(map);setModel(model);});
  const ships=detail?.ships||[],current=ships.find(s=>s.id===selected)||ships.find(s=>s.owner_id===user?.id)||ships[0],active=detail&&detail.game.status!=='setup';
- const openGame=id=>{setGame(id);setDetail(null);setSCS(false);setInvite('');setError('');};
+ const openGame=id=>{setGame(id);setDetail(null);setSCS(false);setInitiativeOpen(false);setRevealedAttack(null);setInvite('');setError('');};
  return <main className={active?'automated-game':'staging'}><header><div><small>{active?'TACTICAL COMMAND':'BATTLE PREPARATION'}</small><h1>Babylon 5 Wars</h1></div><div>{token&&<><button className="secondary" onClick={()=>openGame('')}>Battle Lobby</button><button className="secondary" onClick={()=>action(async()=>{await api('/logout','POST');sessionStorage.removeItem('b5w_token');setToken('');setUser(null);openGame('');})}>Sign Out</button></>}</div></header>
   {error&&<p role="alert" className="error">{error}</p>}
   {!token?<><section className="panel auth-panel"><h2>Player Access</h2><form onSubmit={e=>{e.preventDefault();login(false);}}><label>Player Name<input required autoComplete="username" maxLength={80} value={name} onChange={e=>setName(e.target.value)}/></label><label>Password<input required type="password" autoComplete="current-password" minLength={12} maxLength={256} value={password} onChange={e=>setPassword(e.target.value)}/></label><button disabled={busy}>Sign In</button><button type="button" className="secondary" disabled={busy||name.length<3||password.length<12} onClick={()=>login(true)}>Create Account</button></form></section><VorchanShowcase selectedModelId={modelId} onSelectedModelChange={setModel}/></>:!active?<>
@@ -63,12 +65,13 @@ function App(){
    </section>
    <div className="layout"><section className="battle"><div className="sectionhead"><h2>Tactical Battlefield</h2><label>View<select value={mapMode} onChange={e=>setMode(e.target.value)}><option value="3d">3D</option><option value="2d">2D</option></select></label></div>
     {mapMode==='3d'?<Map3D ships={ships} selected={current?.id} setSelected={setSelected} preset={mapPreset} modelId={modelId} volley={volley}/>:<Map2D ships={ships} selected={current?.id} setSelected={setSelected} preset={mapPreset} volley={volley}/>}
-    <div className="ship-status-grid">{ships.map(s=><button className="secondary" key={s.id} onClick={()=>{setSelected(s.id);setSCS(true);}}><strong>{s.label}</strong><span>{s.public_state.condition.shipDestroyed?'Destroyed':s.withdrawn?'Withdrawn':'Speed '+s.speed+' · '+(s.public_state.condition.commandDisabled?'Command Disabled':'Hex '+s.q+', '+s.r)}</span><span>Open Live SCS</span></button>)}</div>
+    <div className="ship-status-grid">{ships.map(s=><button className="secondary" key={s.id} onClick={()=>{setSelected(s.id);setSCS(true);}}><strong>{s.label}</strong><span>{s.public_state.condition.shipDestroyed?'Destroyed':s.withdrawn?'Withdrawn':'Speed '+s.speed+' · '+(s.public_state.condition.commandDisabled?'Command Disabled':'Hex '+s.q+', '+s.r)}</span><span>Facing: {facingLabel(s.facing)}</span><span>Open Live SCS</span></button>)}</div>
    </section><aside>
-    <BattleActions key={gameId+':'+detail.game.turn+':'+detail.game.phase_id} detail={detail} userId={user?.id} send={send} busy={busy}/>
+    <BattleActions key={gameId+':'+detail.game.turn+':'+detail.game.phase_id} detail={detail} userId={user?.id} send={send} busy={busy} onInitiative={()=>setInitiativeOpen(true)} onAttackRevealed={setRevealedAttack}/>
     {!detail.resolution&&<ShotResults event={latest} replay={replay}/>}
     <BattleJournal events={events} ships={ships} members={detail.members}/>
    </aside></div>
+   {initiativeOpen&&<InitiativeDialog key={gameId+':'+detail.game.turn} detail={detail} userId={user?.id} send={send} busy={busy} error={error} onClose={()=>setInitiativeOpen(false)}/>}
    {scs&&current&&<ShipSystems ship={current} onClose={()=>setSCS(false)}/>}
   </>}
  </main>;
