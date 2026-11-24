@@ -9,9 +9,9 @@ export const VORCHAN_SCS_IDENTIFICATION=Object.freeze({
  source:Object.freeze({...vector.source,basis:'original printed icon legend and individually extracted vector squares'}),
  sections:Object.freeze(['forward','primary','aft','port','starboard']),
  systems:Object.freeze([
-  system('plasma_forward','weapon','forward',4,{weaponCardId:'plasma-accelerator',mountNumber:1}),
-  system('twin_nose_port','weapon','forward',3,{weaponCardId:'twin-array',mountNumber:2}),
-  system('twin_nose_starboard','weapon','forward',3,{weaponCardId:'twin-array',mountNumber:3}),
+  system('plasma_forward','weapon','forward',4,{weaponCardId:'plasma-accelerator',mountNumber:1,displayName:'Plasma Accelerator · Mount 1'}),
+  system('twin_nose_port','weapon','forward',3,{weaponCardId:'twin-array',mountNumber:2,displayName:'Twin Array · Mount 2 (Port)'}),
+  system('twin_nose_starboard','weapon','forward',3,{weaponCardId:'twin-array',mountNumber:3,displayName:'Twin Array · Mount 3 (Starboard)'}),
   system('forward_structure','structure','forward',5),
   system('forward_port_thrust','thruster','forward',5,{iconValue:3,displayName:'Forward Port Retro Thruster'}),
   system('forward_starboard_thrust','thruster','forward',5,{iconValue:3,displayName:'Forward Starboard Retro Thruster'}),
@@ -19,14 +19,14 @@ export const VORCHAN_SCS_IDENTIFICATION=Object.freeze({
   system('engine','engine','primary',7,{iconValue:10}),
   system('reactor','reactor','primary',7),
   system('primary_structure','structure','primary',6),
-  system('command','command','primary',6),
+  system('command','command','primary',6,{displayName:'Command And Control'}),
   system('hangar','hangar','primary',6,{iconValue:2}),
-  system('port_thrust','thruster','port',5,{iconValue:5}),
-  system('starboard_thrust','thruster','starboard',5,{iconValue:5}),
+  system('port_thrust','thruster','port',5,{iconValue:5,displayName:'Port Thruster'}),
+  system('starboard_thrust','thruster','starboard',5,{iconValue:5,displayName:'Starboard Thruster'}),
   system('aft_structure','structure','aft',4),
   system('aft_port_thrust','thruster','aft',4,{iconValue:5,displayName:'Aft Port Main Thruster'}),
   system('aft_starboard_thrust','thruster','aft',4,{iconValue:5,displayName:'Aft Starboard Main Thruster'}),
-  system('jump_aft_centre','jump-engine','aft',6,{powerRequired:3})
+  system('jump_aft_centre','jump-engine','aft',6,{powerRequired:3,displayName:'Jump Engine'})
  ]),
  weapons:Object.freeze([{id:'plasma-accelerator',printedMounts:1},{id:'twin-array',printedMounts:2}]),
  completeness:Object.freeze({allSystemsLocated:true,allArmourIdentified:true,allDamageBoxesCounted:true,allWeaponArcsIdentified:true,sensorStrengthVerified:true,freeThrustVerified:true})
