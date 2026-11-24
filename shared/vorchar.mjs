@@ -1,3 +1,4 @@
+import {MOGRATTI} from './mogratti.mjs';
 import {MOGRATH} from './mograth.mjs';
 import {VORCHAN_LIBRARY_RECORD as base} from './vorchan-trial-library.mjs';
 import {VORCHAN_SCS_IDENTIFICATION} from './vorchan-scs-identification.mjs';
@@ -34,6 +35,7 @@ export const VORCHAR = {
 
 const vorchan = {...base,scs:VORCHAN_SCS_IDENTIFICATION};
 export function hullProfile(id){
+ if(id===MOGRATTI.id)return MOGRATTI;
  if(id===MOGRATH.id)return MOGRATH;
  if(id===VORCHAR_ID)return VORCHAR;
  if(id===base.id)return vorchan;
