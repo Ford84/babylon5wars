@@ -2,7 +2,7 @@
 // values are accepted only after external SCS adjudication. No fabricated tracks.
 import {VORCHAN_SCS_IDENTIFICATION as SCS} from './vorchan-scs-identification.mjs';
 const whole=n=>Number.isInteger(n)&&n>=0;
-const THRUSTERS=new Set(['retro','forward_port_thrust','forward_starboard_thrust','port_thrust','starboard_thrust','aft_port_thrust','aft_starboard_thrust']);
+const THRUSTERS=new Set(['forward_port_thrust','forward_starboard_thrust','port_thrust','starboard_thrust','aft_port_thrust','aft_starboard_thrust']);
 export function adjudicateVorchanMovementDamage(trial,{systemId,markedBoxes=0,destroyed=false,reactorPowerLoss=0,engineThrustLoss=0}={}){
  if(!trial||typeof systemId!=='string'||!systemId||!whole(markedBoxes)||!whole(reactorPowerLoss)||!whole(engineThrustLoss)||typeof destroyed!=='boolean')throw new RangeError('Invalid damage adjudication');
  if(!THRUSTERS.has(systemId)&&!SCS.systems.some(s=>s.id===systemId))throw new RangeError('Unknown Vorchan system');

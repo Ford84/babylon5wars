@@ -1,47 +1,45 @@
-// Verified from the original Vorchan Version 3: 2E/SF control-sheet diagram.
-// One printed small square equals one damage box. Circled numbers give armour;
-// numbers INSIDE the device icon give weapon/hangar/special values, not armour.
-// Weapon mounts are counted from individual ship diagram symbols, not weapon datacards or power diamonds.
+import {VORCHAN_VECTOR_AUDIT as vector} from './vorchan-vector-tracks.mjs';
+// Original Vorchan v3: Icon Recognition legend determines identity. The small
+// outboard symbols numbered 1/2/3 are weapon arcs, not thrusters or tracks.
+const system = (id, kind, section, armour, details = {}) => {
+ const track = vector.tracks[id];
+ return Object.freeze({id,kind,section,armour,boxes:track.boxes.length,rows:Object.freeze(track.rows),damageBoxes:Object.freeze(track.boxes),verified:true,...details});
+};
 export const VORCHAN_SCS_IDENTIFICATION=Object.freeze({
- source:{publication:'Centauri Vorchan Warship',revision:'Version 3: 2E/SF',page:'1',basis:'original printed diagram'},
- sections:['forward','primary','aft','port','starboard'],
- systems:[
-  {id:'retro',kind:'thruster',section:'forward',armour:4,boxes:5,rows:[5],iconValue:null,verified:true},
-  {id:'forward_port_thrust',kind:'thruster',section:'forward',armour:null,boxes:null,rows:[],iconValue:2,verified:false},
-  {id:'twin_nose_port',kind:'weapon',section:'forward',armour:3,boxes:6,rows:[3,3],weaponCardId:'twin-array',mountNumber:2,verified:true},
-  {id:'forward_starboard_thrust',kind:'thruster',section:'forward',armour:null,boxes:null,rows:[],iconValue:3,verified:false},
-  {id:'twin_nose_starboard',kind:'weapon',section:'forward',armour:3,boxes:6,rows:[3,3],weaponCardId:'twin-array',mountNumber:3,verified:true},
-  {id:'plasma_forward',kind:'weapon',section:'forward',armour:4,boxes:8,rows:[4,4],weaponCardId:'plasma-accelerator',mountNumber:1,verified:true},
-  {id:'forward_structure',kind:'structure',section:'forward',armour:5,boxes:48,rows:[2,2,2,4,4,6,6,8,8,4,2],verified:true},
-  {id:'jump_forward_port',kind:'jump-engine',section:'forward',armour:5,boxes:10,rows:[5,5],verified:true},
-  {id:'jump_forward_starboard',kind:'jump-engine',section:'forward',armour:5,boxes:10,rows:[5,5],verified:true},
-  {id:'hangar',kind:'hangar',section:'primary',armour:6,boxes:2,rows:[2],iconValue:2,verified:true},
-  {id:'engine',kind:'engine',section:'primary',armour:7,boxes:11,rows:[3,5,3],iconValue:10,verified:true},
-  {id:'reactor',kind:'reactor',section:'primary',armour:6,boxes:20,rows:[4,4,4,4,4],iconValue:4,verified:true},
-  {id:'sensors',kind:'sensor',section:'primary',armour:7,boxes:12,rows:[2,5,5],verified:true},
-  {id:'command',kind:'command',section:'primary',armour:6,boxes:12,rows:[1,5,5,1],verified:true},
-  {id:'primary_structure',kind:'structure',section:'primary',armour:6,boxes:28,rows:[5,5,5,5,5,3],verified:true},
-  {id:'port_thrust',kind:'thruster',section:'port',armour:5,boxes:12,rows:[2,2,2,2,2,2],iconValue:5,verified:true},
-  {id:'starboard_thrust',kind:'thruster',section:'starboard',armour:5,boxes:12,rows:[2,2,2,2,2,2],iconValue:5,verified:true},
-  {id:'aft_structure',kind:'structure',section:'aft',armour:4,boxes:44,rows:[44],verified:true},
-  {id:'aft_port_thrust',kind:'thruster',section:'aft',armour:4,boxes:8,rows:[4,4],iconValue:5,verified:true},
-  {id:'aft_starboard_thrust',kind:'thruster',section:'aft',armour:4,boxes:8,rows:[4,4],iconValue:5,verified:true},
-  {id:'jump_aft_centre',kind:'jump-engine',section:'aft',armour:6,boxes:16,rows:[4,4,4,4],verified:true}
- ],
- weapons:[{id:'plasma-accelerator',printedMounts:1},{id:'twin-array',printedMounts:2}],
- completeness:{allSystemsLocated:false,allArmourIdentified:false,allDamageBoxesCounted:false,allWeaponArcsIdentified:false,sensorStrengthVerified:false,freeThrustVerified:true}
+ source:Object.freeze({...vector.source,basis:'original printed icon legend and individually extracted vector squares'}),
+ sections:Object.freeze(['forward','primary','aft','port','starboard']),
+ systems:Object.freeze([
+  system('plasma_forward','weapon','forward',4,{weaponCardId:'plasma-accelerator',mountNumber:1}),
+  system('twin_nose_port','weapon','forward',3,{weaponCardId:'twin-array',mountNumber:2}),
+  system('twin_nose_starboard','weapon','forward',3,{weaponCardId:'twin-array',mountNumber:3}),
+  system('forward_structure','structure','forward',5),
+  system('forward_port_thrust','thruster','forward',5,{iconValue:3,displayName:'Forward Port Retro Thruster'}),
+  system('forward_starboard_thrust','thruster','forward',5,{iconValue:3,displayName:'Forward Starboard Retro Thruster'}),
+  system('sensors','sensor','primary',6,{iconValue:8,sensorStrength:8,powerRequired:4}),
+  system('engine','engine','primary',7,{iconValue:10}),
+  system('reactor','reactor','primary',7),
+  system('primary_structure','structure','primary',6),
+  system('command','command','primary',6),
+  system('hangar','hangar','primary',6,{iconValue:2}),
+  system('port_thrust','thruster','port',5,{iconValue:5}),
+  system('starboard_thrust','thruster','starboard',5,{iconValue:5}),
+  system('aft_structure','structure','aft',4),
+  system('aft_port_thrust','thruster','aft',4,{iconValue:5,displayName:'Aft Port Main Thruster'}),
+  system('aft_starboard_thrust','thruster','aft',4,{iconValue:5,displayName:'Aft Starboard Main Thruster'}),
+  system('jump_aft_centre','jump-engine','aft',6,{powerRequired:3})
+ ]),
+ weapons:Object.freeze([{id:'plasma-accelerator',printedMounts:1},{id:'twin-array',printedMounts:2}]),
+ completeness:Object.freeze({allSystemsLocated:true,allArmourIdentified:true,allDamageBoxesCounted:true,allWeaponArcsIdentified:true,sensorStrengthVerified:true,freeThrustVerified:true})
 });
+export const VORCHAN_THRUSTER_RATINGS=Object.freeze(Object.fromEntries(VORCHAN_SCS_IDENTIFICATION.systems.filter(s=>s.kind==='thruster').map(s=>[s.id,s.iconValue])));
 export function auditVorchanIdentification(){
- const s=VORCHAN_SCS_IDENTIFICATION.systems;
- const issues=[];
- if(s.some(x=>!x.verified))issues.push('SCS contains unverified system identification; do not enable automatic combat');
- for(const sys of s){
-  if(sys.verified&&(!Number.isInteger(sys.boxes)||sys.rows.reduce((a,b)=>a+b,0)!==sys.boxes))issues.push(sys.id+': damage box mismatch');
-  if(sys.verified&&!Number.isInteger(sys.armour))issues.push(sys.id+': armour missing');
+ const systems=VORCHAN_SCS_IDENTIFICATION.systems,issues=[],seen=new Set();
+ for(const s of systems){
+  if(!s.verified)issues.push(s.id+': unverified system');
+  if(s.rows.reduce((a,b)=>a+b,0)!==s.boxes||s.damageBoxes.length!==s.boxes)issues.push(s.id+': damage box mismatch');
+  if(!Number.isInteger(s.armour))issues.push(s.id+': armour missing');
+  for(const box of s.damageBoxes){if(seen.has(box.id))issues.push('duplicate damage box '+box.id);seen.add(box.id);}
  }
- if(!VORCHAN_SCS_IDENTIFICATION.completeness.allSystemsLocated)issues.push('Not all SCS systems have been independently located');
- if(!VORCHAN_SCS_IDENTIFICATION.completeness.allArmourIdentified)issues.push('Armour verification is incomplete');
- if(!VORCHAN_SCS_IDENTIFICATION.completeness.allDamageBoxesCounted)issues.push('Damage-box verification is incomplete');
- if(!VORCHAN_SCS_IDENTIFICATION.completeness.allWeaponArcsIdentified)issues.push('Weapon-arc verification is incomplete');
- return {systems:s.length,verifiedTracks:s.filter(x=>x.verified).length,unverifiedTracks:s.filter(x=>!x.verified).map(x=>x.id),issues,readyForCombat:issues.length===0&&s.every(x=>x.verified)&&VORCHAN_SCS_IDENTIFICATION.completeness.allWeaponArcsIdentified};
+ if(seen.size!==vector.totalBoxes)issues.push('whole-sheet damage box mismatch');
+ return {systems:systems.length,damageBoxes:seen.size,verifiedTracks:systems.filter(s=>s.verified).length,unverifiedTracks:systems.filter(s=>!s.verified).map(s=>s.id),issues,shipDataVerified:issues.length===0,readyForCombat:false};
 }

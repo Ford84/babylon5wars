@@ -41,10 +41,25 @@ test('defender must select among multiple live arrays; destroyed system redirect
  const result=applyVorchanStandardVolley({state,damage:9,incoming:'forward',locationRoll:7});
  assert.equal(result.state.tracks.forward_structure.marked,4);
 });
-test('primary structure destruction immediately destroys ship; post-turn section loss fails closed on incomplete tracks',()=>{
+test('primary structure destruction immediately destroys ship; post-turn loss destroys every verified forward-section system',()=>{
  const state=initialVorchanDamage();state.tracks.primary_structure.marked=27;
  const result=applyVorchanStandardVolley({state,damage:8,incoming:'forward',locationRoll:20,primaryRoll:1});
  assert.equal(result.state.shipDestroyed,true);
  const section=initialVorchanDamage();section.destroyedSections=['forward'];
- assert.throws(()=>vorchanPostTurnStructureLoss(section),/Unverified track/);
+ const lost=vorchanPostTurnStructureLoss(section);
+ assert.equal(lost.tracks.forward_port_thrust.marked,10);
+ assert.equal(lost.tracks.forward_starboard_thrust.marked,10);
+ assert.equal(lost.tracks.plasma_forward.marked,10);
+ assert.equal(lost.tracks.twin_nose_port.marked,6);
+ assert.equal(lost.tracks.jump_aft_centre.marked,0);
+});
+
+test('retro hits choose one physical forward thruster and jump hits only reach the aft jump engine',()=>{
+ assert.deepEqual(vorchanHitToken({incoming:'forward',locationRoll:1}).candidates,['forward_port_thrust','forward_starboard_thrust']);
+ assert.deepEqual(vorchanHitToken({incoming:'aft',locationRoll:6}).candidates,['jump_aft_centre']);
+ const first=applyVorchanStandardVolley({state:initialVorchanDamage(),damage:8,incoming:'forward',locationRoll:1});
+ assert.equal(first.choiceType,'system');
+ const chosen=applyVorchanStandardVolley({state:initialVorchanDamage(),damage:8,incoming:'forward',locationRoll:1,systemChoice:'forward_starboard_thrust'});
+ assert.equal(chosen.state.tracks.forward_starboard_thrust.marked,3);
+ assert.equal(chosen.state.tracks.forward_port_thrust.marked,0);
 });

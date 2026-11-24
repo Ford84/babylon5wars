@@ -7,7 +7,7 @@ test('weapon critical d20 plus all damage boxes, with cumulative effects',()=>{
  assert.deepEqual(weaponCritical({systemId:'plasma_forward',roll:18,marked:4}).effects,['damage_minus_2_per_die_minimum_1']);
  assert.deepEqual(weaponCritical({systemId:'plasma_forward',roll:20,marked:5}).effects,['range_penalty_worsened','damage_minus_2_per_die_minimum_1']);
  assert.equal(weaponCritical({systemId:'plasma_forward',roll:8,marked:5}).requiresRuleClarification,true);
- assert.equal(weaponCritical({systemId:'plasma_forward',roll:20,marked:8}).eligible,false);
+ assert.equal(weaponCritical({systemId:'plasma_forward',roll:20,marked:10}).eligible,false);
 });
 test('critical candidates are once per surviving damaged nonstructure system',()=>{
  const before=initialVorchanDamage(),after=structuredClone(before);

@@ -20,7 +20,7 @@ test('turn at speed six requires equal aft and side allocation',()=>{
  assert.equal(a.movement.thrustSpent,3);
 });
 test('pivot of even cost does not require odd-thrust selector',()=>{
- const a=apply(ship(2),state(),1,{type:'pivot-start',direction:1,thrusterPair:'forward-port',thrusters:{retro:1,port_thrust:1}});
+ const a=apply(ship(2),state(),1,{type:'pivot-start',direction:1,thrusterPair:'forward-port',thrusters:{forward_port_thrust:1,port_thrust:1}});
  assert.equal(a.nextShip.facing,1);
  assert.equal(a.movement.motionFacing,0);
 });

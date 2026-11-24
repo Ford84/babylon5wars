@@ -12,13 +12,13 @@ export function initialVorchanDamage(){
 }
 export function damageSystemCandidates(token,section){
  const candidates={
-  retro_thrust:['retro'],plasma_accelerator:['plasma_forward'],
+  retro_thrust:['forward_port_thrust','forward_starboard_thrust'],plasma_accelerator:['plasma_forward'],
   twin_array:['twin_nose_port','twin_nose_starboard'],
   forward_structure:['forward_structure'],aft_structure:['aft_structure'],primary_structure:['primary_structure'],
   side_thrust:['port_thrust','starboard_thrust'],sensors:['sensors'],engine:['engine'],
   hangar:['hangar'],reactor:['reactor'],command:['command'],
   main_thrust:['aft_port_thrust','aft_starboard_thrust'],
-  jump_drive:['jump_aft_centre','jump_forward_port','jump_forward_starboard']
+  jump_drive:['jump_aft_centre']
  }[token]||[];
  return candidates.filter(id=>{const s=systems.get(id);return s&&(s.section===section||section==='primary'||token==='jump_drive')});
 }

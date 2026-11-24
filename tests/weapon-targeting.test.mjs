@@ -10,7 +10,7 @@ test('SCS W1 confirms one plasma and two twin-array mounts with 5 potential indi
  const audit=auditVorchanWeapons();
  assert.equal(audit.inventory.length,3);
  assert.equal(audit.inventory.reduce((n,m)=>n+m.individualGuns,0),5);
- assert.equal(audit.readyForAutomaticFire,false);
+ assert.equal(audit.readyForAutomaticFire,true);
  assert.ok(audit.inventory.every(m=>m.firingArcVerified));
 });
 test('weapon readiness is blocked when historical arming data is unknown',()=>{
