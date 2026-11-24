@@ -8,7 +8,7 @@ const fail=m=>{throw new RangeError(m);};
 const record=(s,type,details)=>s.journal.push({turn:s.turn,phase:s.phase,type,...details});
 const owner=(s,id)=>s.ships.find(x=>x.id===id).owner_id;
 const diceFor=s=>s.dice.find(d=>d.attackId===s.resolution.attack.id);
-const emit=(s)=>{const r=s.resolution,a=r.attack,d=diceFor(s),source=s.fireSnapshot.find(x=>x.id===a.shipId),target=s.fireSnapshot.find(x=>x.id===a.targetId);record(s,'weapons_fired',{attacks:[{...a,from:{q:source.q,r:source.r},to:{q:target.q,r:target.r},effect:a.mountId==='plasma_forward'?'plasma':'pulse',damageDice:d.damageDice,damage:r.damage?.damage??null,damageDiscarded:!!r.skipDamage}]});};
+const emit=(s)=>{const r=s.resolution,a=r.attack,d=diceFor(s),source=s.fireSnapshot.find(x=>x.id===a.shipId),target=s.fireSnapshot.find(x=>x.id===a.targetId);record(s,'weapons_fired',{attacks:[{...a,from:{q:source.q,r:source.r},to:{q:target.q,r:target.r},effect:a.mountId==='plasma_forward'?'plasma':'pulse',damageDice:d.damageDice,damageResult:r.damage,damage:r.damage?.damage??null,damageDiscarded:!!r.skipDamage}]});};
 function nextAttack(s){
  const r=s.resolution;r.index++;
  if(r.index>=r.queue.length){record(s,'combat_dice',{rolls:s.dice});s.resolution=null;s.damageRolled=true;return true;}

@@ -1,4 +1,4 @@
-import {turnIntoPivotDirection} from '../shared/movement-rules.mjs';
+import {movementHeading,turnIntoPivotDirection} from '../shared/movement-rules.mjs';
 import CriticalActions from './CriticalActions.jsx';
 import {facingLabel} from '../shared/ship-facing.mjs';
 import React,{useState} from 'react';
@@ -60,7 +60,7 @@ function Movement({t,ship,turn,detail,send,busy}){
  const canTravel=pick&&!['advance','slide','extended-cancel'].includes(pick.action.type),advanceAfter=canTravel?Math.min(travel,pick.remaining):0;
  const state=t.movement.state,turns=allOptions.filter(o=>o.choices[0].action.type==='turn');
  const turningReason=e.commandDisabled||e.powerOff?'Powered Manoeuvres Unavailable':state.rollInProgress?'Halt The Roll Before Turning':state.pivotInProgress?'Halt The Pivot Before Turning':state.extendedTurn?'Resolve The Extended Turn First':state.pivotActive&&turnIntoPivotDirection(state)===null?'A Turn Into Pivot Requires A Halted 60° Pivot':state.turnDelayRemaining>0?`Move ${state.turnDelayRemaining} More ${state.turnDelayRemaining===1?'Hex':'Hexes'} To Satisfy Turn Delay`:'Insufficient Thrust Or Working Thruster Capacity';
- let destination=pick?.position;try{if(advanceAfter)destination=commitMovement({ship,turn,action:pick.action,advanceAfter,mapPreset:detail.game.map_preset}).nextShip;}catch{}
+ let destination=pick?.position,destinationTravel=null;try{if(pick){const result=commitMovement({ship,turn,action:pick.action,advanceAfter,mapPreset:detail.game.map_preset});destination=result.nextShip;destinationTravel=destination.speed===0?null:movementHeading(result.nextPrivateState.trial.movement.state);}}catch{}
  return <><p>Speed <strong>{ship.speed}</strong> · {t.movement.state.remaining} Hexes Remaining · Thrust <strong>{spent}/{e.freeThrust+t.powerAllocation.purchasedThrust}</strong> · Turn Delay {t.movement.state.turnDelayRemaining}</p>
   <p>Speed Sets This Turn’s Total Travel. Normal Movement Uses Remaining Hexes; Extra Thrust Is For Manoeuvres.</p>
   <p>Facing: {facingLabel(t.movement.state.facing)} · Travel Direction: {ship.public_state.travelFacing===null?'Stationary':facingLabel(ship.public_state.travelFacing)}</p>
@@ -72,7 +72,7 @@ function Movement({t,ship,turn,detail,send,busy}){
   {current?<><label>{category==='movement'?'Movement Action':'Legal Manoeuvre'}<select value={current.name} onChange={e=>{setSelected(e.target.value);setChoice(0);}}>{options.map(o=><option key={o.name} value={o.name}>{o.name}</option>)}</select></label>
    {current.choices.length>1&&<label>Thruster Distribution<select value={Math.min(choice,current.choices.length-1)} onChange={e=>setChoice(Number(e.target.value))}>{current.choices.map((c,i)=><option key={i} value={i}>{Object.entries(c.action.thrusters||{}).map(([id,n])=>labelSystem(id)+' '+n).join(', ')}{c.overthrust.length?' · Overthrust Risk':''}</option>)}</select></label>}
    {canTravel&&pick.remaining>0&&<Amount label="Travel After This Action · Hexes" value={advanceAfter} max={pick.remaining} onChange={setTravel}/>}
-   <p>{pick.cost} Engine Thrust · Destination ({destination.q}, {destination.r}) · Speed {destination.speed}</p>
+   <p>{pick.cost} Engine Thrust · Destination ({destination.q}, {destination.r}) · Speed {destination.speed}<br/>Facing: {facingLabel(destination.facing)} · Travel Direction: {destinationTravel===null?'Stationary':facingLabel(destinationTravel)}</p>
    {!!pick.overthrust.length&&<p className="error">End-Of-Turn Critical Checks: {pick.overthrust.map(x=>labelSystem(x.id)+' +'+x.excess+' Overthrust').join(', ')}</p>}
    <button disabled={busy} onClick={()=>send({type:'move',action:pick.action,advanceAfter})}>{pick.action.type==='advance'?'Move Selected Segment':'Commit Thrust And Move'}</button>
   </>:<p>{category==='movement'?(t.movement.state.remaining>0?'Resolve The Carried Extended Turn Under Manoeuvre Before Normal Travel.':`No normal movement remains at speed ${ship.speed}. Choose Manoeuvre to use remaining thrust, or finish movement.`):'No legal manoeuvre is currently available.'}</p>}

@@ -44,7 +44,7 @@ export function rollVorchanDamage({mountId,chargeTurns=3,dice,range,damageLoss=0
  if(!option)throw new RangeError('Invalid plasma charge');
  const {count,sides,bonus,perHex}=option.damageDice;
  if(!Array.isArray(dice)||dice.length!==count||dice.some(n=>!int(n,1)||n>sides))throw new RangeError('Damage dice mismatch');
- return {weaponId:weapon.id,mode,dice:[...dice],range,raw:dice.reduce((a,b)=>a+Math.max(1,b-damageLoss),bonus),damage:Math.max(0,dice.reduce((a,b)=>a+Math.max(1,b-damageLoss),bonus)+range*perHex),plasma:weapon.class==='Plasma'};
+ return {weaponId:weapon.id,mode,dice:[...dice],range,formula:{count,sides,bonus,perHex,damageLoss},raw:dice.reduce((a,b)=>a+Math.max(1,b-damageLoss),bonus),damage:Math.max(0,dice.reduce((a,b)=>a+Math.max(1,b-damageLoss),bonus)+range*perHex),plasma:weapon.class==='Plasma'};
 }
 function applyToTrack(next,id,damage,plasma,trace){
  const s=systems.get(id);
