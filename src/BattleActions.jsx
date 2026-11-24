@@ -1,3 +1,4 @@
+import {turnIntoPivotDirection} from '../shared/movement-rules.mjs';
 import CriticalActions from './CriticalActions.jsx';
 import {facingLabel} from '../shared/ship-facing.mjs';
 import React,{useState} from 'react';
@@ -54,15 +55,19 @@ function EW({t,turn,detail,send,busy}){
 }
 function Movement({t,ship,turn,detail,send,busy}){
  const [category,setCategory]=useState('movement');
- const options=movementOptions(ship,turn,detail.game.map_preset).filter(o=>movementOptionGroup(o)===category),[selected,setSelected]=useState(''),[choice,setChoice]=useState(0),[travel,setTravel]=useState(1);
+ const allOptions=movementOptions(ship,turn,detail.game.map_preset),options=allOptions.filter(o=>movementOptionGroup(o)===category),[selected,setSelected]=useState(''),[choice,setChoice]=useState(0),[travel,setTravel]=useState(1);
  const current=options.find(x=>x.name===selected)||options[0],pick=current?.choices[Math.min(choice,current.choices.length-1)],e=effectiveCondition(t,turn),spent=t.movement.engineThrustSpent||0;
  const canTravel=pick&&!['advance','slide','extended-cancel'].includes(pick.action.type),advanceAfter=canTravel?Math.min(travel,pick.remaining):0;
+ const state=t.movement.state,turns=allOptions.filter(o=>o.choices[0].action.type==='turn');
+ const turningReason=e.commandDisabled||e.powerOff?'Powered Manoeuvres Unavailable':state.rollInProgress?'Halt The Roll Before Turning':state.pivotInProgress?'Halt The Pivot Before Turning':state.extendedTurn?'Resolve The Extended Turn First':state.pivotActive&&turnIntoPivotDirection(state)===null?'A Turn Into Pivot Requires A Halted 60° Pivot':state.turnDelayRemaining>0?`Move ${state.turnDelayRemaining} More ${state.turnDelayRemaining===1?'Hex':'Hexes'} To Satisfy Turn Delay`:'Insufficient Thrust Or Working Thruster Capacity';
  let destination=pick?.position;try{if(advanceAfter)destination=commitMovement({ship,turn,action:pick.action,advanceAfter,mapPreset:detail.game.map_preset}).nextShip;}catch{}
  return <><p>Speed <strong>{ship.speed}</strong> · {t.movement.state.remaining} Hexes Remaining · Thrust <strong>{spent}/{e.freeThrust+t.powerAllocation.purchasedThrust}</strong> · Turn Delay {t.movement.state.turnDelayRemaining}</p>
   <p>Speed Sets This Turn’s Total Travel. Normal Movement Uses Remaining Hexes; Extra Thrust Is For Manoeuvres.</p>
   <p>Facing: {facingLabel(t.movement.state.facing)} · Travel Direction: {ship.public_state.travelFacing===null?'Stationary':facingLabel(ship.public_state.travelFacing)}</p>
   {!t.movement.state.started?<p>Change Speed First If Desired. Starting Travel Or A Manoeuvre Keeps Your Current Speed And Closes Acceleration For This Turn. A Pivot May Begin Before Travel; Choose 0 Travel To Stay In This Hex.</p>:<p>Speed Is Fixed For This Turn. The Options Below Are Validated Against Your Remaining Movement, Thrust And Manoeuvres.</p>}
   {e.commandDisabled&&<p>Command Systems Disabled: Inertial Movement Only</p>}
+  <p>Turning: {turns.length?(state.pivotActive?'Turn Into Pivot Is Available':'Available Under Manoeuvre'):turningReason}</p>
+  {turns.length>0&&<button className="secondary" onClick={()=>{setCategory('manoeuvre');setSelected(turns[0].name);setChoice(0);}}>Choose Turn</button>}
   <label>Movement Type<select value={category} onChange={e=>{setCategory(e.target.value);setSelected('');setChoice(0);}}><option value="movement">Movement</option><option value="manoeuvre">Manoeuvre</option></select></label>
   {current?<><label>{category==='movement'?'Movement Action':'Legal Manoeuvre'}<select value={current.name} onChange={e=>{setSelected(e.target.value);setChoice(0);}}>{options.map(o=><option key={o.name} value={o.name}>{o.name}</option>)}</select></label>
    {current.choices.length>1&&<label>Thruster Distribution<select value={Math.min(choice,current.choices.length-1)} onChange={e=>setChoice(Number(e.target.value))}>{current.choices.map((c,i)=><option key={i} value={i}>{Object.entries(c.action.thrusters||{}).map(([id,n])=>labelSystem(id)+' '+n).join(', ')}{c.overthrust.length?' · Overthrust Risk':''}</option>)}</select></label>}

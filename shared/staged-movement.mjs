@@ -1,7 +1,7 @@
 // Player-directed staged movement. The engine executes only the selected
 // segment, then waits for the next player choice. Compendium: Movement and
 // Speed; Turning; Turn Cost and Turn Delay.
-import {advanceHex,movementHeading} from './movement-rules.mjs';
+import {advanceHex,movementHeading,turnIntoPivotDirection} from './movement-rules.mjs';
 const integer=Number.isInteger;
 export function newStagedMovement({q,r,facing,speed,version=0}){
  if(![q,r,facing,speed,version].every(integer)||facing<0||facing>5||version<0)throw new RangeError('Invalid ship movement state');
@@ -35,16 +35,16 @@ export function stagedMove(state,action,limits){
  }
  if(action.type==='turn'){
   if(state.pivotInProgress||state.rollInProgress)throw new RangeError('Turn prohibited during active pivot or roll');
-  const facingAfter=(state.facing+action.direction+6)%6;
-  const pivotAligns=state.pivotActive&&facingAfter===(state.motionFacing??state.facing);
-  if(state.pivotActive&&!pivotAligns)throw new RangeError('Pivoted ship may only turn into its direction of motion');
+  const pivotAligns=state.pivotActive&&action.direction===turnIntoPivotDirection(state);
+  if(state.pivotActive&&!pivotAligns)throw new RangeError('Pivoted ship may only turn into its halted one-hexside pivot');
+  const facingAfter=pivotAligns?state.facing:(state.facing+action.direction+6)%6;
   if(![ -1,1 ].includes(action.direction))throw new RangeError('Turn must be one 60-degree step');
   if(state.turnDelayRemaining>0)throw new RangeError('Turn delay not satisfied');
   if(!integer(action.cost)||action.cost<1||!integer(action.delay)||action.delay<0)throw new RangeError('Verified turn cost and delay required');
   if(!integer(action.shortenBy||0)||action.shortenBy<0||action.shortenBy>Math.max(0,action.delay-(state.speed===0?0:1)))throw new RangeError('Invalid turn shortening');
   const spent=action.cost+(action.shortenBy??0);
   if(state.thrustSpent+spent>limits.availableThrust)throw new RangeError('Insufficient thrust');
-  return {...state,facing:(state.facing+action.direction+6)%6,motionFacing:facingAfter,pivotActive:pivotAligns?false:state.pivotActive,turnDelayRemaining:action.delay-(action.shortenBy??0),thrustSpent:state.thrustSpent+spent,started:true,version:state.version+1,history:[...state.history,{type:'turn',direction:action.direction,spent,shortenBy:action.shortenBy??0}]};
+  return {...state,facing:facingAfter,motionFacing:facingAfter,pivotActive:pivotAligns?false:state.pivotActive,turnDelayRemaining:action.delay-(action.shortenBy??0),thrustSpent:state.thrustSpent+spent,started:true,version:state.version+1,history:[...state.history,{type:'turn',direction:action.direction,spent,shortenBy:action.shortenBy??0}]};
  }
  throw new RangeError('Unknown movement action');
 }

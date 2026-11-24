@@ -28,6 +28,10 @@ export function movementHeading({motionFacing,facing,speed}){
  if(!Number.isInteger(heading)||heading<0||heading>5||!Number.isInteger(speed))throw new RangeError('Invalid movement heading');
  return (heading+(speed<0?3:0))%6;
 }
+export function turnIntoPivotDirection(state){
+ const offset=(state.facing-(state.motionFacing??state.facing)+6)%6;
+ return offset===1?1:offset===5?-1:null;
+}
 export function advanceHex({q,r},facing){
  if(!Number.isInteger(q)||!Number.isInteger(r)||!Number.isInteger(facing)||facing<0||facing>5)throw new RangeError('hex or facing');
  // Axial coordinates; 0 points north-east, clockwise.

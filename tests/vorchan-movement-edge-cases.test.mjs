@@ -42,12 +42,12 @@ test('extended turn cannot be cancelled voluntarily',()=>{
  assert.throws(()=>applyVorchanStage({ship:{...ship,...b.nextShip},privateState:b.nextPrivateState,turn:2,action:{type:'extended-cancel',thrusters:{}}}),/Voluntary/);
 });
 
-test('pivoted ship may turn into motion direction, but not away from it',()=>{
+test('turning into a halted one-hexside pivot aligns travel to the unchanged hull facing',()=>{
  const s={...base(3),facing:1,motionFacing:0,pivotActive:true,pivotInProgress:false};
  const limits={availableThrust:10,accelCost:2};
- assert.throws(()=>stagedMove(s,{type:'turn',direction:1,cost:2,delay:1},limits),/turn into/);
- const aligned=stagedMove(s,{type:'turn',direction:-1,cost:2,delay:1},limits);
+ assert.throws(()=>stagedMove(s,{type:'turn',direction:-1,cost:2,delay:1},limits),/turn into/);
+ const aligned=stagedMove(s,{type:'turn',direction:1,cost:2,delay:1},limits);
  assert.equal(aligned.pivotActive,false);
- assert.equal(aligned.facing,0);
- assert.equal(aligned.motionFacing,0);
+ assert.equal(aligned.facing,1);
+ assert.equal(aligned.motionFacing,1);
 });
