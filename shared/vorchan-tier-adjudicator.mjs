@@ -1,3 +1,4 @@
+import {hullProfile} from './vorchar.mjs';
 // W8: deterministic same-tier Vorchan damage reducer. This is a pure
 // adjudicator: no dice generation, no DB writes, and no invented defender
 // choices. The server must persist its input and result atomically.
@@ -9,7 +10,7 @@ export function adjudicateVorchanShipTier({ships,attacks,rollJournal,defenderCho
  if(!Array.isArray(ships)||!Array.isArray(attacks)||!Array.isArray(rollJournal))throw new RangeError('Tier inputs required');
  const byId=new Map(ships.map(s=>[s.id,s]));
  const dice=new Map(rollJournal.map(r=>[r.attackId,r]));
- const states=Object.fromEntries(ships.map(s=>[s.id,structuredClone(initialDamage[s.id]||(s.kind==='shuttle'?{shuttleDamage:s.damage,shipDestroyed:s.damage>=10}:initialVorchanDamage()))]));
+ const states=Object.fromEntries(ships.map(s=>[s.id,structuredClone(initialDamage[s.id]||(s.kind==='shuttle'?{shuttleDamage:s.damage,shipDestroyed:s.damage>=10}:initialVorchanDamage(s.public_state?.libraryId)))]));
  const outcomes=[],pending=[];
  const shots=attacks.filter(a=>a.hit===true).sort((a,b)=>a.order-b.order||a.id.localeCompare(b.id));
  for(const shot of shots){
@@ -22,7 +23,7 @@ export function adjudicateVorchanShipTier({ships,attacks,rollJournal,defenderCho
   if(!incoming||direction.requiresChoice&&!direction.choices?.includes(incoming)){
    pending.push({attackId:shot.id,type:'incoming',choices:direction.choices||[]});break;
   }
-  const rolledDamage=rollVorchanDamage({mountId:shot.mountId,chargeTurns:shot.chargeTurns??3,dice:rolled.damageDice,range:hexDistance(shooter,target),mode:shot.mode||'Standard',damageLoss:shooter.private_state?.trial?.condition?.effects?.weapons?.[shot.mountId]?.damageLoss||0});
+  const rolledDamage=rollVorchanDamage({libraryId:shooter.private_state?.trial?.libraryId||shooter.public_state?.libraryId,mountId:shot.mountId,chargeTurns:shot.chargeTurns??3,dice:rolled.damageDice,range:hexDistance(shooter,target),mode:shot.mode||'Standard',damageLoss:shooter.private_state?.trial?.condition?.effects?.weapons?.[shot.mountId]?.damageLoss||0});
   if(target.kind==='shuttle'){const marked=Math.min(10,states[target.id].shuttleDamage+rolledDamage.damage);const trace=[{systemId:'shuttle_hull',armour:0,marked:marked-states[target.id].shuttleDamage,destroyed:marked===10}];states[target.id]={shuttleDamage:marked,shipDestroyed:marked===10};outcomes.push({attackId:shot.id,targetId:target.id,damage:rolledDamage.damage,trace,shipDestroyed:marked===10});continue;}
   const side=['port','starboard'].includes(incoming);
   const relative=direction.relative;

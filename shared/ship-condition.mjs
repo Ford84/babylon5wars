@@ -1,3 +1,4 @@
+import {hullProfile,hullSystems} from './vorchar.mjs';
 import {VORCHAN_SCS_IDENTIFICATION as SCS,VORCHAN_THRUSTER_RATINGS} from './vorchan-scs-identification.mjs';
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
 import {initialVorchanDamage,vorchanPostTurnStructureLoss} from './vorchan-damage.mjs';
@@ -5,11 +6,20 @@ import {weaponCritical} from './vorchan-criticals.mjs';
 import {effectiveThrusterRating} from './thruster-criticals.mjs';
 export const SYSTEMS=new Map(SCS.systems.map(s=>[s.id,s]));
 export const SYSTEM_POWER=Object.freeze({...Object.fromEntries(LIB.weaponMounts.map(m=>[m.id,LIB.weapons.find(w=>w.id===m.weaponId).powerRequired])),sensors:4,jump_aft_centre:3});
-export const labelSystem=id=>SYSTEMS.get(id)?.displayName||id.replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase());
-export function newCondition(){return {damage:initialVorchanDamage(),effects:{weapons:{},thrusters:{},engineLoss:0,sensorLoss:0,reactorLoss:0,initiativeLoss:0,fireControlLoss:0,offensiveLimited:false,hangarSlow:0,hangarCollapse:0},lastCriticalTurn:0};}
+export function systemPowerForHull(id){
+ const hull=hullProfile(id);
+ if(!hull)return SYSTEM_POWER;
+ return Object.fromEntries(hull.scs.systems.flatMap(system=>{
+  const power=system.powerRequired??hull.weapons.find(weapon=>weapon.id===system.weaponCardId)?.powerRequired;
+  return power?[[system.id,power]]:[];
+ }));
+}
+export const labelSystem=id=>(id==='twin_nose_centre'?'Twin Array · Mount 1 (Nose)':SYSTEMS.get(id)?.displayName)||id.replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase());
+export function newCondition(libraryId){return {damage:initialVorchanDamage(libraryId),effects:{weapons:{},thrusters:{},engineLoss:0,sensorLoss:0,reactorLoss:0,initiativeLoss:0,fireControlLoss:0,offensiveLimited:false,hangarSlow:0,hangarCollapse:0},lastCriticalTurn:0};}
 export function effectiveCondition(trial,turn){
- const c=trial.condition||newCondition(),e=c.effects,d=c.damage;
- const destroyed=SCS.systems.filter(s=>(d.tracks[s.id]?.marked||0)>=s.boxes).map(s=>s.id);
+ const c=trial.condition||newCondition(trial.libraryId),e=c.effects,d=c.damage;
+ const systems=hullSystems(trial.libraryId);
+ const destroyed=systems.filter(s=>(d.tracks[s.id]?.marked||0)>=s.boxes).map(s=>s.id);
  const dead=id=>destroyed.includes(id);
  const shipDestroyed=!!d.shipDestroyed||dead('primary_structure')||dead('reactor');
  const commandDisabled=dead('command')||e.disabledTurn===turn;
@@ -18,12 +28,12 @@ export function effectiveCondition(trial,turn){
  return {destroyedSystems:destroyed,shipDestroyed,commandDisabled,powerOff,
  freeThrust:dead('engine')||commandDisabled||powerOff||engineShort==='off'?0:Math.max(0,10-e.engineLoss),
  engineShort,
- sensorStrength:dead('sensors')||commandDisabled||powerOff||trial.powerAllocation?.turn===turn&&trial.powerAllocation.deactivated?.includes('sensors')?0:Math.max(0,8-e.sensorLoss),
+ sensorStrength:dead('sensors')||commandDisabled||powerOff||trial.powerAllocation?.turn===turn&&trial.powerAllocation.deactivated?.includes('sensors')?0:Math.max(0,(hullProfile(trial.libraryId)||LIB).sensorStrength-e.sensorLoss),
  reactorLoss:e.reactorLoss,initiativeModifier:-e.initiativeLoss-(e.majorInitiativeTurn===turn?2:0),
  fireModifier:-e.fireControlLoss-(trial.movement?.state?.rollInProgress?3:0)-(trial.movement?.state?.pivotTurn===turn?3:0),
  offensiveLimited:e.offensiveLimited,ewLock:e.ewLock?.turn===turn?e.ewLock:null,
  thrusterRatings:Object.fromEntries(Object.entries(VORCHAN_THRUSTER_RATINGS).map(([id,r])=>[id,dead(id)?0:effectiveThrusterRating(r,e.thrusters[id])])),
- hangarCapacity:dead('hangar')?0:Math.max(0,SYSTEMS.get('hangar').boxes-(d.tracks.hangar?.marked||0)),weapons:e.weapons};
+ hangarCapacity:dead('hangar')?0:Math.max(0,systems.find(system=>system.id==='hangar').boxes-(d.tracks.hangar?.marked||0)),weapons:e.weapons};
 }
 // Compatibility projection is derived exclusively from the canonical condition.
 // The existing movement reducer consumes this projection, never editable fields.
@@ -40,13 +50,14 @@ export function rollDie(sides){const b=new Uint32Array(1),limit=Math.floor(42949
 export function criticalChecksForShip(trial,turn){
  const c=trial.condition;if(c.lastCriticalTurn===turn||effectiveCondition(trial,turn).shipDestroyed)return [];
  const checks=[];
- for(const systemId of new Set(c.damage.criticalCandidates||[])){const sys=SYSTEMS.get(systemId);if(sys&&sys.kind!=='structure'&&sys.kind!=='jump-engine'&&c.damage.tracks[systemId].marked<sys.boxes)checks.push({id:systemId+':damage',systemId,kind:'damage',excess:0});}
- for(const [systemId,l] of Object.entries(trial.movement?.turn===turn?trial.movement.thrusterLedger||{}:{}))if(l.used>l.rating&&c.damage.tracks[systemId].marked<SYSTEMS.get(systemId).boxes)checks.push({id:systemId+':overthrust',systemId,kind:'overthrust',excess:l.used-l.rating});
+ const systems=new Map(hullSystems(trial.libraryId).map(system=>[system.id,system]));
+ for(const systemId of new Set(c.damage.criticalCandidates||[])){const sys=systems.get(systemId);if(sys&&sys.kind!=='structure'&&sys.kind!=='jump-engine'&&c.damage.tracks[systemId].marked<sys.boxes)checks.push({id:systemId+':damage',systemId,kind:'damage',excess:0});}
+ for(const [systemId,l] of Object.entries(trial.movement?.turn===turn?trial.movement.thrusterLedger||{}:{}))if(l.used>l.rating&&c.damage.tracks[systemId].marked<systems.get(systemId).boxes)checks.push({id:systemId+':overthrust',systemId,kind:'overthrust',excess:l.used-l.rating});
  return checks;
 }
 export function resolveShipCritical(trial,turn,check,roll,secondaryRoll=null){
  if(!Number.isInteger(roll)||roll<1||roll>20||secondaryRoll!==null&&(!Number.isInteger(secondaryRoll)||secondaryRoll<1||secondaryRoll>20))throw new RangeError('Invalid critical die');
- const n=structuredClone(trial),c=n.condition,e=c.effects,id=check.systemId,sys=SYSTEMS.get(id),marked=c.damage.tracks[id].marked,m=roll+marked,overthrust=check.kind==='overthrust'?{excess:check.excess}:null;
+ const n=structuredClone(trial),c=n.condition,e=c.effects,id=check.systemId,sys=hullSystems(trial.libraryId).find(system=>system.id===id),marked=c.damage.tracks[id].marked,m=roll+marked,overthrust=check.kind==='overthrust'?{excess:check.excess}:null;
  const entry={systemId:id,roll,modifier:marked,total:m,kind:check.kind,effects:[]};
   if(sys.kind==='thruster'){
    // Ordinary damage checks and overthrust checks are independent.
@@ -56,7 +67,7 @@ export function resolveShipCritical(trial,turn,check,roll,secondaryRoll=null){
    if(effectiveThrusterRating(VORCHAN_THRUSTER_RATINGS[id],e.thrusters[id])===0)c.damage.tracks[id].marked=sys.boxes;
    entry.modifier+=overthrust?.excess||0;entry.total=total;entry.effects=[...(outlet?['Outlet Failure']:[]),...(efficiency?['Reduced Efficiency']:[])];
   }else if(sys.kind==='weapon'){
-   const crit=weaponCritical({systemId:id,roll,marked});
+   const crit=weaponCritical({systemId:id,roll,marked,libraryId:trial.libraryId});
    const w=e.weapons[id]||{rangeLoss:0,damageLoss:0};
    if(!(id.startsWith('twin_nose_')&&m>=20)&&crit.effects.includes('range_penalty_worsened'))w.rangeLoss++;
    if(!(id.startsWith('twin_nose_')&&m>=20)&&crit.effects.includes('damage_minus_2_per_die_minimum_1'))w.damageLoss+=2;
@@ -75,7 +86,7 @@ export function resolveShipCritical(trial,turn,check,roll,secondaryRoll=null){
   }else if(sys.kind==='command'){
    const sensors=()=>{e.sensorLoss+=2;e.offensiveLimited=true;entry.effects.push('Sensor Controls Damaged');};
    const major=()=>{e.initiativeLoss+=2;e.majorInitiativeTurn=turn+1;entry.effects.push('Major Communications Disruption');};
-   if(m<=8){e.ewLock={turn:turn+1,defensive:n.ewAllocation?.defensive||0,offensive:n.ewAllocation?.offensive||{}};entry.effects.push('EW Fixed Next Turn');}
+   if(m<=8){e.ewLock={turn:turn+1,defensive:n.ewAllocation?.defensive||0,offensive:n.ewAllocation?.offensive||{},elint:n.ewAllocation?.elint||{}};entry.effects.push('EW Fixed Next Turn');}
    else if(m<=11){e.initiativeLoss++;entry.effects.push('Initiative Reduced By 1');}
    else if(m<=14){e.fireControlLoss++;entry.effects.push('Fire Control Reduced By 1');}
    else if(m<=17)sensors();else if(m<=20)major();else if(m<=23){sensors();major();}
@@ -97,7 +108,7 @@ export function finishShipTurn(trial,turn,die=rollDie){
  if(trial.condition.lastCriticalTurn===turn)return {trial:structuredClone(trial),results:[]};
  let n=structuredClone(trial);const results=[];
  for(const check of criticalChecksForShip(n,turn)){
-  if(n.condition.damage.tracks[check.systemId].marked>=SYSTEMS.get(check.systemId).boxes)continue;
+  if(n.condition.damage.tracks[check.systemId].marked>=hullSystems(n.libraryId).find(system=>system.id===check.systemId).boxes)continue;
   const roll=die(20);let resolved=resolveShipCritical(n,turn,check,roll);
   if(resolved.requiresSecondary)resolved=resolveShipCritical(n,turn,check,roll,die(20));
   n=resolved.trial;results.push(resolved.result);

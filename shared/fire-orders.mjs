@@ -1,3 +1,4 @@
+import {hullProfile} from './vorchar.mjs';
 // W3: authoritative fire declarations and defensive reservations, without attack rolls.
 // The commit is secret until every participant has locked. Defensive assignment happens
 // only after simultaneous reveal and before the first firing die is rolled.
@@ -12,8 +13,8 @@ export function validateFireDeclaration({playerId,ships,fire,turn}){
  const byId=new Map(ships.map(s=>[s.id,s])),used=new Set(),out=[];
  for(const shot of fire.shots){
   if(!shot||!isId(shot.shipId)||!isId(shot.mountId)||!integer(shot.gun)||!['offensive','defensive'].includes(shot.role))throw new RangeError('Invalid gun declaration');
-  const ship=byId.get(shot.shipId),mount=mounts.get(shot.mountId);
-  if(!ship||ship.owner_id!==playerId||ship.public_state?.libraryId!==LIB.id||!mount)throw new RangeError('Weapon is not on your Vorchan');
+  const ship=byId.get(shot.shipId),mount=hullProfile(ship?.public_state?.libraryId)?.weaponMounts.find(m=>m.id===shot.mountId);
+  if(!ship||ship.owner_id!==playerId||!hullProfile(ship.public_state?.libraryId)?.weaponMounts.some(m=>m.id===shot.mountId)||!mount)throw new RangeError('Weapon is not on your Vorchan');
   const weapon=LIB.weapons.find(w=>w.id===mount.weaponId),gunCount=mount.weaponId==='twin-array'?2:1;
   if(shot.gun<1||shot.gun>gunCount)throw new RangeError('Gun number outside mount');
   const key=shot.shipId+':'+shot.mountId+':'+shot.gun;
@@ -58,7 +59,7 @@ export function validateDefensiveAssignment({playerId,ships,declarations,assignm
   const key=a.shipId+':'+a.mountId+':'+a.gun,defender=reserves.get(key),attack=attacks.get(a.attackId);
   if(used.has(key)||!defender||defender.playerId!==playerId||!attack||attack.playerId===playerId||attack.targetId!==a.shipId)throw new RangeError('Defence must use a unique reserved gun against an incoming attack');
   if(!byId.has(attack.shipId)||!byId.has(a.shipId))throw new RangeError('Unknown ship in defensive assignment');
-  const mount=mounts.get(a.mountId),weapon=LIB.weapons.find(w=>w.id===mount?.weaponId);
+  const mount=hullProfile(byId.get(a.shipId)?.public_state?.libraryId)?.weaponMounts.find(m=>m.id===a.mountId),weapon=LIB.weapons.find(w=>w.id===mount?.weaponId);
   if(!weapon||weapon.intercept===null)throw new RangeError('Gun cannot intercept');
   const arc=checkMountArc({shooter:byId.get(a.shipId),target:byId.get(attack.shipId),arc:mount.arc});
   if(!arc.allowed)throw new RangeError('Incoming attacker outside defensive firing arc');

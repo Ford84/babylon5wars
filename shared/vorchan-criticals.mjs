@@ -1,11 +1,12 @@
+import {hullSystems} from './vorchar.mjs';
 // 2nd Edition Rules Compendium, CRITICAL HITS, Basic Weapon Criticals.
 // Pure critical resolution for the Vorchan's verified weapon tracks. Other
 // system criticals must be routed through their own published charts.
 import {VORCHAN_SCS_IDENTIFICATION as SCS} from './vorchan-scs-identification.mjs';
 const systems=new Map(SCS.systems.map(s=>[s.id,s]));
 const integer=n=>Number.isInteger(n);
-export function weaponCritical({systemId,roll,marked,alreadyDestroyed=false}){
- const sys=systems.get(systemId);
+export function weaponCritical({systemId,roll,marked,alreadyDestroyed=false,libraryId}){
+ const sys=hullSystems(libraryId).find(s=>s.id===systemId);
  if(!sys||sys.kind!=='weapon'||!sys.verified||!integer(sys.boxes))throw new RangeError('Unverified or nonweapon critical system');
  if(!integer(roll)||roll<1||roll>20||!integer(marked)||marked<0||marked>sys.boxes)throw new RangeError('Invalid critical roll or damage');
  if(alreadyDestroyed||marked===sys.boxes||marked===0)return {eligible:false,systemId,effects:[]};
@@ -18,7 +19,7 @@ export function weaponCritical({systemId,roll,marked,alreadyDestroyed=false}){
 }
 export function criticalCandidatesForTurn({before,after}){
  if(!before?.tracks||!after?.tracks)throw new RangeError('Damage states required');
- return SCS.systems.filter(s=>s.kind!=='structure'&&s.verified&&integer(s.boxes)&&before.tracks[s.id]&&after.tracks[s.id]&&after.tracks[s.id].marked>before.tracks[s.id].marked&&after.tracks[s.id].marked<s.boxes)
+ return hullSystems(after.libraryId).filter(s=>s.kind!=='structure'&&s.verified&&integer(s.boxes)&&before.tracks[s.id]&&after.tracks[s.id]&&after.tracks[s.id].marked>before.tracks[s.id].marked&&after.tracks[s.id].marked<s.boxes)
  .map(s=>({systemId:s.id,kind:s.kind,marked:after.tracks[s.id].marked,criticalChart:s.kind==='weapon'?'basic_weapon':'requires_verified_chart'}));
 }
 export function applyWeaponCriticalEffects({rangePenaltyPerHex,damageDice,criticalEffects=[]}){

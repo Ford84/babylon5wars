@@ -1,9 +1,10 @@
+import {VORCHAR} from './vorchar.mjs';
 // B5W 2E Rules Compendium, Defensive Fire: a reserved gun may engage
 // exactly one incoming shot. Additional guns degrade by one point each,
 // never contributing a positive modifier. All decisions precede attack dice.
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
 const attackId=s=>[s.shipId,s.mountId,s.gun].join(':');
-const mounts=new Map(LIB.weaponMounts.map(m=>[m.id,m]));
+const mounts=new Map([...LIB.weaponMounts,...VORCHAR.weaponMounts].map(m=>[m.id,m]));
 export function interceptModifiers({declarations,defences}){
  if(!Array.isArray(declarations)||!Array.isArray(defences))throw new RangeError('Committed fire and defence required');
  const attacks=new Map(),reserves=new Map(),used=new Set(),byAttack=new Map();

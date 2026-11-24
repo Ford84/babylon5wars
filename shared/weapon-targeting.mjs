@@ -1,3 +1,4 @@
+import {hullProfile} from './vorchar.mjs';
 import {SHUTTLE} from './vorchan-operations.mjs';
 // B5W 2E Compendium, Weapons Fire: direction, arcs, LOS, EW and range.
 // Pure preview only. Missing SCS arc/LOS facts fail closed, never silently approve fire.
@@ -69,29 +70,30 @@ export function targetFireControlIndex(hullClass){
  if(['fighter','shuttle'].includes(hullClass))return 2;
  throw new RangeError('Unverified target hull class');
 }
-export function vorchanTargetingPreview({shooter,target,mountId,arc,blockingHexes=[],sameHexPrevious=null,defenderDirection=null,attackerOffensiveEW=0,targetDefensiveEW=0,otherModifiers=[],verifiedTerrain=true,rangePenaltyAdjustment=0}){
+export function vorchanTargetingPreview({shooter,target,mountId,arc,blockingHexes=[],sameHexPrevious=null,defenderDirection=null,attackerOffensiveEW=0,targetDefensiveEW=0,otherModifiers=[],verifiedTerrain=true,rangePenaltyAdjustment=0,elintOffensive=0,elintDefensive=0,disruptedEW=0}){
  if(!shooter||!target||shooter.id===target.id)throw new RangeError('Distinct ships required');
- if(shooter.libraryId!==VORCHAN.id||shooter.hullClass!==VORCHAN.class)throw new RangeError('Shooter SCS weapon profile is not verified');
- const mount=VORCHAN.weaponMounts.find(m=>m.id===mountId);
+ const shooterHull=hullProfile(shooter.libraryId),targetHull=hullProfile(target.libraryId);
+ if(!shooterHull||shooter.hullClass!==shooterHull.class)throw new RangeError('Shooter SCS weapon profile is not verified');
+ const mount=shooterHull.weaponMounts.find(m=>m.id===mountId);
  if(!mount)throw new RangeError('Unknown Vorchan mount');
- const weapon=VORCHAN.weapons.find(w=>w.id===mount.weaponId);
+ const weapon=shooterHull.weapons.find(w=>w.id===mount.weaponId);
  const distance=hexDistance(shooter,target);
  const attackArc=checkMountArc({shooter,target,arc:arc??mount.arc,sameHexPrevious});
  const incoming=facingDirections(shooter,target,{sameHexPrevious});
  const direction=incoming.requiresChoice?(incoming.choices?.includes(defenderDirection)?defenderDirection:null):incoming.direction;
  const los=verifiedTerrain?lineOfSight({shooter,target,blockingHexes}):{clear:false,reason:'Terrain and LOS not verified'};
- if(!(target.libraryId===SHUTTLE.id&&target.hullClass==='shuttle')&&(target.libraryId!==VORCHAN.id||target.hullClass!==VORCHAN.class))throw new RangeError('Target SCS defence and hull class are not verified');
- const defence=direction?(target.hullClass==='shuttle'?SHUTTLE.defence:VORCHAN.defence)[direction]:null;
+ if(!(target.libraryId===SHUTTLE.id&&target.hullClass==='shuttle')&&(!targetHull||target.hullClass!==targetHull.class))throw new RangeError('Target SCS defence and hull class are not verified');
+ const defence=direction?(target.hullClass==='shuttle'?SHUTTLE.defence:targetHull.defence)[direction]:null;
  const fireControl=weapon.fireControl[targetFireControlIndex(target.hullClass)];
  const rangePenalty=weaponRangePenalty({range:distance,penaltyPerStep:weapon.rangePenaltyPerHex-rangePenaltyAdjustment});
  const ew=ewAttackModifier({attackerOffensive:attackerOffensiveEW,targetDefensive:targetDefensiveEW,rangePenalty});
  if(!Array.isArray(otherModifiers)||otherModifiers.some(x=>!x||!int(x.value)||x.verified!==true||typeof x.reason!=='string'))throw new RangeError('Unverified additional modifier');
  const extra=otherModifiers.reduce((n,m)=>n+m.value,0);
- const total=defence===null?null:defence+fireControl+ew.total+extra;
+ const total=defence===null?null:defence+fireControl+ew.total+extra+elintOffensive-elintDefensive;
  const blockers=[];
  if(!attackArc.allowed)blockers.push(attackArc.reason||'Arc decision pending');
  if(!los.clear)blockers.push(los.reason||'Line of sight blocked');
  if(!direction)blockers.push('Defender must choose incoming boundary direction');
- return {readyForHitRoll:blockers.length===0,blockers,mountId,weaponId:weapon.id,distance,attackArc,incoming,chosenDirection:direction,los,breakdown:{baseDefence:defence,distance,rangePerHex:distance?ew.adjustedRangePenalty/distance:weapon.rangePenaltyPerHex-rangePenaltyAdjustment,lockedOn:ew.lockedOn,offensiveEW:ew.offensiveBonus,defensiveEW:ew.defensivePenalty,fireControl,rangePenalty:ew.adjustedRangePenalty,extra,total},hitOnD20AtOrBelow:total};
+ return {readyForHitRoll:blockers.length===0,blockers,mountId,weaponId:weapon.id,distance,attackArc,incoming,chosenDirection:direction,los,breakdown:{baseDefence:defence,elintOffensive,elintDefensive,disruptedEW,distance,rangePerHex:distance?ew.adjustedRangePenalty/distance:weapon.rangePenaltyPerHex-rangePenaltyAdjustment,lockedOn:ew.lockedOn,offensiveEW:ew.offensiveBonus,defensiveEW:ew.defensivePenalty,fireControl,rangePenalty:ew.adjustedRangePenalty,extra,total},hitOnD20AtOrBelow:total};
 }
 export function resolveToHit(preview,roll){if(!preview?.readyForHitRoll)throw new RangeError('Targeting preview not validated');if(!int(roll)||roll<1||roll>20)throw new RangeError('d20 must be 1–20');return {roll,hit:roll<=preview.hitOnD20AtOrBelow,targetNumber:preview.hitOnD20AtOrBelow,breakdown:preview.breakdown};}

@@ -22,7 +22,7 @@ export default function GuidedCombat({detail,userId,send,busy,onAttackRevealed})
   {r.stage==='system_choice'&&<p>The defender selects which eligible {labelSystem(r.token)} receives this hit.</p>}
   {r.selected&&<p>Selected System: <strong>{labelSystem(r.selected)}</strong></p>}
   {r.damage&&!animating&&<><DamageRollResult result={r.damage}/>{r.trace.map((t,i)=><p key={i}>{labelSystem(t.systemId)} · Armour {t.armour} · {t.marked} Boxes Marked{t.destroyed?' · Destroyed':''}</p>)}</>}
-  {['location_roll','location_result','primary_roll','primary_result'].includes(r.stage)&&<RuleTable title={'Possible '+labelSystem(r.chart)+' Hit Locations'} rows={locationTable(r.chart)} locations selected={!animating&&locationResult?r.locationResults.at(-1)?.roll:null} note="The firing player rolls; the defender chooses among eligible systems when required. Primary means a second roll on the Primary Hits table."/>}
+  {['location_roll','location_result','primary_roll','primary_result'].includes(r.stage)&&<RuleTable title={'Possible '+labelSystem(r.chart)+' Hit Locations'} rows={locationTable(r.chart,target?.public_state.libraryId)} locations selected={!animating&&locationResult?r.locationResults.at(-1)?.roll:null} note="The firing player rolls; the defender chooses among eligible systems when required. Primary means a second roll on the Primary Hits table."/>}
   {!mine&&<p>Waiting For {actor?.display_name||'The Other Player'}</p>}
   {isRoll&&<button disabled={busy||!mine} onClick={()=>action('combat-roll')}>{labels[r.stage]}</button>}
   {isResult&&!animating&&<button disabled={busy||!mine} onClick={()=>action('combat-ok')}>OK</button>}
