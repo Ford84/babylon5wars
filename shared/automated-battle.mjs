@@ -214,7 +214,7 @@ export function executeBattle(state,playerId,command,die=rollDie){
   if(members(s).every(p=>s.locks[p])){record(s,'ew_allocations_revealed',{allocations:s.ships.map(x=>({shipId:x.id,ownerId:x.owner_id,shipLabel:x.label,...trial(x).ewAllocation}))});startMovement(s);}
  }else if(command.type==='move'&&s.phase==='movement'){
   const action=command.action,advanceAfter=command.advanceAfter??0;
-  if(!int(advanceAfter)||advanceAfter>10000||advanceAfter&&['advance','slide','extended-start','extended-cancel'].includes(action?.type))fail('Invalid automatic movement segment');
+  if(!int(advanceAfter)||advanceAfter>10000||advanceAfter&&['advance','slide','extended-cancel'].includes(action?.type))fail('Invalid automatic movement segment');
   if(!action||e.commandDisabled&&action.type!=='advance')fail('Command damage permits only inertial movement');
   if(e.powerOff&&action.type!=='advance')fail('Reactor shutdown permits only inertial movement');
   const before=s.ships.map(x=>({id:x.id,q:x.q,r:x.r}));
