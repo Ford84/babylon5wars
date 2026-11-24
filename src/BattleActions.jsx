@@ -70,7 +70,7 @@ function Movement({t,ship,turn,detail,send,busy}){
    <p>{pick.cost} Engine Thrust · Destination ({destination.q}, {destination.r}) · Speed {destination.speed}</p>
    {!!pick.overthrust.length&&<p className="error">End-Of-Turn Critical Checks: {pick.overthrust.map(x=>labelSystem(x.id)+' +'+x.excess+' Overthrust').join(', ')}</p>}
    <button disabled={busy} onClick={()=>send({type:'move',action:pick.action,advanceAfter})}>{pick.action.type==='advance'?'Move Selected Segment':'Commit Thrust And Move'}</button>
-  </>:<p>{category==='movement'?`No normal movement remains at speed ${ship.speed}. Choose Manoeuvre to use remaining thrust, or finish movement.`:'No legal manoeuvre is currently available.'}</p>}
+  </>:<p>{category==='movement'?(t.movement.state.remaining>0?'Normal Travel Is Blocked Until The Carried Extended Turn Is Completed. Choose Manoeuvre.':`No normal movement remains at speed ${ship.speed}. Choose Manoeuvre to use remaining thrust, or finish movement.`):'No legal manoeuvre is currently available.'}</p>}
   <button disabled={busy||t.movement.state.remaining!==0} className="secondary" onClick={()=>send({type:'movement-done'})}>Finish Movement</button>
  </>;
 }
