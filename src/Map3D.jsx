@@ -1,3 +1,5 @@
+import MapNavigation,{useMapNavigation} from './MapNavigation.jsx';
+import {hexWorld,mapCameraTarget} from '../shared/map-camera.mjs';
 import {createWeaponAnimator} from './weapon-effects-3d.js';
 import React,{useEffect,useRef,useState} from 'react';
 import * as THREE from 'three';
@@ -16,7 +18,7 @@ export async function saveLocalVorchanModel(file){if(!file||file.size>30*1024*10
 export async function clearLocalVorchanModel(){await storedTyrelModel(null);}
 export async function hasLocalVorchanModel(){return !!(await storedTyrelModel());}
 
-const hexPoint=(q,r)=>({x:Math.sqrt(3)*12*(q+r/2),z:18*r});
+const hexPoint=hexWorld;
 function makeVorchan(){
  const g=new THREE.Group(),purple=getVorchanMaterial(),hull=purple,trim=purple,dark=new THREE.MeshStandardMaterial({color:0x302638,metalness:.12,roughness:.8}),engine=new THREE.MeshBasicMaterial({color:0x69c7ff});
  const poly=(pts,material,height=.6)=>{const s=new THREE.Shape();s.moveTo(pts[0][0],pts[0][1]);pts.slice(1).forEach(p=>s.lineTo(...p));s.closePath();const geo=new THREE.ExtrudeGeometry(s,{depth:height,bevelEnabled:true,bevelSize:.12,bevelThickness:.08,bevelSegments:1});geo.rotateX(-Math.PI/2);const m=new THREE.Mesh(geo,material);g.add(m);return m;};
@@ -28,21 +30,22 @@ function makeVorchan(){
 export default function Map3D({ships,selected,setSelected,preset='standard',modelId=DEFAULT_VORCHAN_MODEL_ID,volley}){
  const modelUrl=vorchanModelById(modelId).url;
  const volleyRef=useRef(volley);volleyRef.current=volley;
- const mount=useRef(null),engine=useRef(null),[zoom,setZoom]=useState(1),[localModel,setLocalModel]=useState(null),[modelStatus,setModelStatus]=useState('Loading model');
+ const mount=useRef(null),engine=useRef(null),[localModel,setLocalModel]=useState(null),[modelStatus,setModelStatus]=useState('Loading model');
  useEffect(()=>{let alive=true;storedTyrelModel().then(data=>{if(alive&&data){setLocalModel(data);setModelStatus('Tyrel Lohr Vorchan — saved default model');}}).catch(()=>{});return()=>{alive=false}},[]);
  const dims={standard:[20,32],outer:[40,64],inner:[80,128]}[preset]||[20,32];
+ const navigation=useMapNavigation(selected,dims[1]),viewRef=useRef(navigation.view);viewRef.current=navigation.view;
  useEffect(()=>{
   const host=mount.current;if(!host)return;
   let renderer;try{renderer=new THREE.WebGLRenderer({antialias:true,alpha:false});}catch{setModelStatus('WebGL unavailable');return;}
   renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));renderer.setSize(host.clientWidth,Math.max(360,host.clientHeight));renderer.setClearColor(0x071328);host.appendChild(renderer.domElement);
   const scene=new THREE.Scene(),camera=new THREE.OrthographicCamera(-150,150,90,-90,.1,2000);
   scene.add(new THREE.AmbientLight(0xb2c4ff,2));const light=new THREE.DirectionalLight(0xffffff,2.5);light.position.set(50,120,40);scene.add(light);
-  const [cols,rows]=dims,centre=hexPoint((cols-1)/2,(rows-1)/2);const base=Math.max(190,rows*19);
+  const [cols,rows]=dims;const base=Math.max(190,rows*19);
   const geometry=new THREE.BufferGeometry(),points=[];
   for(let q=0;q<cols;q++)for(let r=0;r<rows;r++){const p=hexPoint(q,r);for(let k=0;k<6;k++){const a=(60*k-30)*Math.PI/180,b=(60*(k+1)-30)*Math.PI/180;points.push(p.x+12*Math.cos(a),0,p.z+12*Math.sin(a),p.x+12*Math.cos(b),0,p.z+12*Math.sin(b));}}
   geometry.setAttribute('position',new THREE.Float32BufferAttribute(points,3));scene.add(new THREE.LineSegments(geometry,new THREE.LineBasicMaterial({color:0x3b5b7c,transparent:true,opacity:.55})));
   const ray=new THREE.Raycaster(),mouse=new THREE.Vector2(),pick=[],models=[];
-  const updateCamera=()=>{const aspect=host.clientWidth/Math.max(360,host.clientHeight),scale=base/zoom;camera.left=-scale*aspect/2;camera.right=scale*aspect/2;camera.top=scale/2;camera.bottom=-scale/2;camera.position.set(centre.x+scale*.12,scale*.8,centre.z+scale*.9);camera.lookAt(centre.x,0,centre.z);camera.updateProjectionMatrix();renderer.setSize(host.clientWidth,Math.max(360,host.clientHeight));renderer.render(scene,camera);};
+  const updateCamera=()=>{const aspect=host.clientWidth/Math.max(360,host.clientHeight),view=viewRef.current,centre=mapCameraTarget(view,ships,cols,rows),scale=Math.max(base,Math.sqrt(3)*12*(cols+rows/2)/aspect*1.1)/view.zoom;camera.left=-scale*aspect/2;camera.right=scale*aspect/2;camera.top=scale/2;camera.bottom=-scale/2;camera.position.set(centre.x+scale*.12,scale*.8,centre.z+scale*.9);camera.lookAt(centre.x,0,centre.z);camera.far=scale*4+1000;camera.updateProjectionMatrix();renderer.setSize(host.clientWidth,Math.max(360,host.clientHeight));renderer.render(scene,camera);};
   const redraw=(modelFactory)=>{for(const item of models)scene.remove(item);models.length=0;pick.length=0;ships.forEach((s,i)=>{if(!Number.isInteger(s.q)||!Number.isInteger(s.r)||s.q<0||s.r<0||s.q>=cols||s.r>=rows)return;const p=hexPoint(s.q,s.r),model=modelFactory();model.position.set(p.x,1,p.z);model.rotation.y=(s.facing||0)*Math.PI/3;scene.add(model);models.push(model);model.traverse(o=>{if(o.isMesh){o.userData.shipId=s.id??i;pick.push(o);}});const ring=new THREE.Mesh(new THREE.RingGeometry(8,9,32),new THREE.MeshBasicMaterial({color:selected===(s.id??i)?0x8bdcff:0x446c9c,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.set(p.x,.1,p.z);scene.add(ring);models.push(ring);});updateCamera();};
   let factory=()=>makeVorchan(),alive=true;redraw(factory);
   const useGeometry=(geometry,label)=>{geometry.computeVertexNormals();geometry.computeBoundingBox();const size=geometry.boundingBox.getSize(new THREE.Vector3());const centre=geometry.boundingBox.getCenter(new THREE.Vector3());geometry.translate(-centre.x,-centre.y,-centre.z);applyVorchanColourScheme(geometry);const scale=14/Math.max(size.x,size.y,size.z,1);const material=getVorchanMaterial({detailed:true});factory=()=>{const group=new THREE.Group();const mesh=new THREE.Mesh(geometry,material);mesh.scale.setScalar(scale);mesh.rotation.x=-Math.PI/2;group.add(mesh);return group;};setModelStatus(label);redraw(factory);};
@@ -51,12 +54,12 @@ export default function Map3D({ships,selected,setSelected,preset='standard',mode
   cachedPublicGeometry(modelUrl).then(geometry=>{if(alive)useGeometry(geometry,'Tyrel Lohr Vorchan · public model');}).catch(()=>{if(!alive)return;new GLTFLoader().load(FALLBACK_MODEL,gltf=>{if(!alive)return;const source=gltf.scene;source.traverse(o=>{if(o.isMesh){applyVorchanColourScheme(o.geometry);o.material=getVorchanMaterial({detailed:true});}});source.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(source),sz=box.getSize(new THREE.Vector3());const factor=14/Math.max(sz.x,sz.y,sz.z,1);factory=()=>{const obj=source.clone(true);obj.scale.setScalar(factor);return obj;};setModelStatus('Coloured Vorchan preview · public model unavailable');redraw(factory);},undefined,()=>{if(alive)setModelStatus('3D Vorchan preview unavailable');});});}
 
   const onClick=e=>{const rect=renderer.domElement.getBoundingClientRect();mouse.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(mouse,camera);const hits=ray.intersectObjects(pick,false);if(hits.length)setSelected(hits[0].object.userData.shipId);};
-  const onWheel=e=>{e.preventDefault();setZoom(z=>Math.min(12,Math.max(.4,z*(e.deltaY<0?1.15:1/1.15))));};
+  const onWheel=e=>{e.preventDefault();navigation.zoomBy(e.deltaY<0?1.15:1/1.15);};
   renderer.domElement.addEventListener('click',onClick);renderer.domElement.addEventListener('wheel',onWheel,{passive:false});const weaponAnimator=createWeaponAnimator(scene,()=>renderer.render(scene,camera),hexPoint);engine.current={updateCamera,playWeapons:weaponAnimator.play};weaponAnimator.play(volleyRef.current);
   const resize=new ResizeObserver(updateCamera);resize.observe(host);updateCamera();
   return()=>{alive=false;weaponAnimator.dispose();resize.disconnect();renderer.domElement.removeEventListener('click',onClick);renderer.domElement.removeEventListener('wheel',onWheel);renderer.dispose();host.removeChild(renderer.domElement);engine.current=null;};
  },[preset,ships,selected,setSelected,localModel,modelUrl]);
- useEffect(()=>engine.current?.updateCamera(),[zoom]);
+ useEffect(()=>engine.current?.updateCamera(),[navigation.view]);
  useEffect(()=>engine.current?.playWeapons(volley),[volley]);
- return <div><div className="map3d-controls"><button type="button" onClick={()=>setZoom(z=>Math.max(.4,z/1.3))}>− Zoom out</button><button type="button" onClick={()=>setZoom(z=>Math.min(12,z*1.3))}>+ Zoom in</button><button type="button" onClick={()=>setZoom(1)}>Reset camera</button><span>{modelStatus}</span></div><div ref={mount} className="map3d-viewport" aria-label="Interactive 3D tactical hex battlefield"/></div>;
+ return <div><MapNavigation navigation={navigation} ships={ships} setSelected={setSelected}/><div ref={mount} className="map3d-viewport" aria-label="Interactive 3D tactical hex battlefield"/><p className="hint">{modelStatus}</p></div>;
 }

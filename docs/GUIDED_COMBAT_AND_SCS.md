@@ -15,3 +15,11 @@ Movement is grouped under Movement and Manoeuvre. Speed determines total normal 
 The original SCS PDF references fonts without embedding them. `scripts/build-scs-outlines.py` rebuilds the SVG lettering using supplied City font outlines, a City substitute for unavailable display faces and DejaVu Sans Mono for OCR labels. Character positions, ship geometry and all 281 damage-box coordinates are preserved. The SVG needs no installed fonts. Run with the original PDF path and output SVG path; dependencies are PyMuPDF, fontTools, repository City fonts and system DejaVu Sans Mono. Duplicate Weapon Mounts cards were removed from the SCS modal; the original sheet remains complete.
 
 Validation: 251 engine/API/asset tests, production build, and browser checks of three consecutive normal hexes, exhausted movement, manoeuvre choices, the full guided hit/location/damage sequence, final acknowledgement, and legible SCS lettering with six damage marks. Existing rules/scenario exclusions still apply; this change is not a claim that every published weapon rule is implemented.
+
+## Labels And Map Navigation Follow-up
+
+System labels now use Plasma Accelerator (Mount 1), Twin Array (Mount 2/Port and Mount 3/Starboard), Jump Engine, Command And Control and explicit thruster names. Saved internal IDs are unchanged, so historical log records display the corrected names too. Critical-effect identifiers are displayed as words.
+
+Both map views provide zoom, pan, Show Whole Map and Find buttons for each ship. Zoom anchors to a ship and focus follows its current position; pan offsets persist until refocusing or resetting. The 3D camera reads current view state instead of a stale zoom closure and fits the board to the viewport aspect ratio. The 2D SVG fits the visible map panel so a centred ship cannot be hidden below a clipped SVG. Log numbering and padding sit inside each entry border, including on narrow screens.
+
+Validation: 253 tests and production build; browser checks of power labels, narrow log cards, 2D find/pan/zoom and the 3D controls. WebGL rendering is unavailable in the test browser, so the 3D renderer itself was not visually verified in this follow-up.
