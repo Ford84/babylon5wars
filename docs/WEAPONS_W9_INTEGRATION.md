@@ -1,5 +1,7 @@
 # W9 — Live Vorchan combat integration
 
+Historical milestone. For the current playable scenario and automated rules, see [Automated Vorchan Battle](AUTOMATED_VORCHAN_BATTLE.md).
+
 ## Implemented on development branch
 
 1. **Verified board input.** Migration `0004_combat_executor.sql` introduces one immutable `combat_terrain` record per game/turn. The host must explicitly confirm all blocking hexes via `POST /api/games/:id/combat-terrain`; the server will not silently assume empty terrain. `GET /fire-resolution` reads the saved terrain and passes it into the real LOS/arc/EW calculation.

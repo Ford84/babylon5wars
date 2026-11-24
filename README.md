@@ -1,12 +1,16 @@
-# Babylon 5 Wars — Stage 1
+# Babylon 5 Wars
 
-Early multiplayer prototype using React, a Cloudflare Worker, D1 database and private R2 ship-image storage. This is **not yet a complete implementation of the tabletop rules**. The live prototype is hosted on Cloudflare; end-to-end multiplayer acceptance checks remain outstanding.
+Multiplayer Vorchan ship duels using React, a Cloudflare Worker and D1. The current playable scenario is **two corrected Vorchans in clear space**. It automates condition, movement, EW, ship weapons, interception, damage, criticals and end-of-turn upkeep; it does not claim to implement every tabletop scenario or unit type.
+
+## Play
+
+Create a battle, invite a second player, choose starting hexes and facings, assign the two ships and start. The six phases show decisions the engine can apply: ship power, initiative, electronic warfare, movement, weapon orders, defence and damage. Dice and results come from the server. Empty defence steps and actions unavailable because of damage advance automatically.
+
+Open either ship’s live SCS to inspect recorded damage. EW and weapon commitments stay private until both players lock. Reloading preserves dice, damage choices and criticals. Start a **new battle** for these rules: earlier battles retain their existing records and are not silently converted.
+
+Scenario limits and the explicit interpretation of the printed weapon-critical chart’s missing result 13 are documented in [Automated Vorchan Battle](docs/AUTOMATED_VORCHAN_BATTLE.md).
 
 ## Build and test
-
-GitHub Actions runs automatically on pushes to main. See the **Build and test** workflow. It installs dependencies, runs the unit tests and builds the Vite frontend.
-
-Local commands:
 
 ```sh
 npm install
@@ -14,24 +18,18 @@ npm test
 npm run build
 ```
 
-The initial repository does not include a lockfile; once generated, commit `package-lock.json` and switch CI from `npm install` to `npm ci`.
+Node 22.13 or newer is required for the SQLite-backed API integration tests and local preview. `npm run dev` serves the real Worker API and frontend using an ignored, local SQLite database. No Cloudflare credentials are required for preview.
 
 ## Deployment
 
-The `Deploy to Cloudflare` workflow runs on pushes to `main` that touch application, migration, test or deployment files, and can also be started manually. It builds and runs the test suite, applies pending D1 migrations, then deploys the Worker. In GitHub repository settings, configure Actions secrets `CLOUDFLARE_API_TOKEN` (scoped for Workers deployment) and `CLOUDFLARE_ACCOUNT_ID`. Do not commit credentials.
+GitHub Actions runs tests and builds on pull requests. The `Deploy to Cloudflare` workflow applies pending D1 migrations and deploys on application changes merged into `main`. Repository Actions secrets provide `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`; never commit credentials.
 
-The Cloudflare Worker is named `babylon5wars`, with D1 `b5w-private` and R2 `b5w-ship-images`. Check the live migration tracker before any manual schema changes.
+The Worker is `babylon5wars`, D1 is `b5w-private`, and R2 is `b5w-ship-images`. The authoritative snapshot and its revision, ship mirrors and event journal are committed in one database transaction.
 
-## Public ship model
+## Public ship model and presentation
 
-The app includes the selected Attack Cruiser RC2 Vorchan STL model supplied by the project owner. The gallery and tactical board credit Tyrel Lohr and link to the original [Cults3D model listing](https://cults3d.com/en/3d-model/game/centauri-vorchan-attack-cruiser). Public model assets are in `public/models/vorchan/`. The viewer uses a restrained, geometry-aligned hull palette instead of projecting a reference image onto the STL. Battle setup saves the shared board size and public model choice; the 2D/3D view preference and optional STL override are local to each browser. Battle hosts can delete their battles from the lobby.
+The selected Attack Cruiser RC2 STL is credited to Tyrel Lohr with its original [Cults3D listing](https://cults3d.com/en/3d-model/game/centauri-vorchan-attack-cruiser). Public assets are in `public/models/vorchan/`. The shared board size and model are saved at setup; 2D/3D preference and optional local STL overrides remain browser preferences.
 
-## Interface and SCS reference
+City is the interface font and Babylon 5 supplies headings. The SCS uses the original, non-inverted component diagram and a live overlay for the 281 verified damage boxes. Weapon mounts and a collapsible condition register remain available without exposing manual ruling forms.
 
-City is the primary interface font; Babylon 5 is used for headings. The Vorchan systems view pairs the SCS component diagram with weapon-mount records and a text component register. It is a static reference, not a live damage display. Forward external thruster damage tracks remain unverified and must not be treated as combat-ready.
-
-## Remaining acceptance checks
-
-Test registration, login, invitations, two independent players submitting secret orders, turn advancement, stale and simultaneous submissions, image upload/download, and logout. Review authentication and privacy before inviting friends.
-
-The GitHub repository is currently public; avoid committing copyrighted rulebooks, proprietary ship data, API tokens or personal information. It can be made private once the build is established.
+Older milestone documents describe historical implementations. The automated-battle document above is the current source of truth for gameplay scope.
