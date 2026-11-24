@@ -33,6 +33,7 @@ export function weaponReadiness({mountId,turn,trial,gun=1,chargeTurns=null}){
  if(trial?.condition){const condition=effectiveCondition(trial,turn);if(condition.shipDestroyed)reasons.push('Ship destroyed');if(condition.commandDisabled)reasons.push('Command systems disabled');if(condition.powerOff)reasons.push('Reactor shut down');}
 
  if(!trial||trial.libraryId!==LIB.id)reasons.push('Authoritative Vorchan SCS state missing');
+ if(trial?.condition?.effects.weapons[mountId]?.destroyedGuns?.includes(gun))reasons.push('Gun destroyed by a critical hit');
  if(trial?.destroyedSystems?.includes(mountId))reasons.push('Mount destroyed');
  if(trial?.powerAllocation?.deactivated?.includes(mountId))reasons.push('Mount deactivated');
  if(!mount.firingArcVerified)reasons.push('Physical SCS firing arc unverified');

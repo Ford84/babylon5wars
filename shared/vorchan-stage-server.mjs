@@ -80,6 +80,7 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[],m
   if(cost>limits.availableThrust)throw new RangeError('Insufficient thrust to complete extended turn; use forced cancellation if physically impossible');
   next={...old,facing:(old.facing+ext.direction+6)%6,motionFacing:(old.facing+ext.direction+6)%6,turnDelayRemaining:delay-shortenBy,turnDelayOriginal:delay-shortenBy,hexesSinceTurn:0,extendedTurn:null,thrustSpent:cost,started:true,version:old.version+1,history:[...old.history,{type:'extended-complete',direction:ext.direction,spent:cost,shortenBy}]};
  }else if(['pivot-start','pivot-halt','roll-start','roll-halt'].includes(action.type)){
+  if(old.rollInProgress&&action.type!=='roll-halt')throw new RangeError('Halt the roll before another orientation manoeuvre');
   const cost=action.type.startsWith('pivot')?LIB.pivotCost[action.type==='pivot-start'?0:1]:LIB.rollCost[action.type==='roll-start'?0:1];
   if(!Number.isInteger(cost)||cost<0)throw new RangeError('Manoeuvre cost not verified');
   if(old.thrustSpent+cost>limits.availableThrust)throw new RangeError('Insufficient thrust for orientation manoeuvre');

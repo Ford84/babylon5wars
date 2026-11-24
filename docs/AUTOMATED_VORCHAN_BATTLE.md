@@ -16,7 +16,7 @@ A reactor breach permits shutdown to avoid the recorded per-turn containment ris
 
 ## Removed manual workflows
 
-The active scenario exposes six phases: ship power, initiative, EW, movement, weapon orders, defence and damage. Initiative and opposing tie rolls, attack/location/damage dice, critical rolls and upkeep use server-generated dice. The engine advances after all required decisions; it skips empty defence, unavailable fire, inactive sensors and completed movement with no remaining manoeuvre.
+The active scenario exposes seven phases: ship power, initiative, EW, movement, weapon orders, defence and damage, and end-of-turn critical checks. Initiative and opposing tie rolls, attack/location/damage dice, critical rolls and upkeep use server-generated dice. The engine advances after all required decisions; it skips empty defence, unavailable fire, inactive sensors and completed movement with no remaining manoeuvre.
 
 Players choose power allocations, EW, legal manoeuvres and physical thruster distributions, gun roles, charge intervals, attack order, reserved interception and eligible defender allocations. They do not enter dice, hit numbers, damage totals, critical effects, initiative ranks, terrain JSON, free-form rulings or completion checklists. Legacy outcome-writing routes return HTTP 410. Imported templates cannot enter this scenario.
 

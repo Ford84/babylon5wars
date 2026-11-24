@@ -1,3 +1,5 @@
+import {movementHeading} from './movement-rules.mjs';
+import {beginCriticals,advanceCriticals,criticalView} from './guided-criticals.mjs';
 import {commitMovement} from './movement-commit.mjs';
 import {beginGuidedCombat,advanceGuidedCombat,guidedCombatView} from './guided-combat.mjs';
 import {movementOptions} from './movement-options.mjs';
@@ -13,11 +15,11 @@ import {unitInitiative} from './initiative-sequence.mjs';
 import {newStagedMovement} from './staged-movement.mjs';
 import {orientationAtMovementStart} from './orientation-stage.mjs';
 import {extraEWCost} from './preturn.mjs';
-import {newCondition,effectiveCondition,projectTrial,SYSTEMS,SYSTEM_POWER,rollDie,finishShipTurn} from './ship-condition.mjs';
+import {newCondition,effectiveCondition,projectTrial,SYSTEMS,SYSTEM_POWER,rollDie,finishShipTurn,finishCriticalUpkeep} from './ship-condition.mjs';
 export const PLAY_PHASES=Object.freeze([
  {id:'power',label:'Ship Power',group:'initial'}, {id:'initiative',label:'Initiative',group:'initial'},
  {id:'ew_commit',label:'Electronic Warfare',group:'initial'}, {id:'movement',label:'Ship Movement',group:'movement'},
- {id:'fire_commit',label:'Weapon Orders',group:'combat'}, {id:'fire_resolution',label:'Defence And Damage',group:'combat'}
+ {id:'fire_commit',label:'Weapon Orders',group:'combat'}, {id:'fire_resolution',label:'Defence And Damage',group:'combat'}, {id:'critical_resolution',label:'Critical Checks',group:'end'}
 ]);
 export const RULES_REVISION=1;
 export const SCENARIO_RULES={id:'vorchan-clear-space-duel',label:'Vorchan Ship Duel',terrain:'Clear Space',weaponCritical13:'No additional effect (the supplied printed chart omits 13).',scope:'Ship weapons, EW, movement, damage and criticals. Jump operations, ramming, boarding and shuttle operations are not enabled in this scenario.'};
@@ -43,6 +45,7 @@ export function createBattle(rows,players,mapPreset='standard',{passivePlayerId=
 }
 export function requiredActors(s){
  if(s.status!=='active')return [];
+ if(s.phase==='critical_resolution'&&s.criticalResolution)return [s.criticalResolution.actorId];
  const players=members(s);
  if(s.phase==='movement')return (s.moveOrder||[]).filter(id=>!s.locks[id]&&live(s.ships.find(x=>x.owner_id===id),s.turn)).slice(0,1);
  if(s.phase==='fire_resolution'&&s.resolution)return [s.resolution.actorId];
@@ -88,7 +91,11 @@ function initiativeOrder(s,die){
 }
 function attackShips(s){return s.ships.map(x=>({...x,private_state:{trial:projectTrial(trial(x),s.turn)},sameHexPrevious:s.approaches[x.id]||{}}));}
 function endTurn(s,die){
+ if(s.combatFlow!=='automatic'&&beginCriticals(s))return;
  for(const ship of s.ships){const resolved=finishShipTurn(trial(ship),s.turn,die);ship.private_state.trial=resolved.trial;record(s,'critical_checks',{shipId:ship.id,results:resolved.results});}
+ completeTurn(s);
+}
+function completeTurn(s){
  if(checkVictory(s))return;
  s.turn++;s.attacks=[];s.declarations=[];s.defences=[];s.dice=[];s.choices={};s.pending=[];s.combatStarted=false;s.resolution=null;s.damageRolled=false;s.fireSnapshot=null;
  next(s,'power');
@@ -184,7 +191,7 @@ function executeCommand(state,playerId,command,die=rollDie){
  if(s.status!=='active')fail('This battle has finished');
  if(!command||typeof command.type!=='string')fail('Choose an available action');
  if(!requiredActors(s).includes(playerId))fail('Wait for your required action');
- const ship=s.ships.find(x=>x.owner_id===playerId&&live(x,s.turn));
+ const ship=s.ships.find(x=>x.owner_id===playerId&&(s.phase==='critical_resolution'||live(x,s.turn)));
  if(!ship)fail('No surviving ship');
  let t=trial(ship),e=effectiveCondition(t,s.turn);
  const lock=()=>{s.locks[playerId]=true;};
@@ -249,6 +256,8 @@ function executeCommand(state,playerId,command,die=rollDie){
   for(const shot of s.declarations.flatMap(d=>d.fire.shots.filter(x=>x.role==='offensive'&&x.targetId===ship.id))){const shooter=ships.find(x=>x.id===shot.shipId),f=facingDirections(shooter,ship,{sameHexPrevious:shooter.sameHexPrevious[ship.id]});if(f.requiresChoice)expected.set(shooter.id+':'+ship.id,f.choices);}
   if(Object.keys(directions).some(id=>!expected.has(id))||[...expected].some(([id,choices])=>!choices?.includes(directions[id])))fail('Select each legal incoming boundary aspect before rolling');
   s.defences.push({playerId,defence,directions});lock();record(s,'defence_committed',{playerId});combat(s,die);
+ }else if(['critical-roll','critical-ok'].includes(command.type)&&s.phase==='critical_resolution'&&s.criticalResolution){
+  if(advanceCriticals(s,playerId,command,die)){for(const x of s.ships){x.private_state.trial=finishCriticalUpkeep(trial(x),s.turn);record(s,'critical_checks',{shipId:x.id,results:(s.criticalResults||[]).filter(r=>r.shipId===x.id)});}s.criticalResults=[];completeTurn(s);}
  }else if(['combat-roll','combat-ok','combat-choice'].includes(command.type)&&s.phase==='fire_resolution'&&s.resolution){
   if(advanceGuidedCombat(s,playerId,command,die))resolveTier(s,die);
  }else if(command.type==='damage-choice'&&s.phase==='fire_resolution'&&s.combatStarted){
@@ -271,6 +280,7 @@ export function completePassiveActions(state,die=rollDie){
   else if(s.phase==='initiative')command={type:'initiative'};
   else if(s.phase==='ew_commit')command={type:'ew',defensive:0,offensive:{}};
   else if(s.phase==='movement')command=trial(ship).movement.state.remaining?{type:'move',action:{type:'advance',hexes:trial(ship).movement.state.remaining}}:{type:'movement-done'};
+  else if(s.phase==='critical_resolution'){const r=s.criticalResolution;command={type:r.stage.endsWith('_roll')?'critical-roll':'critical-ok',stage:r.stage,checkId:r.check.id};}
   else if(s.phase==='fire_commit')command={type:'fire',fire:{shots:[]}};
   else if(s.phase==='fire_resolution'&&s.resolution){
    const r=s.resolution;command={type:r.stage.endsWith('_roll')?'combat-roll':r.stage.endsWith('_result')?'combat-ok':'combat-choice',stage:r.stage,attackId:r.attack.id,...(r.candidates?.length?{value:r.candidates[0]}:{})};
@@ -297,7 +307,7 @@ export function battleView(s,playerId){
  const required=requiredActors(s),enemyEWRevealed=['movement','fire_commit','fire_resolution'].includes(s.phase)||s.status==='finished';
  const ships=s.ships.map(ship=>{
   const t=trial(ship),c=effectiveCondition(t,s.turn),own=ship.owner_id===playerId;
-  return {...ship,private_state:own?ship.private_state:undefined,public_state:{...ship.public_state,rolled:!!t.movement?.state?.rolled,condition:{...c,weapons:undefined},damage:s.resolution?.states?.[ship.id]||t.condition.damage,ew:enemyEWRevealed?t.ewAllocation:undefined,deactivated:t.powerAllocation?.turn===s.turn?t.powerAllocation.deactivated:[],shipDataRevision:t.shipDataRevision},sameHexPrevious:s.approaches[ship.id]||{}};
+  return {...ship,private_state:own?ship.private_state:undefined,public_state:{...ship.public_state,travelFacing:ship.speed===0?null:movementHeading({facing:ship.facing,motionFacing:t.movement?.state?.motionFacing,speed:ship.speed}),rolled:!!t.movement?.state?.rolled,condition:{...c,weapons:undefined},damage:s.resolution?.states?.[ship.id]||t.condition.damage,ew:enemyEWRevealed?t.ewAllocation:undefined,deactivated:t.powerAllocation?.turn===s.turn?t.powerAllocation.deactivated:[],shipDataRevision:t.shipDataRevision},sameHexPrevious:s.approaches[ship.id]||{}};
  });
- return {ships,resolution:guidedCombatView(s),phase:PLAY_PHASES.find(p=>p.id===s.phase),phases:PLAY_PHASES,scenario:s.scenario,needsAction:required.includes(playerId),required,locked:!!s.locks[playerId],declarations:s.phase==='fire_commit'?s.declarations.filter(d=>d.playerId===playerId):['fire_resolution'].includes(s.phase)?s.declarations:[],defences:s.phase==='fire_resolution'?s.defences.filter(d=>s.combatStarted||d.playerId===playerId):[],pending:s.pending||[],dice:s.combatStarted?s.dice:[],attacks:s.attacks||[],winner:s.winner};
+ return {ships,criticalResolution:criticalView(s),resolution:guidedCombatView(s),phase:PLAY_PHASES.find(p=>p.id===s.phase),phases:PLAY_PHASES,scenario:s.scenario,needsAction:required.includes(playerId),required,locked:!!s.locks[playerId],declarations:s.phase==='fire_commit'?s.declarations.filter(d=>d.playerId===playerId):['fire_resolution'].includes(s.phase)?s.declarations:[],defences:s.phase==='fire_resolution'?s.defences.filter(d=>s.combatStarted||d.playerId===playerId):[],pending:s.pending||[],dice:s.combatStarted?s.dice:[],attacks:s.attacks||[],winner:s.winner};
 }

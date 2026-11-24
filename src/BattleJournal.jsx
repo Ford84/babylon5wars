@@ -5,7 +5,7 @@ import {labelSystem} from '../shared/ship-condition.mjs';
 export default function BattleJournal({events,ships,members}){
  const names=new Map(ships.map(s=>[s.id,s.label])),players=new Map(members.map(m=>[m.user_id,m.display_name]));
  const label=id=>names.get(id)||players.get(id)||'Ship';
- return <details className="panel battle-log" open><summary>Battle Log</summary><ol>{events.filter(e=>!['ew_committed','fire_committed','defence_committed','weapons_fired'].includes(e.event_type)).slice(0,80).map(e=>{const p=e.public||{};return <li key={e.id}><strong>Turn {e.turn} · {e.event_type.replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase())}</strong>
+ return <details className="panel battle-log" open><summary>Battle Log</summary><ol>{events.filter(e=>!['critical_rolled','ew_committed','fire_committed','defence_committed','weapons_fired'].includes(e.event_type)).slice(0,80).map(e=>{const p=e.public||{};return <li key={e.id}><strong>Turn {e.turn} · {e.event_type.replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase())}</strong>
   {p.shipId&&<span> · {label(p.shipId)}</span>}
   {e.event_type==='phase_advanced'&&<p>{PLAY_PHASES.find(x=>x.id===p.to)?.label||p.to}</p>}
   {e.event_type==='initiative_rolled'&&<p>d20 {p.roll} + Modifiers {p.total-p.roll} = <strong>{p.total}</strong></p>}
