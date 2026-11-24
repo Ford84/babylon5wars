@@ -58,7 +58,7 @@ async function fixture({solo=false,start=true,autoReview=true,autoOperations=tru
 }
 test('authenticated staging through two turns: no manual acknowledgements, no terrain entry, persistent server dice and private EW',async()=>{
  const {get,send,call,gameId,sqlite}=await fixture();
- let d=await get();assert.equal(d.automated,true);assert.equal(d.phases.length,10);
+ let d=await get();assert.equal(d.automated,true);assert.equal(d.phases.length,11);
  for(const p of ['p1','p2'])assert.equal((await send(p,{type:'power'})).status,200);
  for(const p of ['p1','p2'])assert.equal((await send(p,{type:'initiative'})).status,200);
  d=await get();const target=d.ships.find(s=>s.owner_id==='p2');
@@ -255,4 +255,24 @@ test('host can build either fleet with catalogue points and meeting deployment, 
  const path='/games/'+gameId+'/fleet-setup',body={expectedRevision:d.game.revision,entries,deploymentMode:'meeting'};
  assert.equal((await call(path,'p2','POST',body)).status,403);let r=await call(path,'p1','POST',body);assert.equal(r.status,201,JSON.stringify(r));assert.deepEqual(r.body.fleets.map(x=>x.points).sort((a,b)=>a-b),[360,720]);assert.equal((await call(path,'p1','POST',body)).status,409);
  d=await get();assert.equal(d.ships.length,3);assert.equal(d.game.deployment_mode,'meeting');assert.equal((await call('/games/'+gameId+'/start','p1','POST',{expectedRevision:d.game.revision})).status,200);d=await get();assert.equal(d.ships.length,3);assert.deepEqual(d.ships.map(x=>x.speed).sort(),[1,2,3]);assert.equal((await call(path,'p1','POST',{...body,expectedRevision:d.game.revision})).status,409);
+});
+test('Vorchar fleet and ELINT disruption persist through authenticated API reloads and reject stale or opposing choices',async()=>{
+ const {get,send,call,gameId,sqlite}=await fixture({start:false,autoOperations:false,autoReview:false});let d=await get();
+ const entries=[{ownerId:'p1',catalogId:'centauri-vorchan-v3-2e-sf',q:3,r:10,facing:0,speed:0},{ownerId:'p1',catalogId:'centauri-vorchar-v2-2e-sf',q:4,r:10,facing:0,speed:0},{ownerId:'p2',catalogId:'centauri-vorchan-v3-2e-sf',q:6,r:7,facing:3,speed:0}];
+ assert.equal((await call('/games/'+gameId+'/fleet-setup','p1','POST',{expectedRevision:d.game.revision,entries,deploymentMode:'free'})).status,201);d=await get();
+ assert.equal((await call('/games/'+gameId+'/start','p1','POST',{expectedRevision:d.game.revision})).status,200);d=await get();
+ const a=d.ships.find(x=>x.owner_id==='p1'&&x.public_state.libraryId===entries[0].catalogId),scout=d.ships.find(x=>x.public_state.libraryId===entries[1].catalogId),b=d.ships.find(x=>x.owner_id==='p2');
+ for(const x of [a,scout,b])assert.equal((await send(x.owner_id,{type:'power',shipId:x.id})).status,200);
+ for(const x of [a,scout,b])assert.equal((await send(x.owner_id,{type:'initiative',unitId:x.id})).status,200);
+ assert.equal((await send('p1',{type:'ew',shipId:a.id,offensive:{[b.id]:2}})).status,200);
+ assert.equal((await send('p1',{type:'ew',shipId:scout.id,offensive:{[a.id]:1,[b.id]:6},elint:{disruption:{[b.id]:3}}})).status,200);
+ let enemy=await get('p2');assert.equal(enemy.ships.find(x=>x.id===scout.id).public_state.ew,undefined);
+ assert.equal((await send('p2',{type:'ew',shipId:b.id,offensive:{[a.id]:1},defensive:7})).status,200);
+ d=await get();assert.equal(d.game.phase_id,'ew_disruption');assert.equal(d.elintDisruption.scoutId,scout.id);const rev=d.game.revision;
+ const command={type:'elint-disrupt',scoutId:scout.id,targetId:b.id,removed:{[a.id]:1}};
+ assert.equal((await send('p2',command)).status,400);assert.equal((await get()).game.revision,rev);
+ const stored=JSON.parse(sqlite.prepare('SELECT state_json FROM battle_states WHERE game_id=?').get(gameId).state_json);assert.equal(stored.elintDisruptions[0].removed,null);
+ assert.equal((await send('p1',command)).status,200);assert.equal((await get()).game.phase_id,'jump_formation');
+ assert.equal((await send('p1',command,rev)).status,409);const after=await get('p2');assert.deepEqual(after.elintContext.disruptions[0].removed,{[a.id]:1});
+ const event=sqlite.prepare("SELECT public_json FROM events WHERE game_id=? AND event_type='elint_disruption_selected'").get(gameId);assert.equal(JSON.parse(event.public_json).scoutId,scout.id);
 });

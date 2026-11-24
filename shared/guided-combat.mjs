@@ -3,7 +3,7 @@ import {resolveVorchanShipFire,attackId} from './weapon-resolution.mjs';
 import {facingDirections} from './weapon-targeting.mjs';
 import {CENTAURI_HIT_CHARTS,hitLocation} from './centauri-combat-data.mjs';
 import {damageSystemCandidates,rollVorchanDamage,applyVorchanStandardVolley} from './vorchan-damage.mjs';
-import {SYSTEMS} from './ship-condition.mjs';
+import {hullProfile,hullSystems} from './vorchar.mjs';
 const fail=m=>{throw new RangeError(m);};
 const record=(s,type,details)=>s.journal.push({turn:s.turn,phase:s.phase,type,...details});
 const owner=(s,id)=>s.ships.find(x=>x.id===id).owner_id;
@@ -38,7 +38,8 @@ function prepareChart(s){
 }
 function prepareSystem(s){
  const r=s.resolution,section=r.chart;
- let candidates=damageSystemCandidates(r.token,section).filter(id=>r.states[r.attack.targetId].tracks[id]?.marked<SYSTEMS.get(id).boxes);
+ const systems=new Map(hullSystems(r.states[r.attack.targetId].libraryId).map(system=>[system.id,system]));
+ let candidates=damageSystemCandidates(r.token,section,r.states[r.attack.targetId].libraryId).filter(id=>r.states[r.attack.targetId].tracks[id]?.marked<systems.get(id)?.boxes);
  if(section==='primary'&&r.token==='side_thrust'&&['port','starboard'].includes(r.incoming))candidates=candidates.filter(id=>id===(r.incoming==='port'?'port_thrust':'starboard_thrust'));
  r.candidates=candidates;r.selected=candidates[0]||null;
  if(candidates.length>1){r.stage='system_choice';r.actorId=owner(s,r.attack.targetId);}else{r.stage='damage_roll';r.actorId=owner(s,r.attack.shipId);}
@@ -50,20 +51,20 @@ export function advanceGuidedCombat(s,playerId,command,die){
  if(command.type==='combat-roll'){
   if(r.stage==='attack_roll'){
    d.roll=die(20);const directions=Object.assign({},...s.defences.map(x=>x.directions||{}));
-   const fire=resolveVorchanShipFire({turn:s.turn,ships:s.fireSnapshot,declarations:s.declarations,defences:s.defences,rolls:s.dice,terrainVerified:true,blockingHexes:[],defenderChoices:directions});
+   const fire=resolveVorchanShipFire({turn:s.turn,ships:s.fireSnapshot,ewSnapshot:s.ewSnapshot,elintDisruptions:s.elintDisruptions,declarations:s.declarations,defences:s.defences,rolls:s.dice,terrainVerified:true,blockingHexes:[],defenderChoices:directions});
    const attack=fire.results.find(x=>x.id===a.id);if(attack.blockers.length)fail(attack.blockers.join('; '));
    r.attack={...attack};d.hit=attack.hit;s.attacks.push(attack);r.stage='attack_result';record(s,'attack_rolled',{attack});
    if(!attack.hit||r.skipDamage)emit(s);
   }else if(r.stage==='location_roll'||r.stage==='primary_roll'){
    const primary=r.stage==='primary_roll'||r.chart==='primary',roll=die(20);
    if(primary){d.primaryRoll=roll;if(d.locationRoll===undefined)d.locationRoll=roll;r.chart='primary';}else d.locationRoll=roll;
-   r.token=hitLocation(CENTAURI_HIT_CHARTS[LIB.id][r.chart],roll);r.locationResults.push({chart:r.chart,roll,token:r.token});r.stage=primary?'primary_result':'location_result';
+   r.token=hitLocation((hullProfile(r.states[r.attack.targetId].libraryId)?.hitCharts??CENTAURI_HIT_CHARTS[LIB.id])[r.chart],roll);r.locationResults.push({chart:r.chart,roll,token:r.token});r.stage=primary?'primary_result':'location_result';
    record(s,'location_rolled',{attackId:a.id,chart:r.chart,roll,token:r.token});
   }else if(r.stage==='damage_roll'){
-   const mount=LIB.weaponMounts.find(m=>m.id===a.mountId),weapon=LIB.weapons.find(w=>w.id===mount.weaponId),option=weapon.firingOptions.find(o=>o.turns===(a.chargeTurns||1));
+   const hull=hullProfile(s.fireSnapshot.find(x=>x.id===a.shipId).public_state.libraryId),mount=hull.weaponMounts.find(m=>m.id===a.mountId),weapon=hull.weapons.find(w=>w.id===mount.weaponId),option=weapon.firingOptions.find(o=>o.turns===(a.chargeTurns||1));
    d.damageDice=Array.from({length:option.damageDice.count},()=>die(option.damageDice.sides));
    const source=s.fireSnapshot.find(x=>x.id===a.shipId),target=s.fireSnapshot.find(x=>x.id===a.targetId),range=Math.max(Math.abs(source.q-target.q),Math.abs(source.r-target.r),Math.abs(source.q+source.r-target.q-target.r));
-   r.damage=rollVorchanDamage({mountId:a.mountId,chargeTurns:a.chargeTurns||1,dice:d.damageDice,range,mode:a.mode,damageLoss:source.private_state.trial.condition.effects.weapons[a.mountId]?.damageLoss||0});
+   r.damage=rollVorchanDamage({libraryId:source.private_state.trial.libraryId,mountId:a.mountId,chargeTurns:a.chargeTurns||1,dice:d.damageDice,range,mode:a.mode,damageLoss:source.private_state.trial.condition.effects.weapons[a.mountId]?.damageLoss||0});
    if(target.kind==='shuttle'){const old=r.states[a.targetId].shuttleDamage,marked=Math.min(10,old+r.damage.damage);r.states[a.targetId]={shuttleDamage:marked,shipDestroyed:marked===10};r.trace=[{systemId:'shuttle_hull',armour:0,marked:marked-old,destroyed:marked===10}];r.stage='damage_result';record(s,'damage_rolled',{attackId:a.id,...r.damage,trace:r.trace});emit(s);return false;}
    const result=applyVorchanStandardVolley({state:r.states[a.targetId],damage:r.damage.damage,plasma:r.damage.plasma,incoming:r.incoming,locationRoll:d.locationRoll,primaryRoll:d.primaryRoll??null,sideChoice:r.sideChoice,systemChoice:r.selected,eligibleSystemIds:r.token==='side_thrust'&&['port','starboard'].includes(r.incoming)?[r.incoming==='port'?'port_thrust':'starboard_thrust']:null});
    if(result.requiresChoice)fail('Location selection is incomplete');r.states[a.targetId]=result.state;r.trace=result.trace;r.stage='damage_result';

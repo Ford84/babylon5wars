@@ -1,3 +1,4 @@
+import {hullProfile} from './vorchar.mjs';
 // Strict server-side staged Vorchan movement adapter. Player submits intent,
 // never turn cost, turn delay, or thrust limits.
 import {pivotStart,pivotHalt,rollStart,rollHalt,orientationAtMovementStart} from './orientation-stage.mjs';
@@ -14,7 +15,7 @@ export {VORCHAN_THRUSTER_RATINGS};
 export function applyVorchanStage({ship,privateState,action,turn,otherShips=[],mapBounds={columns:20,rows:32},allowExit=false}){
  if(!Number.isInteger(turn)||turn<1)throw new RangeError('Invalid battle turn');
  const trial=privateState?.trial;
- if(!trial||trial.libraryId!==LIB.id)throw new RangeError('Not a Vorchan trial ship');
+ if(!trial||!hullProfile(trial.libraryId))throw new RangeError('Not a Vorchan trial ship');
  if(!action||typeof action!=='object'||Array.isArray(action)||!['speed','advance','turn','slide','pivot-start','pivot-halt','roll-start','roll-halt','extended-start','extended-complete','extended-cancel'].includes(action.type))throw new RangeError('Invalid staged action');
  if(Object.keys(action).some(k=>!({speed:['type','change','purchasedThrust','thrusters'],advance:['type','hexes'],turn:['type','direction','thrusters','shortenBy'],slide:['type','direction','thrusters'], 'pivot-start':['type','direction','thrusterPair','oddTo','thrusters'], 'pivot-halt':['type','thrusterPair','oddTo','thrusters'], 'roll-start':['type','thrusters'], 'roll-halt':['type','thrusters'], 'extended-start':['type','direction','initialThrust','thrusters'], 'extended-complete':['type','shortenBy','thrusters'], 'extended-cancel':['type','thrusters']}[action.type].includes(k))))throw new RangeError('Client cannot supply movement costs or limits');
  const previous=trial.movement?.turn===turn-1?trial.movement.state:null;

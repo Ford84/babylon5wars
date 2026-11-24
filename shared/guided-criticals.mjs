@@ -1,4 +1,5 @@
-import {criticalChecksForShip,resolveShipCritical,SYSTEMS} from './ship-condition.mjs';
+import {hullSystems} from './vorchar.mjs';
+import {criticalChecksForShip,resolveShipCritical} from './ship-condition.mjs';
 const record=(s,type,details)=>s.journal.push({turn:s.turn,phase:s.phase,type,...details});
 const shipFor=(s,r)=>s.ships.find(x=>x.id===r.check.shipId);
 const reviewer=(s,r)=>r.rollerId===s.passivePlayerId?s.ships.find(x=>x.owner_id!==s.passivePlayerId).owner_id:r.rollerId;
@@ -6,7 +7,7 @@ function next(s){
  const r=s.criticalResolution;
  while(++r.index<r.queue.length){
   const check=r.queue[r.index],ship=s.ships.find(x=>x.id===check.shipId),marked=ship.private_state.trial.condition.damage.tracks[check.systemId].marked;
-  if(marked>=SYSTEMS.get(check.systemId).boxes)continue;
+  if(marked>=hullSystems(ship.private_state.trial.libraryId).find(system=>system.id===check.systemId).boxes)continue;
   Object.assign(r,{check:{...check,marked,modifier:marked+check.excess},stage:'critical_roll',rollerId:ship.owner_id,actorId:ship.owner_id,roll:null,secondaryRoll:null,result:null,requiresSecondary:false});return false;
  }
  s.criticalResolution=null;return true;

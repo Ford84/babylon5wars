@@ -8,8 +8,10 @@ export function attackCalculation(attack){
  const add=(label,value)=>{total+=value;steps.push(`${label} (${total})`);};
  const rangeLabel=Number.isFinite(b.rangePerHex)?`${signed(b.rangePerHex)} Per Hex × ${b.distance}${b.lockedOn===false?' · No Lock-On':''}`:`Range ${signed(b.rangePenalty)}`;
  add(rangeLabel,b.rangePenalty);
- add(`OEW ${signed(b.offensiveEW)}`,b.offensiveEW);
+ add(`OEW ${signed(b.offensiveEW)}${b.disruptedEW?` · ${b.disruptedEW} Disrupted`:``}`,b.offensiveEW);
+ if(b.elintOffensive)add(`ELINT OEW ${signed(b.elintOffensive)}`,b.elintOffensive);
  add(`DEW ${signed(b.defensiveEW)}`,b.defensiveEW);
+ if(b.elintDefensive)add(`ELINT DEW ${signed(-b.elintDefensive)}`,-b.elintDefensive);
  add(`Fire Control ${signed(b.fireControl)}`,b.fireControl);
  if(b.extra)add(`Condition / Other ${signed(b.extra)}`,b.extra);
  if(attack.intercept?.total)add(`Interception ${signed(attack.intercept.total)}`,attack.intercept.total);

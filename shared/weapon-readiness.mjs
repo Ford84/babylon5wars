@@ -1,3 +1,4 @@
+import {hullProfile} from './vorchar.mjs';
 import {effectiveCondition} from './ship-condition.mjs';
 // Vorchan 2E/SF SCS weapon readiness preflight; pure, conservative and non-mutating.
 // Do not infer charge/cooldown progress from a missing authoritative weapon history.
@@ -26,13 +27,13 @@ export function auditVorchanWeapons(){
  return {inventory:mounts,problems,readyForAutomaticFire:problems.length===0};
 }
 export function weaponReadiness({mountId,turn,trial,gun=1,chargeTurns=null}){
- const mount=vorchanWeaponInventory().find(m=>m.mountId===mountId);
+ const hull=hullProfile(trial?.libraryId||LIB.id),profile=hull?.weaponMounts.find(m=>m.id===mountId),mount=profile?{...profile,mountId:profile.id,firingArcVerified:profile.arc.verified,individualGuns:profile.weaponId==='twin-array'?2:1}:null;
  if(!mount)throw new RangeError('Unknown Vorchan weapon mount');
  if(!Number.isInteger(turn)||turn<1||!Number.isInteger(gun)||gun<1||gun>mount.individualGuns)throw new RangeError('Invalid weapon turn or gun');
  const reasons=[];
  if(trial?.condition){const condition=effectiveCondition(trial,turn);if(condition.shipDestroyed)reasons.push('Ship destroyed');if(condition.commandDisabled)reasons.push('Command systems disabled');if(condition.powerOff)reasons.push('Reactor shut down');}
 
- if(!trial||trial.libraryId!==LIB.id)reasons.push('Authoritative Vorchan SCS state missing');
+ if(!trial||!hullProfile(trial.libraryId))reasons.push('Authoritative Vorchan SCS state missing');
  if(trial?.condition?.effects.weapons[mountId]?.destroyedGuns?.includes(gun))reasons.push('Gun destroyed by a critical hit');
  if(trial?.destroyedSystems?.includes(mountId))reasons.push('Mount destroyed');
  if(trial?.powerAllocation?.deactivated?.includes(mountId))reasons.push('Mount deactivated');

@@ -1,10 +1,11 @@
+import {hullProfile} from './vorchar.mjs';
 import {SYSTEMS} from './ship-condition.mjs';
 import {CENTAURI_HIT_CHARTS} from './centauri-combat-data.mjs';
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
-export const locationTable=chart=>CENTAURI_HIT_CHARTS[LIB.id][chart]||[];
+export const locationTable=(chart,libraryId=LIB.id)=>hullProfile(libraryId)?.hitCharts[chart]||[];
 export function criticalTable(systemId,secondary=false){
  if(secondary)return [[1,14,'No engine thrust next turn'],[15,20,'Maximum thrust forces acceleration next turn']];
- const kind=SYSTEMS.get(systemId)?.kind;
+ const kind=systemId==='twin_nose_centre'?'weapon':SYSTEMS.get(systemId)?.kind;
  if(kind==='weapon')return systemId.startsWith('twin_nose_')?[[1,12,'No additional effect'],[13,13,'No additional effect (scenario interpretation: printed chart omits 13)'],[14,18,'Range penalty worsens by 1 per hex'],[19,19,'Damage reduced by 2 per die (minimum 1)'],[20,null,'One gun destroyed; a second such critical destroys the array']]:[[1,12,'No additional effect'],[13,13,'No additional effect (scenario interpretation: printed chart omits 13)'],[14,18,'Range penalty worsens by 1 per hex'],[19,24,'Damage reduced by 2 per die (minimum 1)'],[25,null,'Both range and damage penalties']];
  return ({thruster:[[1,14,'No additional effect'],[15,19,'Outlet failure; rating reduced and first thrust point lost'],[20,24,'Reduced thrust efficiency'],[25,null,'Both outlet and efficiency effects']],engine:[[1,14,'No additional effect'],[15,20,'Free thrust reduced by 2'],[21,27,'Engine short: roll a second unmodified d20'],[28,null,'Both thrust loss and engine short']],sensor:[[1,14,'No additional effect'],[15,18,'Lose 1 EW'],[19,22,'Lose 2 EW'],[23,26,'Lose 3 EW'],[27,null,'Lose 4 EW']],reactor:[[1,10,'No additional effect'],[11,14,'Lose 2 reactor power'],[15,18,'Lose 4 reactor power'],[19,26,'Lose 8 reactor power'],[27,null,'Lose 10 power and containment breach']],command:[[1,8,'EW fixed next turn'],[9,11,'Initiative reduced by 1'],[12,14,'All fire control reduced by 1'],[15,17,'Lose 2 EW; no more than half offensive EW'],[18,20,'Initiative −4 next turn, then −2 for the scenario'],[21,23,'Sensor controls and major communications effects'],[24,null,'Systems disabled next turn, plus fire-control, sensor and communications effects']],hangar:[[1,12,'No additional critical effect'],[13,18,'Docking activities take twice as long'],[19,24,'Partial bay collapse; repeated collapses worsen capacity'],[25,null,'Both docking damage and collapse']]})[kind]||[];
 }
