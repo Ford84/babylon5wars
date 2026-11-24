@@ -98,3 +98,9 @@ test('Guardian same-hex protection reconstructs arrival order when the protected
  assert.equal(guardianCanProtect({source,defender,target,mount:MOGRATH.weaponMounts.find(x=>x.id==='guardian')}),true);
  source.sameHexPrevious.m.target={q:1,r:11};assert.equal(guardianCanProtect({source,defender,target,mount:MOGRATH.weaponMounts.find(x=>x.id==='guardian')}),true);
 });
+test('a plasma stream hit reduced to zero by range completes without location rolls or missing-journal errors',()=>{
+ let s=fireReady();s.ships[1].q=12;s.ships[1].r=2;s.ships[0].private_state.trial.ewAllocation.offensive={v:8};
+ s=executeBattle(s,'p1',{type:'fire',fire:{shots:[{shipId:'m',targetId:'v',mountId:'plasma_stream',gun:1,role:'offensive',order:1}]}});s=executeBattle(s,'p2',{type:'fire',fire:{shots:[]}});let locations=0;
+ for(let i=0;s.resolution&&i<20;i++){const r=s.resolution;if(r.stage==='location_roll')locations++;s=executeBattle(s,r.actorId,{type:r.stage.endsWith('_roll')?'combat-roll':'combat-ok',stage:r.stage,attackId:r.attack.id},()=>1);}
+ assert.equal(locations,0);assert.equal(s.phase,'hangar');assert.deepEqual(s.dice[0].subVolleys,[]);assert.equal(s.ships[1].private_state.trial.condition.damage.tracks.forward_structure.marked,0);assert.equal(s.ships[0].private_state.trial.weaponReadiness.plasma_stream[1].lastFiredTurn,1);
+});

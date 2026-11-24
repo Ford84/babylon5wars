@@ -27,6 +27,7 @@ export function adjudicateVorchanShipTier({ships,attacks,rollJournal,defenderCho
   if(target.kind==='shuttle'){const marked=Math.min(10,states[target.id].shuttleDamage+rolledDamage.damage);const trace=[{systemId:'shuttle_hull',armour:0,marked:marked-states[target.id].shuttleDamage,destroyed:marked===10}];states[target.id]={shuttleDamage:marked,shipDestroyed:marked===10};outcomes.push({attackId:shot.id,targetId:target.id,damage:rolledDamage.damage,trace,shipDestroyed:marked===10});continue;}
   if(rolledDamage.plasmaStream&&target.kind!=='shuttle'){
    let state=states[target.id];const trace=[];
+   if(rolledDamage.damage===0){outcomes.push({attackId:shot.id,targetId:target.id,damage:0,trace,shipDestroyed:false});continue;}
    if(!Array.isArray(rolled.subVolleys)||rolled.subVolleys.length>Math.ceil(rolledDamage.damage/5))throw new RangeError('Recorded plasma stream sub-volleys required');
    for(let i=0;i<rolled.subVolleys.length&&!state.shipDestroyed;i++){
     const v=rolled.subVolleys[i],result=applyVorchanStandardVolley({state,damage:Math.min(5,rolledDamage.damage-i*5),plasma:true,plasmaStream:true,incoming,locationRoll:v.locationRoll,primaryRoll:v.primaryRoll??null,sideChoice:v.sideChoice,systemChoice:v.systemChoice,eligibleSystemIds:hullProfile(target.public_state?.libraryId)?.hitCharts.primary.find(([min,max])=>v.primaryRoll>=min&&v.primaryRoll<=max)?.[2]==='side_thrust'&&['port','starboard'].includes(incoming)?[incoming==='port'?'port_thrust':'starboard_thrust']:null});
