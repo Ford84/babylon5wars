@@ -33,8 +33,8 @@ export function resolveVorchanShipFire({turn,ships,declarations,defences,rolls,b
   if(!history||!Number.isInteger(history.lastFiredTurn)||!Number.isInteger(history.lastActivatedTurn))blockers.push('Missing per-gun arming history');
   else if(turn<=history.lastFiredTurn||turn<history.lastActivatedTurn)blockers.push('Gun not ready');
   else if(mount.weaponId==='plasma-accelerator'&&turn-history.lastFiredTurn<shot.chargeTurns)blockers.push('Plasma insufficiently charged');
-  const attackerEW=trial?.ewAllocation?.turn===turn?trial.ewAllocation.offensive?.[target.id]??0:null;
-  const defenderEW=target.private_state?.trial?.ewAllocation?.turn===turn?target.private_state.trial.ewAllocation.defensive:null;
+  const attackerEW=trial?.ewAllocation?.turn===turn?trial.ewAllocation.offensive?.[target.kind==='shuttle'?target.carrierId+'-shuttle-flight':target.id]??0:null;
+  const defenderEW=target.kind==='shuttle'?0:target.private_state?.trial?.ewAllocation?.turn===turn?target.private_state.trial.ewAllocation.defensive:null;
   if(attackerEW===null||defenderEW===null)blockers.push('Missing committed EW');
   const condition=trial?.condition?effectiveCondition(trial,turn):null;
   const effects=condition?.weapons?.[shot.mountId];

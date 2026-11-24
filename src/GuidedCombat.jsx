@@ -6,13 +6,13 @@ import React,{useState} from 'react';
 import AnimatedDice from './AnimatedDice.jsx';
 import {labelSystem} from '../shared/ship-condition.mjs';
 export default function GuidedCombat({detail,userId,send,busy,onAttackRevealed}){
- const r=detail.resolution,a=r.attack,attacker=detail.ships.find(s=>s.id===a.shipId),target=detail.ships.find(s=>s.id===a.targetId),actor=detail.members?.find(m=>m.user_id===r.actorId),mine=r.actorId===userId;
+ const r=detail.resolution,a=r.attack,attacker=detail.ships.find(s=>s.id===a.shipId),target=[...detail.ships,...(detail.shuttles||[])].find(s=>s.id===a.targetId),actor=detail.members?.find(m=>m.user_id===r.actorId),mine=r.actorId===userId;
  const [revealed,setRevealed]=useState(null),attackKey=detail.game.turn+':'+a.id,rollKey=attackKey+':'+r.stage,isResult=r.stage.endsWith('_result'),animating=isResult&&revealed!==rollKey;
  const damageResult=r.stage==='damage_result',locationResult=['location_result','primary_result'].includes(r.stage),values=damageResult?r.damage.dice:locationResult?[r.locationResults.at(-1).roll]:[a.roll],diceLabel=damageResult?'Damage Dice · '+damageCalculation(r.damage).formula:locationResult?'Hit Location d20':'Attack d20';
  const labels={attack_roll:'Roll To Hit',attack_result:'Attack Result',location_roll:'Roll Hit Location',location_result:'Hit Location Result',primary_roll:'Roll Primary Hit Location',primary_result:'Primary Hit Result',hull_choice:'Defender Chooses Hull',system_choice:'Defender Chooses System',damage_roll:'Roll Damage',damage_result:'Damage Result'};
  const action=type=>send({type,stage:r.stage,attackId:a.id});
  const isRoll=r.stage.endsWith('_roll'),isChoice=r.stage.endsWith('_choice');
- return <section className="panel combat-review" aria-live="polite"><h2>{animating?(damageResult?'Rolling Damage…':locationResult?'Rolling Hit Location…':'Rolling To Hit…'):labels[r.stage]}</h2><p>Attack {r.index} Of {r.total} · {attacker?.label} → {target?.label}</p><p>{labelSystem(a.mountId)} · Gun {a.gun} · {a.mode||'Standard'} Damage</p>
+ return <section className="panel combat-review" aria-live="polite"><h2>{animating?(damageResult?'Rolling Damage…':locationResult?'Rolling Hit Location…':'Rolling To Hit…'):labels[r.stage]}</h2><p>Attack {r.index} Of {r.total} · {attacker?.label} → {target?.label}</p><p>{labelSystem(a.mountId)} · Gun {a.gun} · {a.mode||'Standard'} Damage</p>{target?.kind==='shuttle'&&<p>Unarmed Shuttle · Damage Goes Directly To Its 10-Box Track · Armour 0 · No Hit-Location Roll</p>}
   {isResult&&<AnimatedDice key={rollKey} values={values} sides={damageResult?10:20} label={diceLabel} onSettled={()=>{setRevealed(rollKey);if(r.stage==='attack_result')onAttackRevealed?.(attackKey);}}/>}
   {(!animating||r.stage!=='attack_result')&&a.roll!=null&&<AttackRollResult attack={a}/>}
   {!animating&&r.skipDamage&&<p>Target Already Destroyed · No Further Damage Will Be Allocated</p>}

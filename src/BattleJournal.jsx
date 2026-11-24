@@ -14,6 +14,10 @@ export default function BattleJournal({events,ships,members}){
   {e.event_type==='damage_resolved'&&<>{p.attacks.map(a=><p key={a.id}>{label(a.shipId)} · {labelSystem(a.mountId)} · d20 {a.roll} Against {a.targetNumber}: <strong>{a.hit?'Hit':'Miss'}</strong></p>)}{p.outcomes.map(o=><p key={o.attackId}>{label(o.targetId)}: {o.trace?.map(x=>labelSystem(x.systemId)+' '+x.marked+' Damage').join(', ')||'No Further Damage'}{o.shipDestroyed?' · Destroyed':''}</p>)}</>}
   {e.event_type==='critical_checks'&&<>{p.results.length?p.results.map((r,i)=><p key={i}>{labelSystem(r.systemId)} · {r.kind==='overthrust'?'Overthrust':'Damage'} · d20 {r.roll} + {r.modifier} = {r.total}: {r.effects.length?r.effects.map(labelSystem).join(', '):'No Additional Effect'}{r.secondaryRoll?' · Secondary d20 '+r.secondaryRoll:''}{r.clarification?' · '+r.clarification:''}</p>):<p>No Critical Checks Due</p>}</>}
   {e.event_type==='containment_check'&&<p>d100 {p.roll} · {p.chance}% Detonation Chance</p>}
+  {e.event_type==='jump_engine_check'&&<p>d100 {p.roll} · {p.risk}% Explosion Risk · <strong>{p.exploded?'Ship Destroyed':'Safe'}</strong></p>}
+  {e.event_type==='jump_point_opened'&&<p>Hex ({p.point.q}, {p.point.r}) · Usable From Turn {p.point.activeTurn}</p>}
+  {e.event_type==='jump_point_closed'&&<p>Jump Engine Ready Again On Turn {p.readyTurn}</p>}
+  {p.shuttleId&&<p>{label(p.shuttleId)}</p>}
   {e.event_type==='forced_acceleration'&&<p>{p.thrust} Thrust Applied Automatically · Speed {p.speed}</p>}
   {e.event_type==='battle_finished'&&<p>{p.winner?label(p.winner)+' Wins':'Draw — Both Ships Lost'}</p>}
   {e.event_type==='defender_choice'&&<p>{labelSystem(p.value)}</p>}

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readdirSync,readFileSync} from 'node:fs';
 import worker from '../worker/index.mjs';
-async function fixture({solo=false,start=true,autoReview=true}={}){
+async function fixture({solo=false,start=true,autoReview=true,autoOperations=true}={}){
  const sqlite=new DatabaseSync(':memory:');
  for(const file of readdirSync(new URL('../migrations/',import.meta.url)).sort())sqlite.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
  const adapt=sql=>{
@@ -45,8 +45,10 @@ async function fixture({solo=false,start=true,autoReview=true}={}){
  async function get(who='p1'){return (await call('/games/'+gameId,who)).body;}
  async function send(who,command,expected){
   const d=await get(who),result=await call('/games/'+gameId+'/battle-command',who,'POST',{expectedRevision:expected??d.game.revision,command});
-  if(result.status===200&&autoReview)for(let i=0;i<100;i++){
-   const now=await get(),r=now.criticalResolution||now.resolution;if(!r)break;
+  if(result.status===200)for(let i=0;i<100;i++){
+   const now=await get(),r=now.criticalResolution||now.resolution;
+   if(autoOperations&&['jump_formation','hangar','vortex_closure'].includes(now.game.phase_id)){const type={jump_formation:'jump',hangar:'hangar',vortex_closure:'vortex'}[now.game.phase_id];for(const actor of now.required){const current=await get(actor);const response=await call('/games/'+gameId+'/battle-command',actor,'POST',{expectedRevision:current.game.revision,command:{type,open:false,maintain:false}});assert.equal(response.status,200,JSON.stringify(response));}continue;}
+   if(!r||!autoReview)break;
    const c=now.criticalResolution?{type:r.stage.endsWith('_roll')?'critical-roll':'critical-ok',stage:r.stage,checkId:r.check.id}:{type:r.stage.endsWith('_roll')?'combat-roll':r.stage.endsWith('_result')?'combat-ok':'combat-choice',stage:r.stage,attackId:r.attack.id,...(r.candidates?.length?{value:r.candidates[0]}:{})};
    const response=await call('/games/'+gameId+'/battle-command',r.actorId,'POST',{expectedRevision:now.game.revision,command:c});assert.equal(response.status,200,JSON.stringify(response));
   }
@@ -56,7 +58,7 @@ async function fixture({solo=false,start=true,autoReview=true}={}){
 }
 test('authenticated staging through two turns: no manual acknowledgements, no terrain entry, persistent server dice and private EW',async()=>{
  const {get,send,call,gameId,sqlite}=await fixture();
- let d=await get();assert.equal(d.automated,true);assert.equal(d.phases.length,7);
+ let d=await get();assert.equal(d.automated,true);assert.equal(d.phases.length,10);
  for(const p of ['p1','p2'])assert.equal((await send(p,{type:'power'})).status,200);
  for(const p of ['p1','p2'])assert.equal((await send(p,{type:'initiative'})).status,200);
  d=await get();const target=d.ships.find(s=>s.owner_id==='p2');
@@ -232,4 +234,18 @@ test('critical prompts persist through the Worker API and enforce defender owner
  assert.equal((await send('p2',command,d.game.revision)).status,409);assert.deepEqual((await get()).criticalResolution,saved);
  for(let i=0;i<8;i++){d=await get();r=d.criticalResolution;if(!r)break;assert.equal((await send(r.actorId,{type:r.stage.endsWith('_roll')?'critical-roll':'critical-ok',stage:r.stage,checkId:r.check.id})).status,200);}
  d=await get();assert.equal(d.criticalResolution,null);assert.equal(d.game.turn,2);sqlite.close();
+});
+test('jump tokens and launched shuttle inventory persist through the authenticated API',async()=>{
+ const {get,send,call,gameId}=await fixture({autoOperations:false});
+ for(const p of ['p1','p2'])await send(p,{type:'power'});
+ for(const p of ['p1','p2'])await send(p,{type:'initiative'});
+ for(const p of ['p1','p2'])await send(p,{type:'ew'});
+ let d=await get();assert.equal(d.game.phase_id,'jump_formation');const a=d.ships.find(x=>x.owner_id==='p1');
+ assert.equal((await send('p1',{type:'jump',open:true,q:a.q,r:a.r,facing:0})).status,200);d=await get('p2');assert.equal(d.jumpPoints.length,1);assert.equal(d.jumpPoints[0].status,'forming');
+ assert.equal((await send('p2',{type:'jump',open:false})).status,200);
+ for(let i=0;i<2;i++){d=await get();await send(d.required[0],{type:'movement-done'});}
+ for(const p of ['p1','p2'])await send(p,{type:'fire',fire:{shots:[]}});
+ d=await get();assert.equal(d.game.phase_id,'hangar');const x=d.shuttles.find(x=>x.owner_id==='p1');const rev=d.game.revision;
+ assert.equal((await send('p1',{type:'hangar',launch:[x.id]})).status,200);assert.equal((await call('/games/'+gameId+'/battle-command','p1','POST',{expectedRevision:rev,command:{type:'hangar',launch:[x.id]}})).status,409);
+ await send('p2',{type:'hangar'});d=await get();assert.equal(d.game.turn,2);assert.equal(d.shuttles.find(y=>y.id===x.id).status,'deployed');assert.equal(d.jumpPoints[0].status,'open');assert.equal(d.shuttles.find(y=>y.id===x.id).public_state.damage.shuttleDamage,0);
 });

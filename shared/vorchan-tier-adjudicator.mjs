@@ -9,7 +9,7 @@ export function adjudicateVorchanShipTier({ships,attacks,rollJournal,defenderCho
  if(!Array.isArray(ships)||!Array.isArray(attacks)||!Array.isArray(rollJournal))throw new RangeError('Tier inputs required');
  const byId=new Map(ships.map(s=>[s.id,s]));
  const dice=new Map(rollJournal.map(r=>[r.attackId,r]));
- const states=Object.fromEntries(ships.map(s=>[s.id,structuredClone(initialDamage[s.id]||initialVorchanDamage())]));
+ const states=Object.fromEntries(ships.map(s=>[s.id,structuredClone(initialDamage[s.id]||(s.kind==='shuttle'?{shuttleDamage:s.damage,shipDestroyed:s.damage>=10}:initialVorchanDamage()))]));
  const outcomes=[],pending=[];
  const shots=attacks.filter(a=>a.hit===true).sort((a,b)=>a.order-b.order||a.id.localeCompare(b.id));
  for(const shot of shots){
@@ -23,6 +23,7 @@ export function adjudicateVorchanShipTier({ships,attacks,rollJournal,defenderCho
    pending.push({attackId:shot.id,type:'incoming',choices:direction.choices||[]});break;
   }
   const rolledDamage=rollVorchanDamage({mountId:shot.mountId,chargeTurns:shot.chargeTurns??3,dice:rolled.damageDice,range:hexDistance(shooter,target),mode:shot.mode||'Standard',damageLoss:shooter.private_state?.trial?.condition?.effects?.weapons?.[shot.mountId]?.damageLoss||0});
+  if(target.kind==='shuttle'){const marked=Math.min(10,states[target.id].shuttleDamage+rolledDamage.damage);const trace=[{systemId:'shuttle_hull',armour:0,marked:marked-states[target.id].shuttleDamage,destroyed:marked===10}];states[target.id]={shuttleDamage:marked,shipDestroyed:marked===10};outcomes.push({attackId:shot.id,targetId:target.id,damage:rolledDamage.damage,trace,shipDestroyed:marked===10});continue;}
   const side=['port','starboard'].includes(incoming);
   const relative=direction.relative;
   const automaticSide=side&&Math.abs(relative-90)>1e-8&&Math.abs(relative-270)>1e-8?(relative<90||relative>270?'forward':'aft'):null;

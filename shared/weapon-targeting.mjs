@@ -1,3 +1,4 @@
+import {SHUTTLE} from './vorchan-operations.mjs';
 // B5W 2E Compendium, Weapons Fire: direction, arcs, LOS, EW and range.
 // Pure preview only. Missing SCS arc/LOS facts fail closed, never silently approve fire.
 import {hexDistance} from './phases.mjs';
@@ -79,8 +80,8 @@ export function vorchanTargetingPreview({shooter,target,mountId,arc,blockingHexe
  const incoming=facingDirections(shooter,target,{sameHexPrevious});
  const direction=incoming.requiresChoice?(incoming.choices?.includes(defenderDirection)?defenderDirection:null):incoming.direction;
  const los=verifiedTerrain?lineOfSight({shooter,target,blockingHexes}):{clear:false,reason:'Terrain and LOS not verified'};
- if(target.libraryId!==VORCHAN.id||target.hullClass!==VORCHAN.class)throw new RangeError('Target SCS defence and hull class are not verified');
- const defence=direction?VORCHAN.defence[direction]:null;
+ if(!(target.libraryId===SHUTTLE.id&&target.hullClass==='shuttle')&&(target.libraryId!==VORCHAN.id||target.hullClass!==VORCHAN.class))throw new RangeError('Target SCS defence and hull class are not verified');
+ const defence=direction?(target.hullClass==='shuttle'?SHUTTLE.defence:VORCHAN.defence)[direction]:null;
  const fireControl=weapon.fireControl[targetFireControlIndex(target.hullClass)];
  const rangePenalty=weaponRangePenalty({range:distance,penaltyPerStep:weapon.rangePenaltyPerHex-rangePenaltyAdjustment});
  const ew=ewAttackModifier({attackerOffensive:attackerOffensiveEW,targetDefensive:targetDefensiveEW,rangePenalty});
