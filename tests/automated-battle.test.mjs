@@ -178,3 +178,13 @@ test('committed acceleration and automatic travel update the hex in one atomic a
  assert.equal(s.ships[0].private_state.trial.movement.engineThrustSpent,6);
  assert.equal(s.journal.find(e=>e.type==='ship_moved').advanceAfter,2);
 });
+
+test('an extended-turn thrust commitment also executes its legal first travel segment',async()=>{
+ const {movementOptions}=await import('../shared/movement-options.mjs');let s=fresh();s.ships[0].speed=6;
+ for(const p of ['p1','p2'])s=command(s,p,{type:'power'});
+ s=command(s,'p1',{type:'initiative'},()=>1);s=command(s,'p2',{type:'initiative'},()=>20);
+ for(const p of ['p1','p2'])s=command(s,p,{type:'ew',defensive:8});
+ const option=movementOptions(s.ships[0],1).find(o=>o.name.startsWith('Begin Extended Turn Port'));
+ assert.ok(option);s=command(s,'p1',{type:'move',action:option.choices[0].action,advanceAfter:1});
+ const movement=s.ships[0].private_state.trial.movement.state;assert.equal(movement.remaining,5);assert.ok(movement.extendedTurn);assert.notDeepEqual([s.ships[0].q,s.ships[0].r],[3,10]);
+});

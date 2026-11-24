@@ -50,7 +50,7 @@ function EW({t,turn,detail,send,busy}){
 function Movement({t,ship,turn,detail,send,busy}){
  const options=movementOptions(ship,turn,detail.game.map_preset),[selected,setSelected]=useState(''),[choice,setChoice]=useState(0),[travel,setTravel]=useState(1);
  const current=options.find(x=>x.name===selected)||options[0],pick=current?.choices[Math.min(choice,current.choices.length-1)],e=effectiveCondition(t,turn),spent=t.movement.engineThrustSpent||0;
- const canTravel=pick&&!['advance','slide','extended-start','extended-cancel'].includes(pick.action.type),advanceAfter=canTravel?Math.min(travel,pick.remaining):0;
+ const canTravel=pick&&!['advance','slide','extended-cancel'].includes(pick.action.type),advanceAfter=canTravel?Math.min(travel,pick.remaining):0;
  let destination=pick?.position;try{if(advanceAfter)destination=commitMovement({ship,turn,action:pick.action,advanceAfter,mapPreset:detail.game.map_preset}).nextShip;}catch{}
  return <><p>Speed <strong>{ship.speed}</strong> · {t.movement.state.remaining} Hexes Remaining · Thrust <strong>{spent}/{e.freeThrust+t.powerAllocation.purchasedThrust}</strong> · Turn Delay {t.movement.state.turnDelayRemaining}</p>
   {e.commandDisabled&&<p>Command Systems Disabled: Inertial Movement Only</p>}
