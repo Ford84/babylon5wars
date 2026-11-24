@@ -11,7 +11,7 @@ import {createThrusterLedger,allocateThrusterThrust} from './thruster-ledger.mjs
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
 import {VORCHAN_THRUSTER_RATINGS} from './vorchan-scs-identification.mjs';
 export {VORCHAN_THRUSTER_RATINGS};
-export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]}){
+export function applyVorchanStage({ship,privateState,action,turn,otherShips=[],mapBounds={columns:20,rows:32},allowExit=false}){
  if(!Number.isInteger(turn)||turn<1)throw new RangeError('Invalid battle turn');
  const trial=privateState?.trial;
  if(!trial||trial.libraryId!==LIB.id)throw new RangeError('Not a Vorchan trial ship');
@@ -104,7 +104,7 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[]})
  if(action.type==='speed'&&old.turnDelayRemaining>0){const speed=Math.abs(next.speed);const delay=vorchanTurnDelayAtSpeed(next.speed,LIB.turnDelay);next={...next,turnDelayRemaining:adjustTurnDelay({oldRequired:old.turnDelayOriginal??old.turnDelayRemaining,hexesSinceTurn:old.hexesSinceTurn??0,newRequired:delay}).remaining,turnDelayOriginal:delay};}
  const newPath=next.history.at(-1)?.path||[];
  for(const point of newPath){
-  if(point.q<0||point.q>=20||point.r<0||point.r>=32)throw new RangeError('Outside trial map bounds');
+  if(!allowExit&&(point.q<0||point.q>=mapBounds.columns||point.r<0||point.r>=mapBounds.rows))throw new RangeError('Outside trial map bounds');
   // Ordinary ships may share a hex. Ramming is a separate declared action.
  }
  // The player chooses a physical thruster allocation; the server calculates cost and validates it.

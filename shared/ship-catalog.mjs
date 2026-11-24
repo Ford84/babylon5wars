@@ -8,7 +8,8 @@ export const BUILTIN_SHIP_CATALOG=Object.freeze([Object.freeze({
  scs:VORCHAN_SCS_IDENTIFICATION,
  verification:{...auditVorchanIdentification(),library:validateVorchanLibraryRecord(VORCHAN_LIBRARY_RECORD)},
  selectable:true,
- automaticCombatReady:false,
+ automaticCombatReady:true,
+ supportedScenarios:Object.freeze(['vorchan-clear-space-duel']),
 })]);
 export function getBuiltinShip(id){return BUILTIN_SHIP_CATALOG.find(s=>s.id===id)||null;}
-export function listBuiltinShips(){return BUILTIN_SHIP_CATALOG.map(({id,name,faction,source,dataRevision,sensorStrength,combatPoints,defence,initiativeBonus,weapons,weaponMounts,scs,verification,selectable,automaticCombatReady})=>({id,name,faction,source,dataRevision,sensorStrength,combatPoints,defence,initiativeBonus,weapons,weaponMounts,systems:scs.systems.map(({id,kind,section,armour,boxes,rows,verified})=>({id,kind,section,armour,boxes,rows,verified})),verification,selectable,automaticCombatReady}));}
+export function listBuiltinShips(){return BUILTIN_SHIP_CATALOG.map(({id,name,faction,source,dataRevision,sensorStrength,combatPoints,defence,initiativeBonus,weapons,weaponMounts,scs,verification,selectable,automaticCombatReady,supportedScenarios})=>({id,name,faction,source,dataRevision,sensorStrength,combatPoints,defence,initiativeBonus,weapons,weaponMounts,systems:scs.systems.map(({id,kind,section,armour,boxes,rows,verified})=>({id,kind,section,armour,boxes,rows,verified})),verification,selectable,automaticCombatReady,supportedScenarios}));}

@@ -15,6 +15,7 @@ const delta=(a,b)=>((a-b+540)%360)-180;
 export function bearingDegrees(shooter,target,{sameHexPrevious=null}={}){
  if(![shooter?.q,shooter?.r,target?.q,target?.r].every(int))throw new RangeError('Invalid hex coordinates');
  if(shooter.q===target.q&&shooter.r===target.r){
+  sameHexPrevious=sameHexPrevious||shooter.sameHexPrevious?.[target.id];
   if(!sameHexPrevious||![sameHexPrevious.shooter?.q,sameHexPrevious.shooter?.r,sameHexPrevious.target?.q,sameHexPrevious.target?.r].every(int))return {requiresChoice:true,reason:'Same-hex fire needs the positions immediately before the last entry'};
   return bearingDegrees(sameHexPrevious.shooter,sameHexPrevious.target);
  }
@@ -22,9 +23,11 @@ export function bearingDegrees(shooter,target,{sameHexPrevious=null}={}){
 }
 export function facingDirections(shooter,target,options={}){
  if(!int(target?.facing)||target.facing<0||target.facing>5)throw new RangeError('Invalid target facing');
- const bearing=bearingDegrees(target,shooter,options);
+ const prev=options.sameHexPrevious||shooter.sameHexPrevious?.[target.id];
+ const bearing=bearingDegrees(target,shooter,prev?{sameHexPrevious:{shooter:prev.target,target:prev.shooter}}:{});
  if(bearing.requiresChoice)return bearing;
- const relative=norm(bearing.angle-(-60+target.facing*60));
+ const raw=norm(bearing.angle-(-60+target.facing*60));
+ const relative=target.private_state?.trial?.movement?.state?.rolled||target.public_state?.rolled?norm(-raw):raw;
  // Forward 60°, port/starboard 120° each, aft 60°.
  const sector=relative<30||relative>330?'forward':relative<150?'starboard':relative<210?'aft':'port';
  const boundary=[30,150,210,330].find(n=>Math.abs(relative-n)<1e-8);
@@ -65,7 +68,7 @@ export function targetFireControlIndex(hullClass){
  if(['fighter','shuttle'].includes(hullClass))return 2;
  throw new RangeError('Unverified target hull class');
 }
-export function vorchanTargetingPreview({shooter,target,mountId,arc,blockingHexes=[],sameHexPrevious=null,defenderDirection=null,attackerOffensiveEW=0,targetDefensiveEW=0,otherModifiers=[],verifiedTerrain=true}){
+export function vorchanTargetingPreview({shooter,target,mountId,arc,blockingHexes=[],sameHexPrevious=null,defenderDirection=null,attackerOffensiveEW=0,targetDefensiveEW=0,otherModifiers=[],verifiedTerrain=true,rangePenaltyAdjustment=0}){
  if(!shooter||!target||shooter.id===target.id)throw new RangeError('Distinct ships required');
  if(shooter.libraryId!==VORCHAN.id||shooter.hullClass!==VORCHAN.class)throw new RangeError('Shooter SCS weapon profile is not verified');
  const mount=VORCHAN.weaponMounts.find(m=>m.id===mountId);
@@ -79,7 +82,7 @@ export function vorchanTargetingPreview({shooter,target,mountId,arc,blockingHexe
  if(target.libraryId!==VORCHAN.id||target.hullClass!==VORCHAN.class)throw new RangeError('Target SCS defence and hull class are not verified');
  const defence=direction?VORCHAN.defence[direction]:null;
  const fireControl=weapon.fireControl[targetFireControlIndex(target.hullClass)];
- const rangePenalty=weaponRangePenalty({range:distance,penaltyPerStep:weapon.rangePenaltyPerHex});
+ const rangePenalty=weaponRangePenalty({range:distance,penaltyPerStep:weapon.rangePenaltyPerHex-rangePenaltyAdjustment});
  const ew=ewAttackModifier({attackerOffensive:attackerOffensiveEW,targetDefensive:targetDefensiveEW,rangePenalty});
  if(!Array.isArray(otherModifiers)||otherModifiers.some(x=>!x||!int(x.value)||x.verified!==true||typeof x.reason!=='string'))throw new RangeError('Unverified additional modifier');
  const extra=otherModifiers.reduce((n,m)=>n+m.value,0);

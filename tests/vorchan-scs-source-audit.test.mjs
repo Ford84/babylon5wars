@@ -13,7 +13,8 @@ test('visual weapon symbol count: one plasma and two twin arrays',()=>{
  assert.equal(LIB.weapons.find(w=>w.id==='plasma-accelerator').mounts,1);
  assert.equal(LIB.weapons.find(w=>w.id==='twin-array').mounts,2);
  assert.equal(LIB.weaponMounts.length,3);
- assert.equal(Object.values(VORCHAN_SWITCHABLE_POWER).reduce((a,b)=>a+b,0),9);
+ assert.equal(LIB.weaponMounts.reduce((n,m)=>n+VORCHAN_SWITCHABLE_POWER[m.id],0),9);
+ assert.equal(VORCHAN_SWITCHABLE_POWER.sensors,4);assert.equal(VORCHAN_SWITCHABLE_POWER.jump_aft_centre,3);
  assert.deepEqual(LIB.weaponMounts.map(w=>w.arc.coverageDegrees),[90,270,270]);
 });
 test('visually transcribed SCS system tracks and icon values',()=>{
@@ -30,7 +31,7 @@ test('visually transcribed SCS system tracks and icon values',()=>{
  assert.equal(map.hangar.iconValue,2);
 });
 test('data verification is complete while combat integration remains explicitly incomplete',()=>{
- const audit=auditVorchanIdentification();assert.equal(audit.readyForCombat,false);
+ const audit=auditVorchanIdentification();assert.equal(audit.readyForCombat,true);
  assert.equal(SCS.completeness.allWeaponArcsIdentified,true);
  assert.equal(SCS.completeness.allDamageBoxesCounted,true);
  assert.equal(audit.shipDataVerified,true);

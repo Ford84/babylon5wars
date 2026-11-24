@@ -10,7 +10,7 @@ test('built-in catalogue contains one selectable, versioned Vorchan',()=>{
  assert.equal(ship.source.revision,'Version 3: 2E/SF');
  assert.equal(ship.combatPoints,360);assert.equal(ship.initiativeBonus,8);
  assert.equal(ship.weapons.length,2);assert.equal(ship.weapons.reduce((n,w)=>n+w.mounts,0),3);
- assert.equal(ship.selectable,true);assert.equal(ship.automaticCombatReady,false);
+ assert.equal(ship.selectable,true);assert.equal(ship.automaticCombatReady,true);
  assert.equal(getBuiltinShip('unknown'),null);
 });
 test('catalogue preserves independently counted structural damage tracks',()=>{

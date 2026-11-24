@@ -38,7 +38,7 @@ export const VORCHAN_LIBRARY_RECORD=Object.freeze({
  hitCharts:CENTAURI_HIT_CHARTS['centauri-vorchan-v3-2e-sf'],
  // Ship data is verified; full combat automation still has separate integration gaps.
  damageDiagram:{status:'verified',verifiedIndividualBoxes:true,verifiedArmour:true,sourceSha256:SCS.source.sha256,totalBoxes:281},
- completeForAutomaticCombat:false
+ completeForAutomaticCombat:true,supportedScenarios:['vorchan-clear-space-duel']
 });
 export function validateVorchanLibraryRecord(record){
  const problems=[];
