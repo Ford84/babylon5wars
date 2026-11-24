@@ -1,13 +1,14 @@
+import {commitMovement} from './movement-commit.mjs';
 import {movementOptions} from './movement-options.mjs';
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
 import {MAP_PRESETS} from './battle-setup.mjs';
+import {rollVorchanDamage} from './vorchan-damage.mjs';
 import {initialWeaponHistory,resolveVorchanShipFire,attackId} from './weapon-resolution.mjs';
 import {validateFireDeclaration,validateDefensiveAssignment} from './fire-orders.mjs';
 import {adjudicateVorchanShipTier} from './vorchan-tier-adjudicator.mjs';
 import {weaponReadiness} from './weapon-readiness.mjs';
 import {facingDirections,checkMountArc as __arc} from './weapon-targeting.mjs';
 import {unitInitiative} from './initiative-sequence.mjs';
-import {applyVorchanStage} from './vorchan-stage-server.mjs';
 import {newStagedMovement} from './staged-movement.mjs';
 import {orientationAtMovementStart} from './orientation-stage.mjs';
 import {extraEWCost} from './preturn.mjs';
@@ -86,7 +87,7 @@ function attackShips(s){return s.ships.map(x=>({...x,private_state:{trial:projec
 function endTurn(s,die){
  for(const ship of s.ships){const resolved=finishShipTurn(trial(ship),s.turn,die);ship.private_state.trial=resolved.trial;record(s,'critical_checks',{shipId:ship.id,results:resolved.results});}
  if(checkVictory(s))return;
- s.turn++;s.attacks=[];s.declarations=[];s.defences=[];s.dice=[];s.choices={};s.pending=[];s.combatStarted=false;s.fireSnapshot=null;
+ s.turn++;s.attacks=[];s.declarations=[];s.defences=[];s.dice=[];s.choices={};s.pending=[];s.combatStarted=false;s.damageRolled=false;s.fireSnapshot=null;
  next(s,'power');
 }
 function combat(s,die){
@@ -94,12 +95,28 @@ function combat(s,die){
  const ships=attackShips(s);
  if(!s.combatStarted){
   s.combatStarted=true;s.fireSnapshot=ships;
-  s.dice=s.declarations.flatMap(d=>d.fire.shots.filter(x=>x.role==='offensive').map(shot=>({attackId:attackId(shot),playerId:d.playerId,roll:die(20),locationRoll:die(20),primaryRoll:die(20),damageDice:Array.from({length:shot.mountId==='plasma_forward'?(shot.chargeTurns===3?4:shot.chargeTurns):1},()=>die(10))})));
-  record(s,'combat_dice',{rolls:s.dice});
- }
+  s.dice=s.declarations.flatMap(d=>d.fire.shots.filter(x=>x.role==='offensive').map(shot=>({attackId:attackId(shot),playerId:d.playerId,roll:die(20),damageDice:[]})));
+ }else if(s.damageRolled===undefined){s.damageRolled=true;} // Preserve dice in older pending battles.
  const directions=Object.assign({},...s.defences.map(d=>d.directions||{}));
  const fire=resolveVorchanShipFire({turn:s.turn,ships:s.fireSnapshot,declarations:s.declarations,defences:s.defences,rolls:s.dice,blockingHexes:[],terrainVerified:true,defenderChoices:directions});
  if(!fire.complete)fail('Attack validation failed: '+fire.results.flatMap(x=>x.blockers).join('; '));
+ if(!s.damageRolled){
+  for(const attack of fire.results){
+   const dice=s.dice.find(r=>r.attackId===attack.id);dice.hit=attack.hit;
+   if(!attack.hit)continue;
+   dice.locationRoll=die(20);dice.primaryRoll=die(20);
+   const mount=LIB.weaponMounts.find(m=>m.id===attack.mountId),weapon=LIB.weapons.find(w=>w.id===mount.weaponId);
+   const option=weapon.firingOptions.find(o=>o.turns===(attack.chargeTurns||1));
+   dice.damageDice=Array.from({length:option.damageDice.count},()=>die(option.damageDice.sides));
+  }
+  s.damageRolled=true;record(s,'combat_dice',{rolls:s.dice});
+  record(s,'weapons_fired',{attacks:fire.results.map(attack=>{
+   const source=ships.find(x=>x.id===attack.shipId),target=ships.find(x=>x.id===attack.targetId),dice=s.dice.find(r=>r.attackId===attack.id);
+   const range=Math.max(Math.abs(source.q-target.q),Math.abs(source.r-target.r),Math.abs(source.q+source.r-target.q-target.r));
+   const damage=attack.hit?rollVorchanDamage({mountId:attack.mountId,chargeTurns:attack.chargeTurns||1,dice:dice.damageDice,range,mode:attack.mode,damageLoss:trial(source).condition.effects.weapons[attack.mountId]?.damageLoss||0}).damage:null;
+   return {...attack,from:{q:source.q,r:source.r},to:{q:target.q,r:target.r},effect:attack.mountId==='plasma_forward'?'plasma':'pulse',damageDice:dice.damageDice,damage};
+  })});
+ }
  const choices=structuredClone(s.choices);
  for(const attack of fire.results){
   const shooter=ships.find(x=>x.id===attack.shipId),target=ships.find(x=>x.id===attack.targetId);
@@ -196,11 +213,12 @@ export function executeBattle(state,playerId,command,die=rollDie){
   t.ewAllocation={turn:s.turn,defensive,offensive,available,unallocated:available-spent};record(s,'ew_committed',{shipId:ship.id});lock();
   if(members(s).every(p=>s.locks[p])){record(s,'ew_allocations_revealed',{allocations:s.ships.map(x=>({shipId:x.id,ownerId:x.owner_id,shipLabel:x.label,...trial(x).ewAllocation}))});startMovement(s);}
  }else if(command.type==='move'&&s.phase==='movement'){
-  const action=command.action;
+  const action=command.action,advanceAfter=command.advanceAfter??0;
+  if(!int(advanceAfter)||advanceAfter>10000||advanceAfter&&['advance','slide','extended-start','extended-cancel'].includes(action?.type))fail('Invalid automatic movement segment');
   if(!action||e.commandDisabled&&action.type!=='advance')fail('Command damage permits only inertial movement');
   if(e.powerOff&&action.type!=='advance')fail('Reactor shutdown permits only inertial movement');
   const before=s.ships.map(x=>({id:x.id,q:x.q,r:x.r}));
-  const result=applyVorchanStage({ship,privateState:{trial:projectTrial(t,s.turn)},turn:s.turn,action,mapBounds:MAP_PRESETS[s.mapPreset],allowExit:true});
+  const result=commitMovement({ship,privateState:{trial:projectTrial(t,s.turn)},turn:s.turn,action,advanceAfter,mapPreset:s.mapPreset});
   Object.assign(ship,result.nextShip);ship.private_state=result.nextPrivateState;
   if(before.find(x=>x.id===ship.id).q!==ship.q||before.find(x=>x.id===ship.id).r!==ship.r)for(const other of s.ships.filter(x=>x.id!==ship.id&&x.q===ship.q&&x.r===ship.r)){
    const a=before.find(x=>x.id===ship.id),b=before.find(x=>x.id===other.id);
@@ -208,7 +226,7 @@ export function executeBattle(state,playerId,command,die=rollDie){
   }
   const bounds=MAP_PRESETS[s.mapPreset];
   if(ship.q<0||ship.q>=bounds.columns||ship.r<0||ship.r>=bounds.rows){ship.withdrawn=true;record(s,'ship_withdrew',{shipId:ship.id});checkVictory(s);}
-  record(s,'ship_moved',{shipId:ship.id,action:action.type,q:ship.q,r:ship.r,facing:ship.facing,speed:ship.speed,thrustSpent:result.engineThrustSpent});
+  record(s,'ship_moved',{shipId:ship.id,action:action.type,advanceAfter,q:ship.q,r:ship.r,facing:ship.facing,speed:ship.speed,thrustSpent:result.engineThrustSpent});
  }else if(command.type==='movement-done'&&s.phase==='movement'){
   if(t.movement.state.remaining!==0)fail('Complete the ship’s remaining movement');
   lock();if(members(s).every(p=>s.locks[p]))next(s,'fire_commit');

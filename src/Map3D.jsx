@@ -1,3 +1,4 @@
+import {createWeaponAnimator} from './weapon-effects-3d.js';
 import React,{useEffect,useRef,useState} from 'react';
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
@@ -24,8 +25,9 @@ function makeVorchan(){
  for(const sign of [-1,1]){poly([[sign*1.6,-1],[sign*5,3],[sign*4.6,3.6],[sign*1.2,1.5]],trim,.35);const e=new THREE.Mesh(new THREE.CylinderGeometry(.5,.7,1.2,10),dark);e.rotation.x=Math.PI/2;e.position.set(sign*1.4,.5,4.7);g.add(e);const glow=new THREE.Mesh(new THREE.CircleGeometry(.45,12),engine);glow.rotation.x=-Math.PI/2;glow.position.set(sign*1.4,.65,5.36);g.add(glow);}
  g.scale.setScalar(.72);return g;
 }
-export default function Map3D({ships,selected,setSelected,preset='standard',modelId=DEFAULT_VORCHAN_MODEL_ID}){
+export default function Map3D({ships,selected,setSelected,preset='standard',modelId=DEFAULT_VORCHAN_MODEL_ID,volley}){
  const modelUrl=vorchanModelById(modelId).url;
+ const volleyRef=useRef(volley);volleyRef.current=volley;
  const mount=useRef(null),engine=useRef(null),[zoom,setZoom]=useState(1),[localModel,setLocalModel]=useState(null),[modelStatus,setModelStatus]=useState('Loading model');
  useEffect(()=>{let alive=true;storedTyrelModel().then(data=>{if(alive&&data){setLocalModel(data);setModelStatus('Tyrel Lohr Vorchan — saved default model');}}).catch(()=>{});return()=>{alive=false}},[]);
  const dims={standard:[20,32],outer:[40,64],inner:[80,128]}[preset]||[20,32];
@@ -50,10 +52,11 @@ export default function Map3D({ships,selected,setSelected,preset='standard',mode
 
   const onClick=e=>{const rect=renderer.domElement.getBoundingClientRect();mouse.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(mouse,camera);const hits=ray.intersectObjects(pick,false);if(hits.length)setSelected(hits[0].object.userData.shipId);};
   const onWheel=e=>{e.preventDefault();setZoom(z=>Math.min(12,Math.max(.4,z*(e.deltaY<0?1.15:1/1.15))));};
-  renderer.domElement.addEventListener('click',onClick);renderer.domElement.addEventListener('wheel',onWheel,{passive:false});engine.current={updateCamera};
+  renderer.domElement.addEventListener('click',onClick);renderer.domElement.addEventListener('wheel',onWheel,{passive:false});const weaponAnimator=createWeaponAnimator(scene,()=>renderer.render(scene,camera),hexPoint);engine.current={updateCamera,playWeapons:weaponAnimator.play};weaponAnimator.play(volleyRef.current);
   const resize=new ResizeObserver(updateCamera);resize.observe(host);updateCamera();
-  return()=>{alive=false;resize.disconnect();renderer.domElement.removeEventListener('click',onClick);renderer.domElement.removeEventListener('wheel',onWheel);renderer.dispose();host.removeChild(renderer.domElement);engine.current=null;};
+  return()=>{alive=false;weaponAnimator.dispose();resize.disconnect();renderer.domElement.removeEventListener('click',onClick);renderer.domElement.removeEventListener('wheel',onWheel);renderer.dispose();host.removeChild(renderer.domElement);engine.current=null;};
  },[preset,ships,selected,setSelected,localModel,modelUrl]);
  useEffect(()=>engine.current?.updateCamera(),[zoom]);
+ useEffect(()=>engine.current?.playWeapons(volley),[volley]);
  return <div><div className="map3d-controls"><button type="button" onClick={()=>setZoom(z=>Math.max(.4,z/1.3))}>− Zoom out</button><button type="button" onClick={()=>setZoom(z=>Math.min(12,z*1.3))}>+ Zoom in</button><button type="button" onClick={()=>setZoom(1)}>Reset camera</button><span>{modelStatus}</span></div><div ref={mount} className="map3d-viewport" aria-label="Interactive 3D tactical hex battlefield"/></div>;
 }

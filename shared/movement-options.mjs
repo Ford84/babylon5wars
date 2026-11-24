@@ -17,7 +17,7 @@ export function movementOptions(ship,turn,mapPreset='standard'){
   const choices=[];
   for(const allocation of allocations){
    const c={...action,...(action.type!=='advance'?{thrusters:Object.fromEntries(Object.entries(allocation).filter(([,n])=>n))}:{})};
-   try{const r=applyVorchanStage({ship,privateState:ship.private_state,action:c,turn,mapBounds:MAP_PRESETS[mapPreset],allowExit:true});const ledger=r.nextPrivateState.trial.movement.thrusterLedger;choices.push({action:c,cost:r.engineThrustSpent-(t.movement.engineThrustSpent||0),overthrust:Object.entries(ledger).filter(([,l])=>l.used>l.rating).map(([id,l])=>({id,excess:l.used-l.rating})),position:r.nextShip});}catch{}
+   try{const r=applyVorchanStage({ship,privateState:ship.private_state,action:c,turn,mapBounds:MAP_PRESETS[mapPreset],allowExit:true});const ledger=r.nextPrivateState.trial.movement.thrusterLedger;choices.push({action:c,cost:r.engineThrustSpent-(t.movement.engineThrustSpent||0),overthrust:Object.entries(ledger).filter(([,l])=>l.used>l.rating).map(([id,l])=>({id,excess:l.used-l.rating})),remaining:r.nextPrivateState.trial.movement.state.remaining,position:r.nextShip});}catch{}
   }
   choices.sort((a,b)=>a.overthrust.reduce((n,x)=>n+x.excess,0)-b.overthrust.reduce((n,x)=>n+x.excess,0)||a.cost-b.cost);
   if(choices.length)templates.push({name,choices});

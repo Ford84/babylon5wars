@@ -36,15 +36,15 @@ export function vorchanHitToken({incoming,locationRoll,primaryRoll=null,sideChoi
  }
  return {requiresChoice:false,section,token,candidates:damageSystemCandidates(token,section)};
 }
-export function rollVorchanDamage({mountId,chargeTurns=3,dice,range,damageLoss=0}){
+export function rollVorchanDamage({mountId,chargeTurns=3,dice,range,damageLoss=0,mode='Standard'}){
  const mount=LIB.weaponMounts.find(m=>m.id===mountId);
- if(!mount||!int(range))throw new RangeError('Invalid weapon or range');
+ if(!mount||!int(range)||!LIB.weapons.find(w=>w.id===mount.weaponId).modes.includes(mode))throw new RangeError('Invalid weapon or range');
  const weapon=LIB.weapons.find(w=>w.id===mount.weaponId);
  const option=mount.weaponId==='plasma-accelerator'?weapon.firingOptions.find(o=>o.turns===chargeTurns):weapon.firingOptions[0];
  if(!option)throw new RangeError('Invalid plasma charge');
  const {count,sides,bonus,perHex}=option.damageDice;
  if(!Array.isArray(dice)||dice.length!==count||dice.some(n=>!int(n,1)||n>sides))throw new RangeError('Damage dice mismatch');
- return {weaponId:weapon.id,dice:[...dice],range,raw:dice.reduce((a,b)=>a+Math.max(1,b-damageLoss),bonus),damage:Math.max(0,dice.reduce((a,b)=>a+Math.max(1,b-damageLoss),bonus)+range*perHex),plasma:weapon.class==='Plasma'};
+ return {weaponId:weapon.id,mode,dice:[...dice],range,raw:dice.reduce((a,b)=>a+Math.max(1,b-damageLoss),bonus),damage:Math.max(0,dice.reduce((a,b)=>a+Math.max(1,b-damageLoss),bonus)+range*perHex),plasma:weapon.class==='Plasma'};
 }
 function applyToTrack(next,id,damage,plasma,trace){
  const s=systems.get(id);
@@ -83,12 +83,13 @@ export function applyVorchanStandardVolley({state,damage,plasma=false,incoming,l
   if(!selected||systems.get(selected).kind!=='structure'){
    if(next.tracks[structure]?.marked===systems.get(structure)?.boxes)structure='primary_structure';
    if(remaining>0)remaining=applyToTrack(next,structure,remaining,plasma,trace);
+   if(remaining>0&&structure!=='primary_structure')remaining=applyToTrack(next,'primary_structure',remaining,plasma,trace);
   }else if(remaining>0&&structure!=='primary_structure'){
    remaining=applyToTrack(next,'primary_structure',remaining,plasma,trace);
   }
  }
  next.destroyedSections=['forward','aft'].filter(section=>next.tracks[section+'_structure']?.marked===systems.get(section+'_structure').boxes);
- next.shipDestroyed=next.tracks.primary_structure?.marked===systems.get('primary_structure').boxes;
+ next.shipDestroyed=next.tracks.primary_structure?.marked===systems.get('primary_structure').boxes||next.tracks.reactor?.marked===systems.get('reactor').boxes;
  return {requiresChoice:false,hit:{...hit,systemId:selected},state:next,trace,unallocated:remaining,criticalChecksDeferred:true,postTurnSectionLossDeferred:true};
 }
 export function vorchanPostTurnStructureLoss(state){
