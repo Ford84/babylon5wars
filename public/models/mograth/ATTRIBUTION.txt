@@ -1,0 +1,6 @@
+Centauri Mograth Frigate — Tyrel Lohr
+Source: user-supplied centauri-mograth-frigate20231201-30311-a2xo9m.zip
+Selected mesh: Centauri-Mograth-RC1.stl (standard version).
+The sculpt is preserved, with vertex welding and a purple / muted brass material scheme.
+Reproduce with scripts/convert-mograth.py and the original archive.
+No ownership of the original sculpt is claimed.

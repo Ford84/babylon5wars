@@ -1,3 +1,4 @@
+import {guardianPowerMode} from './guardian-array.mjs';
 import {elintBudget,validateElint,fixedEWForUnits,ewPositionSnapshot,disruptionQueue,selectDisruption} from './elint.mjs';
 import {hullProfile,hullSystems} from './vorchar.mjs';
 import {enableOperations,activeShuttles,currentMover,shuttleCombatUnit,shuttleView,jumpAvailability,hangarOptions,applyHangar,jumpCheck,openJumpPoint,checkPointRange,noteEntry,entryOptions,enterJump,closePoint,vortexClosure,newShuttleMovement,moveShuttle} from './vorchan-operations.mjs';
@@ -134,7 +135,7 @@ function completeTurn(s){
  next(s,'power');
 }
 function combat(s,die){
- if(s.combatFlow==='guided'&&!s.combatStarted&&beginGuidedCombat(s,attackShips(s)))return;
+ if((s.combatFlow==='guided'||s.declarations.some(d=>d.fire.shots.some(x=>x.mountId==='plasma_stream')))&&!s.combatStarted&&beginGuidedCombat(s,attackShips(s)))return;
  resolveTier(s,die);
 }
 function resolveTier(s,die){
@@ -153,7 +154,7 @@ function resolveTier(s,die){
    if(!attack.hit)continue;
    dice.locationRoll=die(20);dice.primaryRoll=die(20);
    const hull=hullProfile(ships.find(x=>x.id===attack.shipId).public_state.libraryId),mount=hull.weaponMounts.find(m=>m.id===attack.mountId),weapon=hull.weapons.find(w=>w.id===mount.weaponId);
-   const option=weapon.firingOptions.find(o=>o.turns===(attack.chargeTurns||1));
+   const option=weapon.id==='plasma-accelerator'?weapon.firingOptions.find(o=>o.turns===(attack.chargeTurns||1)):weapon.firingOptions[0];
    dice.damageDice=Array.from({length:option.damageDice.count},()=>die(option.damageDice.sides));
   }
   s.damageRolled=true;record(s,'combat_dice',{rolls:s.dice});
@@ -161,7 +162,7 @@ function resolveTier(s,die){
    const source=ships.find(x=>x.id===attack.shipId),target=ships.find(x=>x.id===attack.targetId),dice=s.dice.find(r=>r.attackId===attack.id);
    const range=Math.max(Math.abs(source.q-target.q),Math.abs(source.r-target.r),Math.abs(source.q+source.r-target.q-target.r));
    const damage=attack.hit?rollVorchanDamage({libraryId:source.private_state.trial.libraryId,mountId:attack.mountId,chargeTurns:attack.chargeTurns||1,dice:dice.damageDice,range,mode:attack.mode,damageLoss:trial(source).condition.effects.weapons[attack.mountId]?.damageLoss||0}):null;
-   return {...attack,from:{q:source.q,r:source.r},to:{q:target.q,r:target.r},effect:attack.mountId==='plasma_forward'?'plasma':'pulse',damageDice:dice.damageDice,damageResult:damage,damage:damage?.damage??null};
+   return {...attack,from:{q:source.q,r:source.r},to:{q:target.q,r:target.r},effect:['plasma_forward','plasma_stream'].includes(attack.mountId)?'plasma':'pulse',damageDice:dice.damageDice,damageResult:damage,damage:damage?.damage??null};
   })});
  }
  const choices=structuredClone(s.choices);
@@ -187,7 +188,7 @@ function settleAutomaticActions(s,die){
  for(let step=0;step<12&&s.status==='active';step++){
   const phase=s.phase;let changed=false;
   if(s.operations&&phase==='jump_formation'){
-   for(const ship of s.ships.filter(x=>x.kind!=='shuttle'&&live(x,s.turn)&&!s.locks[x.owner_id]&&!s.unitPhaseLocks?.[x.id]))if(!jumpAvailability(s,ship).ready){const p=s.jumpPoints.find(p=>p.shipId===ship.id&&p.status==='open');if(p&&!effectiveCondition(trial(ship),s.turn).powerOff&&!effectiveCondition(trial(ship),s.turn).destroyedSystems.includes('jump_aft_centre'))jumpCheck(s,ship,die);markShip(s,ship);changed=true;}
+   for(const ship of s.ships.filter(x=>x.kind!=='shuttle'&&live(x,s.turn)&&!s.locks[x.owner_id]&&!s.unitPhaseLocks?.[x.id]))if(!jumpAvailability(s,ship).ready){const p=s.jumpPoints.find(p=>p.shipId===ship.id&&p.status==='open');if(p&&hullProfile(trial(ship).libraryId).jumpDelay&&!effectiveCondition(trial(ship),s.turn).powerOff&&!effectiveCondition(trial(ship),s.turn).destroyedSystems.includes('jump_aft_centre'))jumpCheck(s,ship,die);markShip(s,ship);changed=true;}
    if(checkVictory(s)){changed=true;}else if(members(s).every(p=>s.locks[p])){startMovement(s);changed=true;}
   }else if(s.operations&&phase==='vortex_closure'){
    for(const ship of s.ships.filter(x=>x.kind!=='shuttle'&&live(x,s.turn)&&!s.locks[x.owner_id]&&!s.unitPhaseLocks?.[x.id]))if(!s.jumpPoints.some(p=>p.shipId===ship.id&&p.status==='open'&&p.activeTurn<=s.turn)){markShip(s,ship);changed=true;}
@@ -244,6 +245,7 @@ function executeCommand(state,playerId,command,die=rollDie){
  if(command.type==='power'&&s.phase==='power'){
   const hull=hullProfile(t.libraryId),systemPower=systemPowerForHull(hull.id);
   let {purchasedThrust=0,extraEW=0,deactivated=[],shutdown=false}=command;
+  if(hull.weaponMounts.some(m=>m.weaponId==='guardian-array')&&!e.destroyedSystems.includes('guardian')){t.guardianMode=guardianPowerMode(t,s.turn,command.guardianMode);if(t.guardianMode.mode==='switching')deactivated=[...new Set([...deactivated,'guardian'])];}
   if(s.operations&&t.jump?.maintaining){deactivated=[...new Set([...deactivated,...hull.weaponMounts.map(x=>x.id).filter(id=>!e.destroyedSystems.includes(id)),...[]])];if(purchasedThrust||extraEW)fail('Maintaining a jump point uses all spare power');}
   if(s.operations&&deactivated.includes('jump_aft_centre')&&t.condition.damage.tracks.jump_aft_centre.marked<=hull.scs.systems.find(system=>system.id==='jump_aft_centre').boxes/2)fail('The jump engine may only be deactivated when more than 50% damaged');
   if(!int(purchasedThrust)||!int(extraEW)||!Array.isArray(deactivated)||new Set(deactivated).size!==deactivated.length||deactivated.some(id=>!Object.hasOwn(systemPower,id)||e.destroyedSystems.includes(id))||typeof shutdown!=='boolean')fail('Invalid power allocation');
@@ -264,7 +266,7 @@ function executeCommand(state,playerId,command,die=rollDie){
  }else if(command.type==='initiative'&&s.phase==='initiative'){
   const unit=s.operations&&command.unitId? [...s.ships,...activeShuttles(s)].find(x=>x.id===command.unitId&&x.owner_id===playerId):available.find(x=>trial(x).initiative?.turn!==s.turn)||ship;
   if(!unit)fail('Choose your unit');const shuttle=unit.kind==='shuttle',old=shuttle?unit.initiative:trial(unit).initiative;if(old?.turn===s.turn)fail('This unit has already rolled initiative');
-  const result=unitInitiative({roll:die(20),printedBonus:shuttle?9:8,speed:unit.speed,launchedOrLanded:!shuttle&&trial(unit).hangarActionTurn===s.turn-1,newlyLaunched:shuttle&&unit.launchedTurn===s.turn-1,otherModifiers:shuttle?0:effectiveCondition(trial(unit),s.turn).initiativeModifier});
+  const result=unitInitiative({roll:die(20),printedBonus:shuttle?9:hullProfile(trial(unit).libraryId).initiativeBonus,speed:unit.speed,launchedOrLanded:!shuttle&&trial(unit).hangarActionTurn===s.turn-1,newlyLaunched:shuttle&&unit.launchedTurn===s.turn-1,otherModifiers:shuttle?0:effectiveCondition(trial(unit),s.turn).initiativeModifier});
   if(shuttle)unit.initiative={...result,turn:s.turn};else trial(unit).initiative={...result,turn:s.turn};record(s,'initiative_rolled',{shipId:unit.id,...result});
   if(!s.operations||[...available,...activeShuttles(s).filter(x=>x.owner_id===playerId)].every(x=>(x.kind==='shuttle'?x.initiative:trial(x).initiative)?.turn===s.turn))s.locks[playerId]=true;
   if(members(s).every(p=>s.locks[p])){initiativeOrder(s,die);next(s,'ew_commit');}
@@ -335,7 +337,7 @@ function executeCommand(state,playerId,command,die=rollDie){
   s.declarations.push({playerId,fire});lock();record(s,'fire_committed',{playerId});
   if(members(s).every(p=>s.locks[p])){next(s,'fire_resolution');record(s,'fire_revealed',{declarations:s.declarations});}
  }else if(command.type==='defence'&&s.phase==='fire_resolution'&&!s.combatStarted){
-  const ships=attackShips(s),defence=validateDefensiveAssignment({playerId,ships,declarations:s.declarations,assignments:command.assignments||[]}),directions=command.directions||{};
+  const ships=attackShips(s),defence=validateDefensiveAssignment({playerId,ships,declarations:s.declarations,assignments:command.assignments||[],directions:command.directions||{}}),directions=command.directions||{};
   const expected=new Map();
   for(const shot of s.declarations.flatMap(d=>d.fire.shots.filter(x=>x.role==='offensive'&&ships.some(y=>y.id===x.targetId&&y.owner_id===playerId)))){const shooter=ships.find(x=>x.id===shot.shipId),target=ships.find(x=>x.id===shot.targetId),f=facingDirections(shooter,target,{sameHexPrevious:shooter.sameHexPrevious[target.id]});if(f.requiresChoice)expected.set(shooter.id+':'+target.id,f.choices);}
   if(Object.keys(directions).some(id=>!expected.has(id))||[...expected].some(([id,choices])=>!choices?.includes(directions[id])))fail('Select each legal incoming boundary aspect before rolling');

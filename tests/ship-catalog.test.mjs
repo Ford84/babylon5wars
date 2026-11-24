@@ -4,7 +4,7 @@ import {BUILTIN_SHIP_CATALOG,getBuiltinShip,listBuiltinShips} from '../shared/sh
 import {auditVorchanIdentification} from '../shared/vorchan-scs-identification.mjs';
 
 test('built-in catalogue contains selectable, versioned Centauri ships',()=>{
- assert.equal(BUILTIN_SHIP_CATALOG.length,2);
+ assert.equal(BUILTIN_SHIP_CATALOG.length,3);
  const ship=getBuiltinShip('centauri-vorchan-v3-2e-sf');
  assert.ok(ship);assert.equal(ship.faction,'Centauri Republic');
  assert.equal(ship.source.revision,'Version 3: 2E/SF');
@@ -18,7 +18,7 @@ test('catalogue preserves independently counted structural damage tracks',()=>{
  assert.equal(ship.scs.systems.length,18);
  assert.deepEqual(auditVorchanIdentification().unverifiedTracks,[]);
  assert.deepEqual(ship.scs.systems.filter(s=>s.kind==='structure').map(s=>s.boxes),[48,28,44]);
- assert.equal(listBuiltinShips().length,2);
+ assert.equal(listBuiltinShips().length,3);
 });
 
 test('Vorchan three weapon mounts resolve to individually tracked SCS systems',()=>{

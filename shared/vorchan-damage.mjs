@@ -16,6 +16,7 @@ export function damageSystemCandidates(token,section,libraryId){
  const candidates={
   retro_thrust:['forward_port_thrust','forward_starboard_thrust'],plasma_accelerator:['plasma_forward'],
   twin_array:hullSystems(libraryId).filter(s=>s.weaponCardId==='twin-array').map(s=>s.id),
+  plasma_stream:['plasma_stream'],matter_cannon:['matter_port','matter_starboard'],guardian_array:['guardian'],
   forward_structure:['forward_structure'],aft_structure:['aft_structure'],primary_structure:['primary_structure'],
   side_thrust:['port_thrust','starboard_thrust'],sensors:['sensors'],engine:['engine'],
   hangar:['hangar'],reactor:['reactor'],command:['command'],
@@ -48,22 +49,23 @@ export function rollVorchanDamage({mountId,chargeTurns=3,dice,range,damageLoss=0
  if(!option)throw new RangeError('Invalid plasma charge');
  const {count,sides,bonus,perHex}=option.damageDice;
  if(!Array.isArray(dice)||dice.length!==count||dice.some(n=>!int(n,1)||n>sides))throw new RangeError('Damage dice mismatch');
- return {weaponId:weapon.id,mode,dice:[...dice],range,formula:{count,sides,bonus,perHex,damageLoss},raw:dice.reduce((a,b)=>a+Math.max(1,b-damageLoss),bonus),damage:Math.max(0,dice.reduce((a,b)=>a+Math.max(1,b-damageLoss),bonus)+range*perHex),plasma:weapon.class==='Plasma'};
+ return {weaponId:weapon.id,mode,dice:[...dice],range,formula:{count,sides,bonus,perHex,damageLoss},raw:dice.reduce((a,b)=>a+Math.max(1,b-damageLoss),bonus),damage:Math.max(0,dice.reduce((a,b)=>a+Math.max(1,b-damageLoss),bonus)+range*perHex),plasma:weapon.class==='Plasma',matter:weapon.class==='Matter',plasmaStream:weapon.id==='plasma-stream',raking:weapon.id==='plasma-stream'?5:null};
 }
-function applyToTrack(next,id,damage,plasma,trace,systems){
+function applyToTrack(next,id,damage,plasma,trace,systems,{matter=false,plasmaStream=false}={}){
  const s=systems.get(id);
  if(!s?.verified||!int(s.boxes)||!int(s.armour)||!next.tracks[id])throw new RangeError('Unverified SCS damage track '+id);
  const previous=next.tracks[id].marked;
  const remaining=Math.max(0,s.boxes-previous);
  if(remaining===0)return damage;
- const armour=plasma?Math.floor(s.armour/2):s.armour;
+ const currentArmour=Math.max(0,s.armour-(next.armourLoss?.[id]||0)),armour=matter?0:plasma?Math.floor(currentArmour/2):currentArmour;
+ if(plasmaStream&&damage>=5){next.armourLoss??={};next.armourLoss[id]=(next.armourLoss[id]||0)+Math.min(1,currentArmour);}
  const penetrated=Math.max(0,damage-armour),marked=Math.min(remaining,penetrated);
  next.tracks[id]={marked:previous+marked};
  if(marked&&!next.criticalCandidates.includes(id))next.criticalCandidates.push(id);
- trace.push({systemId:id,armour,damageIn:damage,marked,damageOut:Math.max(0,penetrated-marked),destroyed:previous+marked===s.boxes});
- return Math.max(0,penetrated-marked);
+ trace.push({systemId:id,armour,damageIn:damage,marked,damageOut:matter?0:Math.max(0,penetrated-marked),armourLost:plasmaStream&&damage>=5&&currentArmour>0?1:0,destroyed:previous+marked===s.boxes});
+ return matter?0:Math.max(0,penetrated-marked);
 }
-export function applyVorchanStandardVolley({state,damage,plasma=false,incoming,locationRoll,primaryRoll=null,sideChoice=null,systemChoice=null,shieldChoice=null,eligibleSystemIds=null}){
+export function applyVorchanStandardVolley({state,damage,plasma=false,matter=false,plasmaStream=false,incoming,locationRoll,primaryRoll=null,sideChoice=null,systemChoice=null,shieldChoice=null,eligibleSystemIds=null}){
  if(!state||!int(damage)||!['forward','aft','port','starboard'].includes(incoming)||typeof plasma!=='boolean')throw new RangeError('Invalid volley');
  if(shieldChoice!==null)throw new RangeError('Vorchan SCS has no verified shield system');
  if(state.shipDestroyed)throw new RangeError('Ship already destroyed');
@@ -78,23 +80,24 @@ export function applyVorchanStandardVolley({state,damage,plasma=false,incoming,l
  if(systemChoice&&candidates.length&&!candidates.includes(systemChoice))throw new RangeError('Invalid defender system choice');
  const selected=systemChoice||candidates[0]||null;
  // Destroyed systems cannot absorb another volley; hit structure instead.
- let structure=hit.section==='primary'?'primary_structure':hit.section==='aft'?'aft_structure':'forward_structure';
+ const medium=hullProfile(state.libraryId)?.class==='medium';
+ let structure=medium?'primary_structure':hit.section==='primary'?'primary_structure':hit.section==='aft'?'aft_structure':'forward_structure';
  let remaining=damage;
- if(selected)remaining=applyToTrack(next,selected,remaining,plasma,trace,systems);
+ if(selected)remaining=applyToTrack(next,selected,remaining,plasma,trace,systems,{matter,plasmaStream});
  else if(hit.token.endsWith('_structure'))structure=hit.token;
  if(!selected||remaining>0){
   if(selected&&systems.get(selected).kind==='structure')structure=selected;
   // An overkill is routed to its own structural area, not necessarily the hit chart.
-  else if(selected)structure=['primary','port','starboard'].includes(systems.get(selected).section)?'primary_structure':systems.get(selected).section==='aft'?'aft_structure':'forward_structure';
+  else if(selected)structure=medium?'primary_structure':['primary','port','starboard'].includes(systems.get(selected).section)?'primary_structure':systems.get(selected).section==='aft'?'aft_structure':'forward_structure';
   if(!selected||systems.get(selected).kind!=='structure'){
    if(next.tracks[structure]?.marked===systems.get(structure)?.boxes)structure='primary_structure';
-   if(remaining>0)remaining=applyToTrack(next,structure,remaining,plasma,trace,systems);
-   if(remaining>0&&structure!=='primary_structure')remaining=applyToTrack(next,'primary_structure',remaining,plasma,trace,systems);
+   if(remaining>0)remaining=applyToTrack(next,structure,remaining,plasma,trace,systems,{matter,plasmaStream});
+   if(remaining>0&&structure!=='primary_structure')remaining=applyToTrack(next,'primary_structure',remaining,plasma,trace,systems,{matter,plasmaStream});
   }else if(remaining>0&&structure!=='primary_structure'){
-   remaining=applyToTrack(next,'primary_structure',remaining,plasma,trace,systems);
+   remaining=applyToTrack(next,'primary_structure',remaining,plasma,trace,systems,{matter,plasmaStream});
   }
  }
- next.destroyedSections=['forward','aft'].filter(section=>next.tracks[section+'_structure']?.marked===systems.get(section+'_structure').boxes);
+ next.destroyedSections=['forward','aft'].filter(section=>systems.has(section+'_structure')&&next.tracks[section+'_structure']?.marked===systems.get(section+'_structure').boxes);
  next.shipDestroyed=next.tracks.primary_structure?.marked===systems.get('primary_structure').boxes||next.tracks.reactor?.marked===systems.get('reactor').boxes;
  return {requiresChoice:false,hit:{...hit,systemId:selected},state:next,trace,unallocated:remaining,criticalChecksDeferred:true,postTurnSectionLossDeferred:true};
 }

@@ -26,10 +26,10 @@ export function validateManoeuvreThrusters({action,oldState,cost,allocation}){
   const direction=action.type==='extended-complete'?oldState.extendedTurn?.direction:action.direction;
   if(![-1,1].includes(direction))throw new RangeError('Invalid extended turn direction');
   groups=[reverse?forward:aft,reverse?same(direction):opposite(direction)];
- }else if(action.type==='pivot-start'||action.type==='pivot-halt'){
+ }else if(action.type==='pivot-start'||action.type==='pivot-halt'||action.type==='agile-pivot'){
   groups=groupForPair[action.thrusterPair];
   if(!groups)throw new RangeError('Invalid pivot thruster pair');
- }else if(action.type==='roll-start'||action.type==='roll-halt'){
+ }else if(action.type==='roll-start'||action.type==='roll-halt'||action.type==='agile-roll'){
   return true; // Roll cost may be channelled through any combination of thrusters.
  }else throw new RangeError('Unsupported thrust manoeuvre');
  const eligible=new Set(groups.flat());

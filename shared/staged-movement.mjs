@@ -48,10 +48,10 @@ export function stagedMove(state,action,limits){
  }
  throw new RangeError('Unknown movement action');
 }
-export function turnCostAtSpeed(speed,chart){
+export function turnCostAtSpeed(speed,chart,divisor=2){
  if(!integer(speed)||!Array.isArray(chart)||chart.length!==12)throw new RangeError('Invalid speed/turn chart');
  if(Math.abs(speed)===0)return 1;
- if(Math.abs(speed)>12)return Math.ceil(Math.abs(speed)/2);
+ if(Math.abs(speed)>12)return Math.ceil(Math.abs(speed)/divisor);
  const value=chart[Math.abs(speed)-1];
  if(!integer(value)||value<0)throw new RangeError('Invalid printed turn chart');
  return Math.max(1,value);

@@ -1,3 +1,4 @@
+import {hullProfile,hullSystems} from './vorchar.mjs';
 // Compendium: Jump Engines / Opening, Closing and Maintaining a Jump Point;
 // Hangars / Launching and Landing; Fighter/Shuttle Movement. Vorchan v3 SCS.
 import {hexDistance} from './phases.mjs';
@@ -11,8 +12,8 @@ export const activeShuttles=s=>(s.shuttles||[]).filter(x=>x.status==='deployed')
 export const currentMover=s=>s.operations?(s.unitMoveOrder||[]).map(id=>[...s.ships,...activeShuttles(s)].find(x=>x.id===id)).find(x=>x&&!x.withdrawn&&!s.unitLocks?.[x.id]):null;
 export function enableOperations(s){
  s.operations=true;if(s.scenario)s.scenario={...s.scenario,scope:'Ship weapons, EW, movement, damage, criticals, jump points and unarmed shuttles. Ramming and boarding are not enabled.'};s.jumpPoints??=[];s.lastHexEntry??={};
- s.shuttles??=s.ships.flatMap(ship=>[1,2].map(n=>({id:ship.id+'-shuttle-'+n,kind:'shuttle',owner_id:ship.owner_id,carrierId:ship.id,label:ship.label+' · Shuttle '+n,status:'aboard',damage:0,q:ship.q,r:ship.r,facing:ship.facing,motionFacing:ship.facing,speed:0})));
- for(const x of s.ships){const t=x.private_state.trial;t.jump??={readyTurn:1,powered:!t.powerAllocation?.reactorShutdown&&!t.powerAllocation?.deactivated?.includes('jump_aft_centre')};if(effectiveCondition(t,s.turn).shipDestroyed||t.condition.damage.tracks.hangar.marked>=SYSTEMS.get('hangar').boxes)for(const c of s.shuttles.filter(c=>c.carrierId===x.id&&c.status==='aboard')){c.status='destroyed';c.damage=10;}}
+ s.shuttles??=s.ships.flatMap(ship=>Array.from({length:hullProfile(ship.public_state?.libraryId)?.shuttles??2},(_,i)=>i+1).map(n=>({id:ship.id+'-shuttle-'+n,kind:'shuttle',owner_id:ship.owner_id,carrierId:ship.id,label:ship.label+' · Shuttle '+n,status:'aboard',damage:0,q:ship.q,r:ship.r,facing:ship.facing,motionFacing:ship.facing,speed:0})));
+ for(const x of s.ships){const t=x.private_state.trial;t.jump??={readyTurn:1,powered:!t.powerAllocation?.reactorShutdown&&!t.powerAllocation?.deactivated?.includes('jump_aft_centre')};if(effectiveCondition(t,s.turn).shipDestroyed||t.condition.damage.tracks.hangar.marked>=hullSystems(t.libraryId).find(x=>x.id==='hangar').boxes)for(const c of s.shuttles.filter(c=>c.carrierId===x.id&&c.status==='aboard')){c.status='destroyed';c.damage=10;}}
  if(s.phase==='movement'&&!s.unitMoveOrder){s.unitMoveOrder=(s.moveOrder||s.ships.map(x=>x.owner_id)).map(id=>s.ships.find(x=>x.owner_id===id)?.id).filter(Boolean);s.unitLocks=Object.fromEntries(s.ships.filter(x=>s.locks[x.owner_id]).map(x=>[x.id,true]));}
  return s;
 }
@@ -20,6 +21,7 @@ export function shuttleCombatUnit(x){return {...x,public_state:{libraryId:SHUTTL
 export function shuttleView(x){return {...x,public_state:{libraryId:SHUTTLE.id,hullClass:'shuttle',travelFacing:x.speed===0?null:movementHeading(x),condition:{shipDestroyed:x.status==='destroyed',commandDisabled:false},damage:{shuttleDamage:x.damage}},stats:SHUTTLE};}
 export function jumpAvailability(s,ship){
  const t=ship.private_state.trial,e=effectiveCondition(t,s.turn),j=t.jump||{readyTurn:1};
+ if(!hullProfile(t.libraryId)?.jumpDelay)return {ready:false,reasons:['No Jump Engine'],risk:0};
  const reasons=[];
  if(e.shipDestroyed||ship.withdrawn)reasons.push('Ship Unavailable');
  if(e.powerOff||t.powerAllocation?.deactivated?.includes('jump_aft_centre'))reasons.push('Jump Engine Unpowered');
@@ -30,14 +32,14 @@ export function jumpAvailability(s,ship){
 }
 export function hangarOptions(s,ship){
  const t=ship.private_state.trial,e=effectiveCondition(t,s.turn),m=t.movement?.state||{};
- const capacity=e.destroyedSystems.includes('hangar')?0:Math.max(0,SYSTEMS.get('hangar').boxes-t.condition.damage.tracks.hangar.marked);
+ const capacity=e.destroyedSystems.includes('hangar')?0:Math.max(0,hullSystems(t.libraryId).find(x=>x.id==='hangar').boxes-t.condition.damage.tracks.hangar.marked);
  const aboard=(s.shuttles||[]).filter(x=>x.carrierId===ship.id&&x.status==='aboard');
  const reasons=[];
  if(e.shipDestroyed||ship.withdrawn)reasons.push('Carrier Unavailable');
  if(e.powerOff||t.jump?.maintaining||t.powerAllocation?.deactivated?.includes('hangar'))reasons.push('Hangar Unpowered');
  if(!capacity)reasons.push('Hangar Destroyed');
  if(m.pivotTurn===s.turn||m.rollStartedTurn===s.turn||m.history?.some(x=>x.type?.startsWith('roll'))||m.pivotInProgress||m.rollInProgress||m.pivotActive)reasons.push('Carrier Pivoted Or Rolled This Turn');
- const rate=t.condition.effects.hangarCollapse>=2?0:t.condition.effects.hangarCollapse===1?1:2;
+ const rate=Math.max(0,(hullProfile(t.libraryId)?.hangarRate??2)-t.condition.effects.hangarCollapse);
  if(!rate)reasons.push('Launch / Recovery Rate Reduced To Zero');
  const heading=x=>Math.abs(x.speed)===0?null:movementHeading(x);
  const recover=activeShuttles(s).filter(x=>x.owner_id===ship.owner_id&&x.q===ship.q&&x.r===ship.r&&heading(x)===heading({...ship,motionFacing:m.motionFacing})&&Math.abs(x.speed)>=Math.abs(ship.speed)&&Math.abs(x.speed)<=Math.abs(ship.speed)+SHUTTLE.thrust);

@@ -1,10 +1,11 @@
+import {hullProfile} from './vorchar.mjs';
 import {applyVorchanStage} from './vorchan-stage-server.mjs';
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
 import {effectiveCondition} from './ship-condition.mjs';
 import {MAP_PRESETS} from './battle-setup.mjs';
 import {turnCostAtSpeed,vorchanTurnDelayAtSpeed} from './staged-movement.mjs';
 export function movementOptions(ship,turn,mapPreset='standard'){
- const t=ship.private_state.trial,state=t.movement.state,e=effectiveCondition(t,turn),speed=ship.speed,reverse=speed<0;
+ const t=ship.private_state.trial,hull=hullProfile(t.libraryId),state=t.movement.state,e=effectiveCondition(t,turn),speed=ship.speed,reverse=speed<0;
  const forward=['forward_port_thrust','forward_starboard_thrust'],aft=['aft_port_thrust','aft_starboard_thrust'];
  const side=d=>(reverse?-d:d)===1?'port_thrust':'starboard_thrust';
  const templates=[];
@@ -28,17 +29,19 @@ export function movementOptions(ship,turn,mapPreset='standard'){
  for(const d of [-1,1]){
   const name=d===-1?'Port':'Starboard';
   add('Slide '+name,{type:'slide',direction:d},Math.ceil(Math.abs(speed)/5),[[side(d)]]);
-  const delay=vorchanTurnDelayAtSpeed(speed,LIB.turnDelay),cost=turnCostAtSpeed(speed,LIB.turnCost);
-  for(let shorter=0;shorter<=Math.max(0,delay-1);shorter++)add((state.pivotActive?'Turn Into Pivot · ':'Turn ')+name+(shorter?' · Shorten Delay '+shorter:''),{type:'turn',direction:d,shortenBy:shorter},cost+shorter,[reverse?forward:aft,[side(d)]]);
+  const delay=vorchanTurnDelayAtSpeed(speed,hull.turnDelay),cost=turnCostAtSpeed(speed,hull.turnCost,hull.turnCostDivisor||2);
+  for(const steps of (hull.agile?[1,2,3]:[1]))for(let shorter=0;shorter<=Math.max(0,delay-1);shorter++)add((state.pivotActive?'Turn Into Pivot · ':steps>1?'Snap Turn '+steps*60+'° · ':'Turn ')+name+(shorter?' · Shorten Delay '+shorter:''),{type:'turn',direction:d,shortenBy:shorter,...(hull.agile?{steps}:{})},cost*(hull.agile&&state.pivotActive?1:steps)+shorter,[reverse?forward:aft,[side(d)]]);
   if(!state.extendedTurn)for(let initial=Math.ceil(cost/4);initial<cost;initial++)add('Begin Extended Turn '+name+' · Pay '+initial,{type:'extended-start',direction:d,initialThrust:initial},initial,[reverse?forward:aft,[side(d)]]);
  }
  if(state.extendedTurn){const ext=state.extendedTurn;add('Complete Extended Turn',{type:'extended-complete',shortenBy:0},ext.totalCost-ext.initialThrust,[reverse?forward:aft,[side(ext.direction)]]);add('Cancel Impossible Extended Turn',{type:'extended-cancel'},0,[]);}
  for(const pair of ['forward-port','aft-starboard','forward-starboard','aft-port']){
   const [main,sideName]=pair.split('-');const direction=['forward-port','aft-starboard'].includes(pair)?1:-1;
-  add('Start Pivot '+(direction===1?'Clockwise':'Anticlockwise')+' · '+pair,{type:'pivot-start',direction,thrusterPair:pair},2,[main==='forward'?forward:aft,[sideName+'_thrust']]);
-  add('Halt Pivot · '+pair,{type:'pivot-halt',thrusterPair:pair},2,[main==='forward'?forward:aft,[sideName+'_thrust']]);
+  if(hull.agile)for(const steps of [1,2,3])add('Pivot '+steps*60+'° '+(direction===1?'Clockwise':'Anticlockwise')+' · '+pair,{type:'agile-pivot',direction,steps,thrusterPair:pair},hull.pivotCost[0]*steps,[main==='forward'?forward:aft,[sideName+'_thrust']]);
+  if(!hull.agile)add('Start Pivot '+(direction===1?'Clockwise':'Anticlockwise')+' · '+pair,{type:'pivot-start',direction,thrusterPair:pair},2,[main==='forward'?forward:aft,[sideName+'_thrust']]);
+  if(!hull.agile)add('Halt Pivot · '+pair,{type:'pivot-halt',thrusterPair:pair},2,[main==='forward'?forward:aft,[sideName+'_thrust']]);
  }
- add('Start Roll',{type:'roll-start'},1,[Object.keys(e.thrusterRatings)]);add('Halt Roll',{type:'roll-halt'},1,[Object.keys(e.thrusterRatings)]);
+ if(hull.agile)add('Roll 180° Immediately',{type:'agile-roll'},hull.rollCost[0],[Object.keys(e.thrusterRatings)]);
+ if(!hull.agile)add('Start Roll',{type:'roll-start'},1,[Object.keys(e.thrusterRatings)]);if(!hull.agile)add('Halt Roll',{type:'roll-halt'},1,[Object.keys(e.thrusterRatings)]);
  return templates;
 }
 

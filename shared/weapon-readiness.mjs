@@ -38,10 +38,13 @@ export function weaponReadiness({mountId,turn,trial,gun=1,chargeTurns=null}){
  if(trial?.destroyedSystems?.includes(mountId))reasons.push('Mount destroyed');
  if(trial?.powerAllocation?.deactivated?.includes(mountId))reasons.push('Mount deactivated');
  if(!mount.firingArcVerified)reasons.push('Physical SCS firing arc unverified');
+ const weapon=hull.weapons.find(w=>w.id===mount.weaponId),guardian=trial?.guardianMode;
+ if(weapon.id==='guardian-array'&&guardian?.mode==='switching')reasons.push('Guardian Array changing modes');
  const state=trial?.weaponReadiness?.[mountId]?.[gun];
  if(!state||!Number.isInteger(state.lastFiredTurn)||!Number.isInteger(state.lastActivatedTurn))reasons.push('Authoritative per-gun arming history unavailable');
  if(mount.weaponId==='plasma-accelerator'&&(!Number.isInteger(chargeTurns)||chargeTurns<1||chargeTurns>3))reasons.push('Choose one-, two- or three-turn plasma charge');
  if(state&&Number.isInteger(chargeTurns)&&(turn-state.lastFiredTurn<chargeTurns||turn-state.lastActivatedTurn+1<chargeTurns))reasons.push('Plasma weapon has not armed for chosen firing interval');
+ if(state&&weapon.armingTurns>1&&(turn-state.lastFiredTurn<weapon.armingTurns||turn-state.lastActivatedTurn+1<weapon.armingTurns))reasons.push('Weapon is rearming for '+weapon.armingTurns+' turns');
  if(state&&turn<=state.lastFiredTurn)reasons.push('Gun has already fired this turn');
  return {mountId,gun,turn,ready:reasons.length===0,reasons,individualGuns:mount.individualGuns,chargeTurns:mount.weaponId==='plasma-accelerator'?chargeTurns:null};
 }

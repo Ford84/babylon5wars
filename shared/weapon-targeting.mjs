@@ -39,10 +39,11 @@ export function facingDirections(shooter,target,options={}){
 }
 export function checkMountArc({shooter,target,arc,sameHexPrevious=null}){
  if(!int(shooter?.facing)||shooter.facing<0||shooter.facing>5)throw new RangeError('Invalid shooter facing');
+ if(arc?.verified&&arc.coverageDegrees===360)return {allowed:true,verified:true,relative:0,reason:null};
  if(!arc||arc.verified!==true||!finite(arc.start)||!finite(arc.end))return {allowed:false,verified:false,reason:'Original SCS mount firing arc has not been verified'};
  const bearing=bearingDegrees(shooter,target,{sameHexPrevious});
  if(bearing.requiresChoice)return {allowed:false,verified:true,...bearing};
- const relative=norm(bearing.angle-(-60+shooter.facing*60));
+ const raw=norm(bearing.angle-(-60+shooter.facing*60)),relative=shooter.private_state?.trial?.movement?.state?.rolled||shooter.public_state?.rolled?norm(-raw):raw;
  const start=norm(arc.start),end=norm(arc.end);
  const allowed=start<=end?relative>=start-1e-8&&relative<=end+1e-8:relative>=start-1e-8||relative<=end+1e-8;
  return {allowed,verified:true,relative,reason:allowed?null:'Target outside physical weapon arc'};
@@ -85,15 +86,16 @@ export function vorchanTargetingPreview({shooter,target,mountId,arc,blockingHexe
  if(!(target.libraryId===SHUTTLE.id&&target.hullClass==='shuttle')&&(!targetHull||target.hullClass!==targetHull.class))throw new RangeError('Target SCS defence and hull class are not verified');
  const defence=direction?(target.hullClass==='shuttle'?SHUTTLE.defence:targetHull.defence)[direction]:null;
  const fireControl=weapon.fireControl[targetFireControlIndex(target.hullClass)];
- const rangePenalty=weaponRangePenalty({range:distance,penaltyPerStep:weapon.rangePenaltyPerHex-rangePenaltyAdjustment});
+ const rangePenalty=weaponRangePenalty({range:distance,penaltyPerStep:weapon.rangePenaltyPerHex-rangePenaltyAdjustment,hexesPerStep:weapon.rangeHexesPerStep||1});
  const ew=ewAttackModifier({attackerOffensive:attackerOffensiveEW,targetDefensive:targetDefensiveEW,rangePenalty});
  if(!Array.isArray(otherModifiers)||otherModifiers.some(x=>!x||!int(x.value)||x.verified!==true||typeof x.reason!=='string'))throw new RangeError('Unverified additional modifier');
  const extra=otherModifiers.reduce((n,m)=>n+m.value,0);
  const total=defence===null?null:defence+fireControl+ew.total+extra+elintOffensive-elintDefensive;
  const blockers=[];
+ if(fireControl===null)blockers.push('This weapon can only attack fighters or shuttles');
  if(!attackArc.allowed)blockers.push(attackArc.reason||'Arc decision pending');
  if(!los.clear)blockers.push(los.reason||'Line of sight blocked');
  if(!direction)blockers.push('Defender must choose incoming boundary direction');
- return {readyForHitRoll:blockers.length===0,blockers,mountId,weaponId:weapon.id,distance,attackArc,incoming,chosenDirection:direction,los,breakdown:{baseDefence:defence,elintOffensive,elintDefensive,disruptedEW,distance,rangePerHex:distance?ew.adjustedRangePenalty/distance:weapon.rangePenaltyPerHex-rangePenaltyAdjustment,lockedOn:ew.lockedOn,offensiveEW:ew.offensiveBonus,defensiveEW:ew.defensivePenalty,fireControl,rangePenalty:ew.adjustedRangePenalty,extra,total},hitOnD20AtOrBelow:total};
+ return {readyForHitRoll:blockers.length===0,blockers,mountId,weaponId:weapon.id,distance,attackArc,incoming,chosenDirection:direction,los,breakdown:{baseDefence:defence,rangeStepHexes:weapon.rangeHexesPerStep||1,rangeStepPenalty:(weapon.rangePenaltyPerHex-rangePenaltyAdjustment)*(ew.lockedOn?1:2),elintOffensive,elintDefensive,disruptedEW,distance,rangePerHex:distance?ew.adjustedRangePenalty/distance:weapon.rangePenaltyPerHex-rangePenaltyAdjustment,lockedOn:ew.lockedOn,offensiveEW:ew.offensiveBonus,defensiveEW:ew.defensivePenalty,fireControl,rangePenalty:ew.adjustedRangePenalty,extra,total},hitOnD20AtOrBelow:total};
 }
 export function resolveToHit(preview,roll){if(!preview?.readyForHitRoll)throw new RangeError('Targeting preview not validated');if(!int(roll)||roll<1||roll>20)throw new RangeError('d20 must be 1–20');return {roll,hit:roll<=preview.hitOnD20AtOrBelow,targetNumber:preview.hitOnD20AtOrBelow,breakdown:preview.breakdown};}

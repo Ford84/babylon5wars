@@ -25,7 +25,7 @@ export function resolveVorchanShipFire({turn,ships,declarations,defences,rolls,b
   const id=attackId(shot),source=byId.get(shot.shipId),target=byId.get(shot.targetId),mount=hullProfile(source?.public_state?.libraryId)?.weaponMounts.find(m=>m.id===shot.mountId);
   if(seen.has(id)||!mount||!source||!target)throw new RangeError('Duplicate or invalid attack');
   seen.add(id);
-  const blockers=[],weapon=LIB.weapons.find(w=>w.id===mount.weaponId);
+  const blockers=[],weapon=hullProfile(source.public_state.libraryId).weapons.find(w=>w.id===mount.weaponId);
   const trial=source.private_state?.trial;
   if(trial?.condition?.effects.weapons[shot.mountId]?.destroyedGuns?.includes(shot.gun))blockers.push('Gun destroyed by a critical hit');
   if(!trial||!hullProfile(trial.libraryId)?.weaponMounts.some(m=>m.id===shot.mountId))blockers.push('Missing authoritative Vorchan state');
@@ -34,6 +34,7 @@ export function resolveVorchanShipFire({turn,ships,declarations,defences,rolls,b
   const history=trial?.weaponReadiness?.[shot.mountId]?.[shot.gun];
   if(!history||!Number.isInteger(history.lastFiredTurn)||!Number.isInteger(history.lastActivatedTurn))blockers.push('Missing per-gun arming history');
   else if(turn<=history.lastFiredTurn||turn<history.lastActivatedTurn)blockers.push('Gun not ready');
+  else if(weapon.armingTurns>1&&(turn-history.lastFiredTurn<weapon.armingTurns||turn-history.lastActivatedTurn+1<weapon.armingTurns))blockers.push('Weapon rearming');
   else if(mount.weaponId==='plasma-accelerator'&&turn-history.lastFiredTurn<shot.chargeTurns)blockers.push('Plasma insufficiently charged');
   const attackerEW=trial?.ewAllocation?.turn===turn?trial.ewAllocation.offensive?.[target.kind==='shuttle'?target.carrierId+'-shuttle-flight':target.id]??0:null;
   const defenderEW=target.kind==='shuttle'?0:target.private_state?.trial?.ewAllocation?.turn===turn?target.private_state.trial.ewAllocation.defensive:null;
