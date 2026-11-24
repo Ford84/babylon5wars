@@ -39,7 +39,7 @@ function ModelViewport({ model }) {
     grid.position.y = -12;
     scene.add(grid);
 
-    const material = getVorchanMaterial();
+    const material = getVorchanMaterial({detailed:true});
     const group = new THREE.Group();
     scene.add(group);
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -153,7 +153,7 @@ export default function VorchanShowcase({selectedModelId, onSelectedModelChange,
       </div>
       {open && <ModelViewport key={model.url} model={model} />}
       <p className="model-credit">
-        Model by Tyrel Lohr. Simple purple hull finish. <a href="https://cults3d.com/en/3d-model/game/centauri-vorchan-attack-cruiser" target="_blank" rel="noopener noreferrer">View the original model listing</a>.
+        Model by Tyrel Lohr. Purple hull with restrained plum, lavender and brass detailing. <a href="https://cults3d.com/en/3d-model/game/centauri-vorchan-attack-cruiser" target="_blank" rel="noopener noreferrer">View the original model listing</a>.
       </p>
     </section>
   );
