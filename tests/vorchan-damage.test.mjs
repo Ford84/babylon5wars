@@ -63,3 +63,11 @@ test('retro hits choose one physical forward thruster and jump hits only reach t
  assert.equal(chosen.state.tracks.forward_starboard_thrust.marked,3);
  assert.equal(chosen.state.tracks.forward_port_thrust.marked,0);
 });
+
+test('overkill continues from a system through its destroyed section to primary structure',()=>{
+ const state=initialVorchanDamage();state.tracks.forward_structure.marked=47;
+ const r=applyVorchanStandardVolley({state,damage:30,incoming:'forward',locationRoll:6,systemChoice:'twin_nose_port'});
+ assert.deepEqual(r.trace.map(x=>[x.systemId,x.marked]),[['twin_nose_port',6],['forward_structure',1],['primary_structure',9]]);
+ assert.equal(r.unallocated,0);assert.equal(state.tracks.forward_structure.marked,47);
+ assert.throws(()=>rollVorchanDamage({mountId:'plasma_forward',dice:[1,1,1,1],range:0,mode:'Raking'}),/Invalid/);
+});

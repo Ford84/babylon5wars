@@ -7,6 +7,7 @@ import BattleSetupPanel from './BattleSetupPanel.jsx';
 import BattleLobbyList from './BattleLobbyList.jsx';
 import ShipSystems from './ShipSystems.jsx';
 import BattleActions from './BattleActions.jsx';
+import {useWeaponPlayback,ShotResults} from './WeaponEffects.jsx';
 import {PLAY_PHASES,SCENARIO_RULES} from '../shared/automated-battle.mjs';
 import {VORCHAN_LIBRARY_RECORD as LIB} from '../shared/vorchan-trial-library.mjs';
 import {labelSystem} from '../shared/ship-condition.mjs';
@@ -15,7 +16,7 @@ import './style.css';
 function BattleJournal({events,ships,members}){
  const names=new Map(ships.map(s=>[s.id,s.label])),players=new Map(members.map(m=>[m.user_id,m.display_name]));
  const label=id=>names.get(id)||players.get(id)||'Ship';
- return <details className="panel battle-log" open><summary>Battle Log</summary><ol>{events.filter(e=>!['ew_committed','fire_committed','defence_committed'].includes(e.event_type)).slice(0,80).map(e=>{const p=e.public||{};return <li key={e.id}><strong>Turn {e.turn} · {e.event_type.replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase())}</strong>
+ return <details className="panel battle-log" open><summary>Battle Log</summary><ol>{events.filter(e=>!['ew_committed','fire_committed','defence_committed','weapons_fired'].includes(e.event_type)).slice(0,80).map(e=>{const p=e.public||{};return <li key={e.id}><strong>Turn {e.turn} · {e.event_type.replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase())}</strong>
   {p.shipId&&<span> · {label(p.shipId)}</span>}
   {e.event_type==='phase_advanced'&&<p>{PLAY_PHASES.find(x=>x.id===p.to)?.label||p.to}</p>}
   {e.event_type==='initiative_rolled'&&<p>d20 {p.roll} + Modifiers {p.total-p.roll} = <strong>{p.total}</strong></p>}
@@ -27,14 +28,15 @@ function BattleJournal({events,ships,members}){
   {e.event_type==='forced_acceleration'&&<p>{p.thrust} Thrust Applied Automatically · Speed {p.speed}</p>}
   {e.event_type==='battle_finished'&&<p>{p.winner?label(p.winner)+' Wins':'Draw — Both Ships Lost'}</p>}
   {e.event_type==='defender_choice'&&<p>{labelSystem(p.value)}</p>}
-  {e.event_type==='combat_dice'&&<details><summary>Server Dice Journal</summary>{p.rolls.map(r=><p key={r.attackId}>{label(r.attackId.split(':')[0])}: Attack {r.roll} · Location {r.locationRoll} · Primary {r.primaryRoll} · Damage {r.damageDice.join(', ')}</p>)}</details>}
+  {e.event_type==='combat_dice'&&<details><summary>Server Dice Journal</summary>{p.rolls.map(r=><p key={r.attackId}>{label(r.attackId.split(':')[0])}: Attack {r.roll} · Location {r.locationRoll} · Primary {r.primaryRoll} · {r.hit===false?'Miss · No Damage Roll':'Damage '+r.damageDice.join(', ')}</p>)}</details>}
  </li>;})}</ol></details>;
 }
 function App(){
  const [token,setToken]=useState(()=>sessionStorage.getItem('b5w_token')||''),[user,setUser]=useState(null),[games,setGames]=useState([]),[gameId,setGame]=useState(''),[detail,setDetail]=useState(null),[events,setEvents]=useState([]);
  const [name,setName]=useState(''),[password,setPassword]=useState(''),[title,setTitle]=useState('New Battle'),[joinCode,setJoin]=useState(''),[invite,setInvite]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [mapPreset,setMap]=useState('standard'),[mapMode,setMode]=useState('3d'),[modelId,setModel]=useState('attack-cruiser-rc2'),[localModel,setLocal]=useState(false),[positions,setPositions]=useState([{q:3,r:10,facing:0},{q:15,r:10,facing:3}]);
- const [selected,setSelected]=useState(''),[scs,setSCS]=useState(false),[serverDice,setServerDice]=useState(null);
+ const [selected,setSelected]=useState(''),[scs,setSCS]=useState(false);
+ const {volley,latest,replay}=useWeaponPlayback(events,gameId,detail?.game.id===gameId);
  const requestScope=useRef(''),loadNumber=useRef(0);requestScope.current=token+':'+gameId;
  const api=useCallback(async(path,method='GET',body)=>{
   const response=await fetch('/api'+path,{method,headers:{'content-type':'application/json',...(token?{authorization:'Bearer '+token}:{})},...(body?{body:JSON.stringify(body)}:{})});
@@ -54,11 +56,11 @@ function App(){
  useEffect(()=>{hasLocalVorchanModel().then(setLocal).catch(()=>{});},[]);
  useEffect(()=>{const close=e=>{if(e.key==='Escape')setSCS(false);};window.addEventListener('keydown',close);return()=>window.removeEventListener('keydown',close);},[]);
  async function action(fn){setBusy(true);setError('');try{await fn();await load();}catch(e){setError(e.message);await load();}finally{setBusy(false);}}
- const send=command=>action(async()=>{const result=await api('/games/'+gameId+'/battle-command','POST',{expectedRevision:detail.game.revision,command});const rolls=result.events?.find(e=>e.type==='combat_dice')?.rolls;if(rolls)setServerDice(rolls);});
+ const send=command=>action(async()=>{await api('/games/'+gameId+'/battle-command','POST',{expectedRevision:detail.game.revision,command});});
  const login=register=>action(async()=>{if(register)await api('/register','POST',{name,password});const result=await api('/login','POST',{name,password});sessionStorage.setItem('b5w_token',result.token);setToken(result.token);setPassword('');});
  const setup=patch=>action(async()=>{const map=patch.mapPreset??mapPreset,model=patch.modelId??modelId;if(detail?.game.status==='setup')await api('/games/'+gameId+'/setup','POST',{expectedRevision:detail.game.revision,mapPreset:map,modelId:model});setMap(map);setModel(model);});
  const ships=detail?.ships||[],current=ships.find(s=>s.id===selected)||ships.find(s=>s.owner_id===user?.id)||ships[0],active=detail&&detail.game.status!=='setup';
- const openGame=id=>{setGame(id);setDetail(null);setSCS(false);setInvite('');setError('');setServerDice(null);};
+ const openGame=id=>{setGame(id);setDetail(null);setSCS(false);setInvite('');setError('');};
  return <main className={active?'automated-game':'staging'}><header><div><small>{active?'TACTICAL COMMAND':'BATTLE PREPARATION'}</small><h1>Babylon 5 Wars</h1></div><div>{token&&<><button className="secondary" onClick={()=>openGame('')}>Battle Lobby</button><button className="secondary" onClick={()=>action(async()=>{await api('/logout','POST');sessionStorage.removeItem('b5w_token');setToken('');setUser(null);openGame('');})}>Sign Out</button></>}</div></header>
   {error&&<p role="alert" className="error">{error}</p>}
   {!token?<><section className="panel auth-panel"><h2>Player Access</h2><form onSubmit={e=>{e.preventDefault();login(false);}}><label>Player Name<input required autoComplete="username" maxLength={80} value={name} onChange={e=>setName(e.target.value)}/></label><label>Password<input required type="password" autoComplete="current-password" minLength={12} maxLength={256} value={password} onChange={e=>setPassword(e.target.value)}/></label><button disabled={busy}>Sign In</button><button type="button" className="secondary" disabled={busy||name.length<3||password.length<12} onClick={()=>login(true)}>Create Account</button></form></section><VorchanShowcase selectedModelId={modelId} onSelectedModelChange={setModel}/></>:!active?<>
@@ -77,11 +79,11 @@ function App(){
     {detail.game.status==='finished'&&<p>All final damage and critical results are saved below.</p>}
    </section>
    <div className="layout"><section className="battle"><div className="sectionhead"><h2>Tactical Battlefield</h2><label>View<select value={mapMode} onChange={e=>setMode(e.target.value)}><option value="3d">3D</option><option value="2d">2D</option></select></label></div>
-    {mapMode==='3d'?<Map3D ships={ships} selected={current?.id} setSelected={setSelected} preset={mapPreset} modelId={modelId}/>:<Map2D ships={ships} selected={current?.id} setSelected={setSelected} preset={mapPreset}/>}
+    {mapMode==='3d'?<Map3D ships={ships} selected={current?.id} setSelected={setSelected} preset={mapPreset} modelId={modelId} volley={volley}/>:<Map2D ships={ships} selected={current?.id} setSelected={setSelected} preset={mapPreset} volley={volley}/>}
     <div className="ship-status-grid">{ships.map(s=><button className="secondary" key={s.id} onClick={()=>{setSelected(s.id);setSCS(true);}}><strong>{s.label}</strong><span>{s.public_state.condition.shipDestroyed?'Destroyed':s.withdrawn?'Withdrawn':'Speed '+s.speed+' · '+(s.public_state.condition.commandDisabled?'Command Disabled':'Hex '+s.q+', '+s.r)}</span><span>Open Live SCS</span></button>)}</div>
    </section><aside>
     <BattleActions key={gameId+':'+detail.game.turn+':'+detail.game.phase_id} detail={detail} userId={user?.id} send={send} busy={busy}/>
-    {serverDice&&<details className="panel" open><summary>Latest Attack Dice</summary>{serverDice.map(r=><p className="server-dice" key={r.attackId}><strong>d20 {r.roll}</strong> · Damage Dice {r.damageDice.join(', ')}</p>)}<button className="secondary" onClick={()=>setServerDice(null)}>Dismiss</button></details>}
+    <ShotResults event={latest} replay={replay}/>
     <BattleJournal events={events} ships={ships} members={detail.members}/>
    </aside></div>
    {scs&&current&&<ShipSystems ship={current} onClose={()=>setSCS(false)}/>}

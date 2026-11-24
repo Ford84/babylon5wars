@@ -38,8 +38,8 @@ test('fire and EW commitments stay secret until the simultaneous barrier',()=>{
 test('simultaneous damage commits once, preserves opposing shots and immediately disables destroyed mounts',()=>{
  let s=readyForFire(sequence([2,7]));
  const shot=(shipId,targetId)=>({shipId,targetId,mountId:'plasma_forward',gun:1,role:'offensive',chargeTurns:3,order:1});
- s=command(s,'p1',{type:'fire',fire:{shots:[shot('a','b')]}});// Attack=1, location=4 (plasma), primary=1, four d10=10, for both attacks.
- s=command(s,'p2',{type:'fire',fire:{shots:[shot('b','a')]}},sequence([1,4,1,10,10,10,10,1,4,1,10,10,10,10]));
+ s=command(s,'p1',{type:'fire',fire:{shots:[shot('a','b')]}});// Both attack rolls first, then location=4 (plasma), primary=1 and four d10=10 for each hit.
+ s=command(s,'p2',{type:'fire',fire:{shots:[shot('b','a')]}},sequence([1,1,4,1,10,10,10,10,4,1,10,10,10,10]));
  assert.equal(s.turn,2);
  for(const x of s.ships){assert.equal(x.private_state.trial.condition.damage.tracks.plasma_forward.marked,10);assert.ok(effectiveCondition(x.private_state.trial,2).destroyedSystems.includes('plasma_forward'));}
  assert.equal(s.journal.find(e=>e.type==='damage_resolved').outcomes.length,2);
@@ -50,6 +50,7 @@ test('only defender may choose among surviving eligible systems; choices persist
  s=command(s,'p1',{type:'fire',fire:{shots:[{shipId:'a',targetId:'b',mountId:'twin_nose_port',gun:1,role:'offensive',order:1}]}});
  s=command(s,'p2',{type:'fire',fire:{shots:[]}},sequence([1,6,1,8]));
  assert.equal(s.pending[0].type,'system');const dice=structuredClone(s.dice);
+ delete s.damageRolled; // Simulate an already-rolled pending battle saved by the previous build.
  assert.throws(()=>command(s,'p1',{type:'damage-choice',attackId:s.pending[0].attackId,value:'twin_nose_port'}),/Wait/);
  s=command(s,'p2',{type:'damage-choice',attackId:s.pending[0].attackId,value:'twin_nose_starboard'},()=>{throw Error('No reroll should occur for a destroyed mount');});
  assert.equal(s.turn,2);assert.equal(s.ships[1].private_state.trial.condition.damage.tracks.twin_nose_starboard.marked,6);
@@ -141,4 +142,39 @@ test('crossing the configured map edge resolves withdrawal as a tracked battle r
  s=command(s,'p1',{type:'move',action:{type:'speed',change:1,purchasedThrust:0,thrusters:{aft_port_thrust:1,aft_starboard_thrust:1}}});
  s=command(s,'p1',{type:'move',action:{type:'advance',hexes:1}});
  assert.equal(s.status,'finished');assert.equal(s.ships[0].withdrawn,true);assert.equal(s.winner,'p2');
+});
+
+test('to-hit rolls precede damage and misses receive no damage or location dice',()=>{
+ let s=readyForFire(sequence([2,7]));
+ s=command(s,'p1',{type:'fire',fire:{shots:[{shipId:'a',targetId:'b',mountId:'twin_nose_port',gun:1,role:'offensive',order:1},{shipId:'a',targetId:'b',mountId:'plasma_forward',gun:1,role:'offensive',chargeTurns:3,order:2}]}});
+ const values=[20,1,4,1,10,10,10,10],sides=[];
+ s=command(s,'p2',{type:'fire',fire:{shots:[]}},n=>{sides.push(n);const next=values.shift();if(next===undefined)throw Error('Unexpected die');return next;});
+ assert.equal(s.turn,2);assert.deepEqual(sides,[20,20,20,20,10,10,10,10]);
+ const dice=s.journal.find(e=>e.type==='combat_dice').rolls;
+ assert.equal(dice[0].hit,false);assert.deepEqual(dice[0].damageDice,[]);assert.equal(dice[0].locationRoll,undefined);
+ const attacks=s.journal.find(e=>e.type==='weapons_fired').attacks;
+ assert.equal(attacks[0].damage,null);assert.equal(attacks[1].damageDice.length,4);assert.equal(attacks[1].mode,'Standard');
+ assert.deepEqual(attacks[1].from,{q:3,r:10});assert.deepEqual(attacks[1].to,{q:6,r:7});
+});
+test('reactors destroyed in the same ship-fire step do not cancel mutual return fire',()=>{
+ let s=readyForFire(sequence([2,7]));
+ for(const ship of s.ships)ship.private_state.trial.condition.damage.tracks.reactor.marked=11;
+ const shot=(shipId,targetId)=>({shipId,targetId,mountId:'plasma_forward',gun:1,role:'offensive',chargeTurns:3,order:1});
+ s=command(s,'p1',{type:'fire',fire:{shots:[shot('a','b')]}});
+ s=command(s,'p2',{type:'fire',fire:{shots:[shot('b','a')]}},sequence([1,1,19,18,10,10,10,10,19,18,10,10,10,10]));
+ assert.equal(s.status,'finished');assert.equal(s.winner,null);
+ assert.equal(s.journal.find(e=>e.type==='damage_resolved').outcomes.length,2);
+ assert.ok(s.ships.every(ship=>ship.private_state.trial.condition.damage.tracks.reactor.marked===12));
+});
+test('committed acceleration and automatic travel update the hex in one atomic action',()=>{
+ let s=fresh();for(const p of ['p1','p2'])s=command(s,p,{type:'power'});
+ s=command(s,'p1',{type:'initiative'},()=>1);s=command(s,'p2',{type:'initiative'},()=>20);
+ for(const p of ['p1','p2'])s=command(s,p,{type:'ew',defensive:8});
+ const c={type:'move',action:{type:'speed',change:3,purchasedThrust:0,thrusters:{aft_port_thrust:3,aft_starboard_thrust:3}},advanceAfter:2};
+ assert.throws(()=>command(s,'p1',{...c,advanceAfter:4}),/movement segment/);
+ assert.equal(s.ships[0].speed,0);assert.equal(s.ships[0].q,3);
+ s=command(s,'p1',c);assert.equal(s.ships[0].q,5);assert.equal(s.ships[0].r,8);assert.equal(s.ships[0].speed,3);
+ assert.equal(s.ships[0].private_state.trial.movement.state.remaining,1);
+ assert.equal(s.ships[0].private_state.trial.movement.engineThrustSpent,6);
+ assert.equal(s.journal.find(e=>e.type==='ship_moved').advanceAfter,2);
 });

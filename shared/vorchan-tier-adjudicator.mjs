@@ -22,7 +22,7 @@ export function adjudicateVorchanShipTier({ships,attacks,rollJournal,defenderCho
   if(!incoming||direction.requiresChoice&&!direction.choices?.includes(incoming)){
    pending.push({attackId:shot.id,type:'incoming',choices:direction.choices||[]});break;
   }
-  const rolledDamage=rollVorchanDamage({mountId:shot.mountId,chargeTurns:shot.chargeTurns??3,dice:rolled.damageDice,range:hexDistance(shooter,target),damageLoss:shooter.private_state?.trial?.condition?.effects?.weapons?.[shot.mountId]?.damageLoss||0});
+  const rolledDamage=rollVorchanDamage({mountId:shot.mountId,chargeTurns:shot.chargeTurns??3,dice:rolled.damageDice,range:hexDistance(shooter,target),mode:shot.mode||'Standard',damageLoss:shooter.private_state?.trial?.condition?.effects?.weapons?.[shot.mountId]?.damageLoss||0});
   const side=['port','starboard'].includes(incoming);
   const relative=direction.relative;
   const automaticSide=side&&Math.abs(relative-90)>1e-8&&Math.abs(relative-270)>1e-8?(relative<90||relative>270?'forward':'aft'):null;

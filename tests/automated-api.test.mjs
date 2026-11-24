@@ -126,3 +126,19 @@ test('two concurrent commands against one revision commit exactly one full trans
  assert.equal(Object.keys(JSON.parse(snapshot.state_json).locks).length,1);
  sqlite.close();
 });
+
+test('authenticated combined thrust and travel capture one revision and persist the new hex',async()=>{
+ const {get,send,sqlite}=await fixture();
+ for(const p of ['p1','p2'])assert.equal((await send(p,{type:'power'})).status,200);
+ for(const p of ['p1','p2'])assert.equal((await send(p,{type:'initiative'})).status,200);
+ for(const p of ['p1','p2'])assert.equal((await send(p,{type:'ew',defensive:8})).status,200);
+ const before=await get(),actor=before.readiness.find(p=>p.required).id,ship=before.ships.find(x=>x.owner_id===actor);
+ const action={type:'speed',change:1,purchasedThrust:0,thrusters:{aft_port_thrust:1,aft_starboard_thrust:1}};
+ const result=await send(actor,{type:'move',action,advanceAfter:1});assert.equal(result.status,200,JSON.stringify(result));
+ const after=await get(actor),moved=after.ships.find(x=>x.id===ship.id);
+ assert.equal(after.game.revision,before.game.revision+1);assert.equal(moved.speed,1);assert.notDeepEqual([moved.q,moved.r],[ship.q,ship.r]);
+ assert.equal(moved.private_state.trial.movement.state.remaining,0);
+ const event=sqlite.prepare("SELECT public_json FROM events WHERE event_type='ship_moved'").get();assert.equal(JSON.parse(event.public_json).advanceAfter,1);
+ const row=sqlite.prepare('SELECT q,r FROM ships WHERE id=?').get(ship.id);assert.deepEqual([row.q,row.r],[moved.q,moved.r]);
+ sqlite.close();
+});

@@ -1,6 +1,7 @@
 import React,{useState} from 'react';
 import {SYSTEM_POWER,effectiveCondition,labelSystem} from '../shared/ship-condition.mjs';
 import {extraEWCost} from '../shared/preturn.mjs';
+import {commitMovement} from '../shared/movement-commit.mjs';
 import {movementOptions} from '../shared/movement-options.mjs';
 import {VORCHAN_LIBRARY_RECORD as LIB} from '../shared/vorchan-trial-library.mjs';
 import {weaponReadiness} from '../shared/weapon-readiness.mjs';
@@ -47,15 +48,18 @@ function EW({t,turn,detail,send,busy}){
  </>;
 }
 function Movement({t,ship,turn,detail,send,busy}){
- const options=movementOptions(ship,turn,detail.game.map_preset),[selected,setSelected]=useState(''),[choice,setChoice]=useState(0);
+ const options=movementOptions(ship,turn,detail.game.map_preset),[selected,setSelected]=useState(''),[choice,setChoice]=useState(0),[travel,setTravel]=useState(1);
  const current=options.find(x=>x.name===selected)||options[0],pick=current?.choices[Math.min(choice,current.choices.length-1)],e=effectiveCondition(t,turn),spent=t.movement.engineThrustSpent||0;
+ const canTravel=pick&&!['advance','slide','extended-start','extended-cancel'].includes(pick.action.type),advanceAfter=canTravel?Math.min(travel,pick.remaining):0;
+ let destination=pick?.position;try{if(advanceAfter)destination=commitMovement({ship,turn,action:pick.action,advanceAfter,mapPreset:detail.game.map_preset}).nextShip;}catch{}
  return <><p>Speed <strong>{ship.speed}</strong> · {t.movement.state.remaining} Hexes Remaining · Thrust <strong>{spent}/{e.freeThrust+t.powerAllocation.purchasedThrust}</strong> · Turn Delay {t.movement.state.turnDelayRemaining}</p>
   {e.commandDisabled&&<p>Command Systems Disabled: Inertial Movement Only</p>}
   {current?<><label>Legal Manoeuvre<select value={current.name} onChange={e=>{setSelected(e.target.value);setChoice(0);}}>{options.map(o=><option key={o.name} value={o.name}>{o.name}</option>)}</select></label>
    {current.choices.length>1&&<label>Thruster Distribution<select value={Math.min(choice,current.choices.length-1)} onChange={e=>setChoice(Number(e.target.value))}>{current.choices.map((c,i)=><option key={i} value={i}>{Object.entries(c.action.thrusters||{}).map(([id,n])=>labelSystem(id)+' '+n).join(', ')}{c.overthrust.length?' · Overthrust Risk':''}</option>)}</select></label>}
-   <p>{pick.cost} Engine Thrust · Destination ({pick.position.q}, {pick.position.r}) · Speed {pick.position.speed}</p>
+   {canTravel&&pick.remaining>0&&<Amount label="Move Automatically After Manoeuvre · Hexes" value={advanceAfter} max={pick.remaining} onChange={setTravel}/>}
+   <p>{pick.cost} Engine Thrust · Destination ({destination.q}, {destination.r}) · Speed {destination.speed}</p>
    {!!pick.overthrust.length&&<p className="error">End-Of-Turn Critical Checks: {pick.overthrust.map(x=>labelSystem(x.id)+' +'+x.excess+' Overthrust').join(', ')}</p>}
-   <button disabled={busy} onClick={()=>send({type:'move',action:pick.action})}>Execute Manoeuvre</button>
+   <button disabled={busy} onClick={()=>send({type:'move',action:pick.action,advanceAfter})}>Commit Thrust And Move</button>
   </>:<p>No powered manoeuvre is currently available.</p>}
   <button disabled={busy||t.movement.state.remaining!==0} className="secondary" onClick={()=>send({type:'movement-done'})}>Finish Movement</button>
  </>;
@@ -73,6 +77,7 @@ function Weapons({ship,t,turn,detail,send,busy}){
    const arc=target&&checkMountArc({shooter:ship,target,arc:m.arc}).allowed;
    return <article className="weapon-datacard" key={m.id}><h3>{w.name} · Mount {m.mountNumber}</h3>
     <p>{preview?.distance??'—'} Hexes · {m.arc.coverageDegrees}° Arc · {arc?'Target In Arc':'Target Outside Arc'}{preview?.readyForHitRoll?' · Hit On '+preview.hitOnD20AtOrBelow+' Or Less':''}</p>
+    <p>Standard Damage · One Hit Location{w.class==='Plasma'?' · Half Armour':''}</p>
     <p>{m.weaponId==='plasma-accelerator'&&chosen?w.firingOptions.find(o=>o.turns===chosen).damageDice.count+'d10 + '+w.firingOptions.find(o=>o.turns===chosen).damageDice.bonus+' − Range':w.damage}{weaponEffect.damageLoss?' · −'+weaponEffect.damageLoss+' Per Die (Minimum 1)':''}</p>
     {m.weaponId==='plasma-accelerator'&&options.length>0&&<label>Available Charge<select value={chosen} onChange={event=>{const n=Number(event.target.value);setCharge(n);setShots(old=>old.map(x=>x.mountId===m.id?{...x,chargeTurns:n}:x));}}>{options.map(n=><option key={n} value={n}>{n} Turn{n===1?'':'s'}</option>)}</select></label>}
     {Array.from({length:m.weaponId==='twin-array'?2:1},(_,i)=>{const gun=i+1,r=weaponReadiness({trial:t,mountId:m.id,turn,gun,chargeTurns:m.id==='plasma_forward'?chosen:null}),selected=shots.find(x=>x.mountId===m.id&&x.gun===gun);return <label key={gun}>Gun {gun}{!r.ready?' · '+r.reasons.join(', '):''}<select disabled={!r.ready||!target} value={selected?.role||'unused'} onChange={event=>modify(m.id,gun,event.target.value)}><option value="unused">Hold Fire</option>{arc&&<option value="offensive">Fire At {target?.label}</option>}{w.intercept&&arc&&<option value="defensive">Reserve For Interception</option>}</select></label>;})}

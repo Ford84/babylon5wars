@@ -52,7 +52,7 @@ export function resolveVorchanShipFire({turn,ships,declarations,defences,rolls,b
   const uniqueBlockers=[...new Set(blockers)];
   const effectivePreview=preview?.readyForHitRoll?{...preview,hitOnD20AtOrBelow:preview.hitOnD20AtOrBelow+intercept.total}:preview;
   const result=uniqueBlockers.length?null:resolveToHit(effectivePreview,roll);
-  results.push({id,tier:'ship',shipId:source.id,targetId:target.id,mountId:shot.mountId,gun:shot.gun,order:shot.order,chargeTurns:shot.chargeTurns??null,defensive,intercept,roll:result?.roll??null,targetNumber:effectivePreview?.hitOnD20AtOrBelow??null,hit:result?.hit??null,blockers:uniqueBlockers,breakdown:preview?.breakdown??null,damageApplied:false});
+  results.push({id,tier:'ship',shipId:source.id,targetId:target.id,mountId:shot.mountId,gun:shot.gun,mode:shot.mode||'Standard',order:shot.order,chargeTurns:shot.chargeTurns??null,defensive,intercept,roll:result?.roll??null,targetNumber:effectivePreview?.hitOnD20AtOrBelow??null,hit:result?.hit??null,blockers:uniqueBlockers,breakdown:preview?.breakdown??null,damageApplied:false});
  }
  results.sort((a,b)=>a.order-b.order||a.id.localeCompare(b.id));
  return {turn,tier:'ship',simultaneous:true,results,complete:results.every(r=>r.blockers.length===0),damageApplied:false,requiresDamageResolution:true};

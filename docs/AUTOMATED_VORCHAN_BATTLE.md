@@ -2,6 +2,8 @@
 
 Implemented 24 November 2026. This replaces the former manual trial workflow for newly created battles.
 
+See [Combat Flow Audit — 24 November 2026](COMBAT_FLOW_AUDIT_2026_11_24.md) for subsequent corrections, automatic movement segments and weapon animation.
+
 ## Connected condition and rules
 
 `shared/ship-condition.mjs` owns the damage and critical-effect record. Movement limits, physical thruster ratings, power availability, sensor output, initiative, weapon readiness, range penalties and damage penalties derive from that record. The saved state is the source of truth; editable condition fields and host damage overrides are retired.
