@@ -292,3 +292,15 @@ test('Mograth fleet starts through API with one shuttle, no jump prompts and per
  for(let i=0;(d=await get()).resolution&&i<150;i++){const r=d.resolution;const response=await send(r.actorId,{type:r.stage.endsWith('_roll')?'combat-roll':r.stage.endsWith('_result')?'combat-ok':'combat-choice',stage:r.stage,attackId:r.attack.id,...(r.candidates.length?{value:r.candidates[0]}:{})});assert.equal(response.status,200,JSON.stringify(response));}
  const stored=JSON.parse(sqlite.prepare('SELECT state_json FROM battle_states WHERE game_id=?').get(gameId).state_json);assert.ok(stored.dice[0].subVolleys.length>=1);assert.equal(stored.dice[0].subVolleys.length,Math.ceil(Math.max(0,dice.reduce((a,b)=>a+b,1))/5));assert.equal(stored.ships.find(x=>x.id===m.id).private_state.trial.weaponReadiness.plasma_stream[1].lastFiredTurn,1);
 });
+test('Mogratti fleet API preserves variant points, all nine gun histories and separate SCS damage across two turns',async()=>{
+ const {get,send,call,gameId}=await fixture({start:false,autoOperations:false});let d=await get();
+ const entries=[{ownerId:'p1',catalogId:'centauri-mogratti-v2-2e-sf',q:4,r:10,facing:0,speed:0},{ownerId:'p2',catalogId:'centauri-mograth-v2-2e-sf',q:7,r:7,facing:3,speed:0}];
+ const setup=await call('/games/'+gameId+'/fleet-setup','p1','POST',{expectedRevision:d.game.revision,entries,deploymentMode:'free'});assert.equal(setup.status,201);assert.deepEqual(setup.body.fleets.map(x=>x.points).sort((a,b)=>a-b),[450,575]);d=await get();assert.equal((await call('/games/'+gameId+'/start','p1','POST',{expectedRevision:d.game.revision})).status,200);
+ d=await get();const a=d.ships.find(x=>x.owner_id==='p1');assert.equal(Object.values(a.private_state.trial.weaponReadiness).flatMap(Object.values).length,9);assert.equal(a.private_state.trial.condition.damage.tracks.guardian,undefined);assert.ok(a.private_state.trial.condition.damage.tracks.twin_primary);assert.equal(d.shuttles.filter(x=>x.carrierId===a.id).length,1);
+ for(let turn=1;turn<=2;turn++){
+  assert.equal((await send('p1',{type:'power',purchasedThrust:1})).status,200);await send('p2',{type:'power'});d=await get();assert.equal(d.ships.find(x=>x.id===a.id).private_state.trial.powerAllocation.availablePower,2);
+  for(const p of ['p1','p2'])await send(p,{type:'initiative'});for(const p of ['p1','p2'])await send(p,{type:'ew'});d=await get();assert.equal(d.game.phase_id,'movement');
+  while((d=await get()).game.phase_id==='movement')assert.equal((await send(d.required[0],{type:'movement-done'})).status,200);
+  for(const p of ['p1','p2'])await send(p,{type:'fire',fire:{shots:[]}});d=await get();assert.equal(d.game.phase_id,'hangar');for(const p of ['p1','p2'])await send(p,{type:'hangar'});assert.equal((await get()).game.turn,turn+1);
+ }
+});

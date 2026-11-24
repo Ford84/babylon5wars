@@ -23,7 +23,7 @@ export function damageSystemCandidates(token,section,libraryId){
   main_thrust:['aft_port_thrust','aft_starboard_thrust'],
   jump_drive:['jump_aft_centre']
  }[token]||[];
- return candidates.filter(id=>{const s=systems.get(id);return s&&(s.section===section||section==='primary'||token==='jump_drive')});
+ return candidates.filter(id=>{const s=systems.get(id);return s&&(s.section===section||section==='primary'||token==='jump_drive')&&!(section==='primary'&&s.kind==='weapon'&&hullProfile(libraryId)?.hitCharts.primary.some(row=>row[2]===token)&&s.section!=='primary')});
 }
 export function vorchanHitToken({incoming,locationRoll,primaryRoll=null,sideChoice=null,libraryId}){
  if(!['forward','aft','port','starboard'].includes(incoming)||!int(locationRoll,1)||locationRoll>20)throw new RangeError('Invalid hit direction or d20');
