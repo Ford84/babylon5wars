@@ -32,7 +32,7 @@ const members=s=>[...new Set(s.ships.filter(x=>live(x,s.turn)).map(x=>x.owner_id
 const record=(s,type,details)=>{s.journal.push({turn:s.turn,phase:s.phase,type,...details});};
 export function createBattle(rows,players,mapPreset='standard',{passivePlayerId=null,combatFlow='guided',operations=false}={}){
  if(passivePlayerId&&!players.some(p=>p.user_id===passivePlayerId&&p.role==='passive'))fail('Invalid passive opponent');
- if(rows.length!==2||players.length!==2||players.some(p=>rows.filter(x=>x.owner_id===p.user_id).length!==1))fail('Assign one Vorchan to each of two players');
+ if(rows.length<2||rows.length>24||players.length!==2||players.some(p=>!rows.some(x=>x.owner_id===p.user_id))||rows.some(x=>!players.some(p=>p.user_id===x.owner_id)))fail('Assign a supported fleet to each of two players');
  const ships=rows.map(row=>{
   const t=typeof row.private_state_json==='string'?JSON.parse(row.private_state_json).trial:row.private_state?.trial;
   if(t?.libraryId!==LIB.id||t.shipDataRevision!==LIB.dataRevision)fail('Create new ships using the corrected Vorchan data');
@@ -40,7 +40,7 @@ export function createBattle(rows,players,mapPreset='standard',{passivePlayerId=
   const n={...structuredClone(t),rulesRevision:RULES_REVISION,condition:newCondition(),weaponReadiness:initialWeaponHistory(1)};
   // Scenario starts with all weapons fully armed. Reactivation subsequently starts from scratch.
   for(const guns of Object.values(n.weaponReadiness))for(const h of Object.values(guns)){h.lastFiredTurn=-2;h.lastActivatedTurn=-1;}
-  return {id:row.id,owner_id:row.owner_id,label:row.label,q:row.q,r:row.r,facing:row.facing,speed:0,public_state:{libraryId:LIB.id,trial:true},private_state:{trial:projectTrial(n,1)}};
+  return {id:row.id,owner_id:row.owner_id,label:row.label,q:row.q,r:row.r,facing:row.facing,speed:row.speed||0,public_state:{libraryId:LIB.id,trial:true,combatPoints:LIB.combatPoints},private_state:{trial:projectTrial(n,1)}};
  });
  const battle={passivePlayerId,combatFlow,schema:RULES_REVISION,phase:'power',turn:1,status:'active',mapPreset,ships,locks:{},declarations:[],defences:[],dice:[],choices:{},approaches:{},journal:[],scenario:SCENARIO_RULES};if(operations)enableOperations(battle);return completePassiveActions(battle);
 }
@@ -54,15 +54,16 @@ export function requiredActors(s){
  if(s.phase==='fire_resolution'&&s.combatStarted)return [...new Set((s.pending||[]).map(x=>s.ships.find(y=>y.id===x.targetId)?.owner_id).filter(Boolean))];
  return players.filter(id=>!s.locks[id]);
 }
-function next(s,phase){s.phase=phase;s.locks={};record(s,'phase_advanced',{to:phase});}
+function markShip(s,ship){s.unitPhaseLocks??={};s.unitPhaseLocks[ship.id]=true;if(s.ships.filter(x=>x.owner_id===ship.owner_id&&live(x,s.turn)).every(x=>s.unitPhaseLocks[x.id]))s.locks[ship.owner_id]=true;}
+function next(s,phase){s.phase=phase;s.locks={};s.unitPhaseLocks={};s.unitPhaseStamp=s.turn+':'+phase;record(s,'phase_advanced',{to:phase});}
 function checkVictory(s){
  if(s.operations)for(const ship of s.ships)if(effectiveCondition(trial(ship),s.turn).shipDestroyed)for(const x of s.shuttles.filter(x=>x.carrierId===ship.id&&x.status==='aboard')){x.status='destroyed';x.damage=10;}
  const alive=s.ships.filter(x=>live(x,s.turn));
- if(alive.length<2){s.status='finished';s.winner=alive[0]?.owner_id||null;record(s,'battle_finished',{winner:s.winner});return true;}return false;
+ if(new Set(alive.map(x=>x.owner_id)).size<2){s.status='finished';s.winner=alive[0]?.owner_id||null;record(s,'battle_finished',{winner:s.winner});return true;}return false;
 }
 function startMovement(s){
  next(s,'movement');
- for(const ship of s.ships){
+ for(const ship of s.ships.filter(x=>live(x,s.turn))){
   const t=trial(ship),old=t.movement?.state;
   const state=old?{...orientationAtMovementStart({...old,turn:s.turn-1},s.turn),q:ship.q,r:ship.r,speed:ship.speed,remaining:Math.abs(ship.speed),moved:0,thrustSpent:0,started:false,history:[],slideDirection:null,normalSinceSlide:true,version:0}:newStagedMovement(ship);
   Object.assign(state,normaliseHaltedPivot(state));state.turn=s.turn;ship.facing=state.facing;ship.speed=state.speed;
@@ -175,40 +176,40 @@ function settleAutomaticActions(s,die){
  for(let step=0;step<12&&s.status==='active';step++){
   const phase=s.phase;let changed=false;
   if(s.operations&&phase==='jump_formation'){
-   for(const ship of s.ships.filter(x=>x.kind!=='shuttle'&&live(x,s.turn)&&!s.locks[x.owner_id]))if(!jumpAvailability(s,ship).ready){const p=s.jumpPoints.find(p=>p.shipId===ship.id&&p.status==='open');if(p&&!effectiveCondition(trial(ship),s.turn).powerOff&&!effectiveCondition(trial(ship),s.turn).destroyedSystems.includes('jump_aft_centre'))jumpCheck(s,ship,die);s.locks[ship.owner_id]=true;changed=true;}
+   for(const ship of s.ships.filter(x=>x.kind!=='shuttle'&&live(x,s.turn)&&!s.locks[x.owner_id]&&!s.unitPhaseLocks?.[x.id]))if(!jumpAvailability(s,ship).ready){const p=s.jumpPoints.find(p=>p.shipId===ship.id&&p.status==='open');if(p&&!effectiveCondition(trial(ship),s.turn).powerOff&&!effectiveCondition(trial(ship),s.turn).destroyedSystems.includes('jump_aft_centre'))jumpCheck(s,ship,die);markShip(s,ship);changed=true;}
    if(checkVictory(s)){changed=true;}else if(members(s).every(p=>s.locks[p])){startMovement(s);changed=true;}
   }else if(s.operations&&phase==='vortex_closure'){
-   for(const ship of s.ships.filter(x=>x.kind!=='shuttle'&&live(x,s.turn)&&!s.locks[x.owner_id]))if(!s.jumpPoints.some(p=>p.shipId===ship.id&&p.status==='open'&&p.activeTurn<=s.turn)){s.locks[ship.owner_id]=true;changed=true;}
+   for(const ship of s.ships.filter(x=>x.kind!=='shuttle'&&live(x,s.turn)&&!s.locks[x.owner_id]&&!s.unitPhaseLocks?.[x.id]))if(!s.jumpPoints.some(p=>p.shipId===ship.id&&p.status==='open'&&p.activeTurn<=s.turn)){markShip(s,ship);changed=true;}
    if(members(s).every(p=>s.locks[p])){next(s,'hangar');changed=true;}
   }else if(s.operations&&phase==='hangar'){
-   for(const ship of s.ships.filter(x=>x.kind!=='shuttle'&&live(x,s.turn)&&!s.locks[x.owner_id])){const o=hangarOptions(s,ship);if(!o.lossRequired&&(!o.available||!o.aboard.length&&!o.recover.length)){s.locks[ship.owner_id]=true;changed=true;}}
+   for(const ship of s.ships.filter(x=>x.kind!=='shuttle'&&live(x,s.turn)&&!s.locks[x.owner_id]&&!s.unitPhaseLocks?.[x.id])){const o=hangarOptions(s,ship);if(!o.lossRequired&&(!o.available||!o.aboard.length&&!o.recover.length)){markShip(s,ship);changed=true;}}
    if(members(s).every(p=>s.locks[p])){completeTurn(s);changed=true;}
   }else if(phase==='ew_commit'){
-   for(const ship of s.ships.filter(x=>x.kind!=='shuttle'&&live(x,s.turn)&&!s.locks[x.owner_id])){
+   for(const ship of s.ships.filter(x=>x.kind!=='shuttle'&&live(x,s.turn)&&!s.locks[x.owner_id]&&!s.unitPhaseLocks?.[x.id])){
     const t=trial(ship),e=effectiveCondition(t,s.turn),available=e.sensorStrength+(e.sensorStrength?t.powerAllocation.extraEW:0);
     const fixed=e.ewLock,previous=fixed?fixed.defensive+Object.values(fixed.offensive).reduce((a,b)=>a+b,0):0;
-    if(available===0||fixed&&available>=previous){t.ewAllocation={turn:s.turn,defensive:available&&fixed?fixed.defensive:0,offensive:available&&fixed?fixed.offensive:{},available,unallocated:Math.max(0,available-(available?previous:0))};s.locks[ship.owner_id]=true;changed=true;record(s,'ew_automatic',{shipId:ship.id,reason:available?'Command-Fixed Allocation':'No Active Sensors'});}
+    if(available===0||fixed&&available>=previous){t.ewAllocation={turn:s.turn,defensive:available&&fixed?fixed.defensive:0,offensive:available&&fixed?fixed.offensive:{},available,unallocated:Math.max(0,available-(available?previous:0))};markShip(s,ship);changed=true;record(s,'ew_automatic',{shipId:ship.id,reason:available?'Command-Fixed Allocation':'No Active Sensors'});}
    }
    if(members(s).every(p=>s.locks[p])){record(s,'ew_allocations_revealed',{allocations:s.ships.map(x=>({shipId:x.id,ownerId:x.owner_id,shipLabel:x.label,...trial(x).ewAllocation}))});beginJump(s);changed=true;}
   }else if(phase==='movement'){
-   const actor=requiredActors(s)[0],ship=s.ships.find(x=>x.owner_id===actor);
+   const actor=requiredActors(s)[0],ship=s.operations?currentMover(s):s.ships.find(x=>x.owner_id===actor);
    if(ship&&(!s.operations||currentMover(s)?.kind!=='shuttle')&&trial(ship).movement.state.remaining===0&&movementOptions(ship,s.turn,s.mapPreset).length===0){if(s.operations)s.unitLocks[ship.id]=true;else s.locks[actor]=true;record(s,'movement_automatic',{shipId:ship.id,reason:'No Remaining Movement Or Working Manoeuvre'});changed=true;}
    if(s.operations?!currentMover(s):members(s).every(p=>s.locks[p])){next(s,'fire_commit');changed=true;}
   }else if(phase==='fire_commit'){
    const ships=attackShips(s);
-   for(const ship of ships.filter(x=>x.kind!=='shuttle'&&live(x,s.turn)&&!s.locks[x.owner_id])){
+   for(const ship of ships.filter(x=>x.kind!=='shuttle'&&live(x,s.turn)&&!s.locks[x.owner_id]&&!s.unitPhaseLocks?.[x.id])){
     const enemies=ships.filter(x=>x.owner_id!==ship.owner_id&&(x.kind==='shuttle'||live(x,s.turn)));
     const any=LIB.weaponMounts.some(m=>[1,...(m.weaponId==='twin-array'?[2]:[])].some(gun=>weaponReadiness({trial:trial(ship),mountId:m.id,turn:s.turn,gun,chargeTurns:m.weaponId==='plasma-accelerator'?1:null}).ready)&&enemies.some(enemy=>__arc({shooter:ship,target:enemy,arc:m.arc}).allowed));
-    if(!any){s.declarations.push({playerId:ship.owner_id,fire:{shots:[]}});s.locks[ship.owner_id]=true;record(s,'fire_automatic',{shipId:ship.id,reason:'No Legal Weapon Fire'});changed=true;}
+    if(!any){s.declarations.push({playerId:ship.owner_id,fire:{shots:[]}});markShip(s,ship);record(s,'fire_automatic',{shipId:ship.id,reason:'No Legal Weapon Fire'});changed=true;}
    }
    if(members(s).every(p=>s.locks[p])){next(s,'fire_resolution');record(s,'fire_revealed',{declarations:s.declarations});changed=true;}
   }else if(phase==='fire_resolution'&&!s.combatStarted){
    const ships=attackShips(s);
-   for(const ship of ships.filter(x=>x.kind!=='shuttle'&&live(x,s.turn)&&!s.locks[x.owner_id])){
+   for(const ship of ships.filter(x=>x.kind!=='shuttle'&&live(x,s.turn)&&!s.locks[x.owner_id]).filter((x,i,a)=>a.findIndex(y=>y.owner_id===x.owner_id)===i)){
     const incoming=s.declarations.flatMap(d=>d.fire.shots.filter(x=>x.role==='offensive'&&ships.some(y=>y.id===x.targetId&&y.owner_id===ship.owner_id)));
-    const reserves=s.declarations.find(d=>d.playerId===ship.owner_id)?.fire.shots.filter(x=>x.role==='defensive')||[];
+    const reserves=s.declarations.filter(d=>d.playerId===ship.owner_id).flatMap(d=>d.fire.shots.filter(x=>x.role==='defensive'));
     const boundary=incoming.some(shot=>{const a=ships.find(x=>x.id===shot.shipId);const target=ships.find(x=>x.id===shot.targetId);return facingDirections(a,target,{sameHexPrevious:a.sameHexPrevious[target.id]}).requiresChoice;});
-    const canIntercept=reserves.some(reserve=>incoming.some(shot=>{try{return validateDefensiveAssignment({playerId:ship.owner_id,ships,declarations:s.declarations,assignments:[{shipId:ship.id,mountId:reserve.mountId,gun:reserve.gun,attackId:attackId(shot)}]}).assignments.length>0;}catch{return false;}}));
+    const canIntercept=reserves.some(reserve=>incoming.some(shot=>{try{return validateDefensiveAssignment({playerId:ship.owner_id,ships,declarations:s.declarations,assignments:[{shipId:reserve.shipId,mountId:reserve.mountId,gun:reserve.gun,attackId:attackId(shot)}]}).assignments.length>0;}catch{return false;}}));
     if(!boundary&&!canIntercept){s.defences.push({playerId:ship.owner_id,defence:{assignments:[]},directions:{}});s.locks[ship.owner_id]=true;record(s,'defence_automatic',{shipId:ship.id,reason:'No Defensive Decision Required'});changed=true;}
    }
    if(members(s).every(p=>s.locks[p])){combat(s,die);changed=true;}
@@ -217,15 +218,18 @@ function settleAutomaticActions(s,die){
  }
 }
 function executeCommand(state,playerId,command,die=rollDie){
- const s=structuredClone(state);s.journal=[];
+ const s=structuredClone(state);s.journal=[];if(s.unitPhaseStamp!==s.turn+':'+s.phase){s.unitPhaseLocks={};s.unitPhaseStamp=s.turn+':'+s.phase;}
  if(s.combatFlow===undefined&&!s.combatStarted)s.combatFlow='guided';
  if(s.status!=='active')fail('This battle has finished');
  if(!command||typeof command.type!=='string')fail('Choose an available action');
  if(!requiredActors(s).includes(playerId))fail('Wait for your required action');
- const ship=s.ships.find(x=>x.owner_id===playerId&&(s.phase==='critical_resolution'||live(x,s.turn)));
+ const available=s.ships.filter(x=>x.owner_id===playerId&&(s.phase==='critical_resolution'||live(x,s.turn)));
+ const ship=s.operations&&s.phase==='movement'&&currentMover(s)?.kind!=='shuttle'?currentMover(s):command.shipId?available.find(x=>x.id===command.shipId):available.find(x=>!s.unitPhaseLocks?.[x.id])||available[0];
+ if(command.shipId&&(!ship||ship.owner_id!==playerId))fail('Choose your own active ship');
  if(!ship)fail('No surviving ship');
  let t=trial(ship),e=effectiveCondition(t,s.turn);
- const lock=()=>{s.locks[playerId]=true;};
+ const lock=()=>{markShip(s,ship);};
+ if(['power','ew','jump','hangar','vortex','fire'].includes(command.type)&&s.unitPhaseLocks?.[ship.id])fail('This ship has already completed this phase');
  if(command.type==='power'&&s.phase==='power'){
   let {purchasedThrust=0,extraEW=0,deactivated=[],shutdown=false}=command;
   if(s.operations&&t.jump?.maintaining){deactivated=[...new Set([...deactivated,...LIB.weaponMounts.map(x=>x.id).filter(id=>!e.destroyedSystems.includes(id)),...[]])];if(purchasedThrust||extraEW)fail('Maintaining a jump point uses all spare power');}
@@ -246,11 +250,11 @@ function executeCommand(state,playerId,command,die=rollDie){
   t=projectTrial(t,s.turn);ship.private_state.trial=t;record(s,'power_committed',{shipId:ship.id,allocation:t.powerAllocation});lock();
   if(!checkVictory(s)&&members(s).every(p=>s.locks[p]))next(s,'initiative');
  }else if(command.type==='initiative'&&s.phase==='initiative'){
-  const unit=s.operations&&command.unitId? [...s.ships,...activeShuttles(s)].find(x=>x.id===command.unitId&&x.owner_id===playerId):ship;
+  const unit=s.operations&&command.unitId? [...s.ships,...activeShuttles(s)].find(x=>x.id===command.unitId&&x.owner_id===playerId):available.find(x=>trial(x).initiative?.turn!==s.turn)||ship;
   if(!unit)fail('Choose your unit');const shuttle=unit.kind==='shuttle',old=shuttle?unit.initiative:trial(unit).initiative;if(old?.turn===s.turn)fail('This unit has already rolled initiative');
-  const result=unitInitiative({roll:die(20),printedBonus:shuttle?9:8,speed:unit.speed,launchedOrLanded:!shuttle&&t.hangarActionTurn===s.turn-1,newlyLaunched:shuttle&&unit.launchedTurn===s.turn-1,otherModifiers:shuttle?0:e.initiativeModifier});
-  if(shuttle)unit.initiative={...result,turn:s.turn};else t.initiative={...result,turn:s.turn};record(s,'initiative_rolled',{shipId:unit.id,...result});
-  if(!s.operations||[ship,...activeShuttles(s).filter(x=>x.owner_id===playerId)].every(x=>(x.kind==='shuttle'?x.initiative:trial(x).initiative)?.turn===s.turn))lock();
+  const result=unitInitiative({roll:die(20),printedBonus:shuttle?9:8,speed:unit.speed,launchedOrLanded:!shuttle&&trial(unit).hangarActionTurn===s.turn-1,newlyLaunched:shuttle&&unit.launchedTurn===s.turn-1,otherModifiers:shuttle?0:effectiveCondition(trial(unit),s.turn).initiativeModifier});
+  if(shuttle)unit.initiative={...result,turn:s.turn};else trial(unit).initiative={...result,turn:s.turn};record(s,'initiative_rolled',{shipId:unit.id,...result});
+  if(!s.operations||[...available,...activeShuttles(s).filter(x=>x.owner_id===playerId)].every(x=>(x.kind==='shuttle'?x.initiative:trial(x).initiative)?.turn===s.turn))s.locks[playerId]=true;
   if(members(s).every(p=>s.locks[p])){initiativeOrder(s,die);next(s,'ew_commit');}
  }else if(command.type==='ew'&&s.phase==='ew_commit'){
   const defensive=command.defensive??0,offensive=command.offensive??{},available=e.sensorStrength+(e.sensorStrength>0?t.powerAllocation.extraEW:0);
@@ -307,6 +311,7 @@ function executeCommand(state,playerId,command,die=rollDie){
   const x=activeShuttles(s).find(x=>x.id===command.unitId&&x.owner_id===playerId);if(!x||![-1,1].includes(command.direction)||x.movement.spent+3>4)fail('Insufficient Shuttle Thrust For Combat Pivot');x.facing=(x.facing+command.direction+6)%6;x.movement.spent+=3;record(s,'shuttle_combat_pivot',{shipId:x.id,facing:x.facing,thrustSpent:x.movement.spent});
  }else if(command.type==='fire'&&s.phase==='fire_commit'){
   const ships=attackShips(s),fire=validateFireDeclaration({playerId,ships,fire:command.fire,turn:s.turn});
+  if(fire.shots.some(x=>x.shipId!==ship.id))fail('Commit this ship’s weapons separately');
   for(const shot of fire.shots){const r=weaponReadiness({mountId:shot.mountId,gun:shot.gun,turn:s.turn,trial:projectTrial(t,s.turn),chargeTurns:shot.mountId==='plasma_forward'?shot.chargeTurns:null});if(!r.ready)fail(r.reasons.join('; '));}
   s.declarations.push({playerId,fire});lock();record(s,'fire_committed',{playerId});
   if(members(s).every(p=>s.locks[p])){next(s,'fire_resolution');record(s,'fire_revealed',{declarations:s.declarations});}
@@ -315,7 +320,7 @@ function executeCommand(state,playerId,command,die=rollDie){
   const expected=new Map();
   for(const shot of s.declarations.flatMap(d=>d.fire.shots.filter(x=>x.role==='offensive'&&ships.some(y=>y.id===x.targetId&&y.owner_id===playerId)))){const shooter=ships.find(x=>x.id===shot.shipId),target=ships.find(x=>x.id===shot.targetId),f=facingDirections(shooter,target,{sameHexPrevious:shooter.sameHexPrevious[target.id]});if(f.requiresChoice)expected.set(shooter.id+':'+target.id,f.choices);}
   if(Object.keys(directions).some(id=>!expected.has(id))||[...expected].some(([id,choices])=>!choices?.includes(directions[id])))fail('Select each legal incoming boundary aspect before rolling');
-  s.defences.push({playerId,defence,directions});lock();record(s,'defence_committed',{playerId});combat(s,die);
+  s.defences.push({playerId,defence,directions});s.locks[playerId]=true;record(s,'defence_committed',{playerId});combat(s,die);
  }else if(['critical-roll','critical-ok'].includes(command.type)&&s.phase==='critical_resolution'&&s.criticalResolution){
   if(advanceCriticals(s,playerId,command,die)){for(const x of s.ships){x.private_state.trial=finishCriticalUpkeep(trial(x),s.turn);record(s,'critical_checks',{shipId:x.id,results:(s.criticalResults||[]).filter(r=>r.shipId===x.id)});}s.criticalResults=[];postTurn(s);}
  }else if(['combat-roll','combat-ok','combat-choice'].includes(command.type)&&s.phase==='fire_resolution'&&s.resolution){
@@ -332,12 +337,12 @@ function executeCommand(state,playerId,command,die=rollDie){
 // Only the server sets passivePlayerId, when creating an explicit solo test.
 export function completePassiveActions(state,die=rollDie){
  let s=state;const journal=[...(s.journal||[])];
- for(let i=0;i<50;i++){
+ for(let i=0;i<500;i++){
   const id=s.passivePlayerId;
   if(!id||!requiredActors(s).includes(id)){s.journal=journal;return s;}
-  const ship=s.ships.find(x=>x.owner_id===id);let command;
+  const candidates=s.ships.filter(x=>x.owner_id===id&&live(x,s.turn));const ship=s.operations&&s.phase==='movement'&&currentMover(s)?.kind!=='shuttle'?currentMover(s):candidates.find(x=>!s.unitPhaseLocks?.[x.id])||candidates[0];let command;
   if(s.phase==='power')command={type:'power'};
-  else if(s.phase==='initiative'){const units=[ship,...activeShuttles(s).filter(x=>x.owner_id===id)];const unit=units.find(x=>(x.kind==='shuttle'?x.initiative:trial(x).initiative)?.turn!==s.turn);command={type:'initiative',unitId:unit?.id};}
+  else if(s.phase==='initiative'){const units=[...candidates,...activeShuttles(s).filter(x=>x.owner_id===id)];const unit=units.find(x=>(x.kind==='shuttle'?x.initiative:trial(x).initiative)?.turn!==s.turn);command={type:'initiative',unitId:unit?.id};}
   else if(s.phase==='ew_commit')command={type:'ew',defensive:0,offensive:{}};
   else if(s.phase==='jump_formation')command={type:'jump',open:false};
   else if(s.phase==='vortex_closure')command={type:'vortex',maintain:false};
@@ -358,6 +363,7 @@ export function completePassiveActions(state,die=rollDie){
    }
    command={type:'defence',assignments:[],directions};
   }else fail('Passive opponent reached an unsupported phase');
+  if(ship&&['power','ew','jump','vortex','hangar','fire'].includes(command.type))command.shipId=ship.id;
   s=executeCommand(s,id,command,die);journal.push(...s.journal);
   journal.push({turn:s.turn,phase:s.phase,type:'passive_action_completed',playerId:id,action:command.type});
  }
@@ -375,5 +381,5 @@ export function battleView(s,playerId){
  });
  const shuttles=(s.shuttles||[]).map(x=>{const d=s.resolution?.states?.[x.id];return shuttleView(d?{...x,damage:d.shuttleDamage||0,status:d.shipDestroyed?'destroyed':x.status}:x);});
  const mover=currentMover(s);
- return {ships,operations:!!s.operations,shuttles,jumpPoints:(s.jumpPoints||[]).filter(p=>p.status!=='closed'),movingUnitId:mover?.id,entryPoints:mover?entryOptions(s,mover):[],jumpStatus:Object.fromEntries(s.ships.map(x=>[x.id,jumpAvailability(s,x)])),hangars:s.operations?Object.fromEntries(s.ships.filter(x=>x.owner_id===playerId).map(x=>[x.id,hangarOptions(s,x)])):{},criticalResolution:criticalView(s),resolution:guidedCombatView(s),phase:PLAY_PHASES.find(p=>p.id===s.phase),phases:PLAY_PHASES,scenario:s.scenario,needsAction:required.includes(playerId),required,locked:!!s.locks[playerId],declarations:s.phase==='fire_commit'?s.declarations.filter(d=>d.playerId===playerId):['fire_resolution'].includes(s.phase)?s.declarations:[],defences:s.phase==='fire_resolution'?s.defences.filter(d=>s.combatStarted||d.playerId===playerId):[],pending:s.pending||[],dice:s.combatStarted?s.dice:[],attacks:s.attacks||[],winner:s.winner};
+ return {ships,unitPhaseLocks:s.unitPhaseLocks||{},operations:!!s.operations,shuttles,jumpPoints:(s.jumpPoints||[]).filter(p=>p.status!=='closed'),movingUnitId:mover?.id,entryPoints:mover?entryOptions(s,mover):[],jumpStatus:Object.fromEntries(s.ships.map(x=>[x.id,jumpAvailability(s,x)])),hangars:s.operations?Object.fromEntries(s.ships.filter(x=>x.owner_id===playerId).map(x=>[x.id,hangarOptions(s,x)])):{},criticalResolution:criticalView(s),resolution:guidedCombatView(s),phase:PLAY_PHASES.find(p=>p.id===s.phase),phases:PLAY_PHASES,scenario:s.scenario,needsAction:required.includes(playerId),required,locked:!!s.locks[playerId],declarations:s.phase==='fire_commit'?s.declarations.filter(d=>d.playerId===playerId):['fire_resolution'].includes(s.phase)?s.declarations:[],defences:s.phase==='fire_resolution'?s.defences.filter(d=>s.combatStarted||d.playerId===playerId):[],pending:s.pending||[],dice:s.combatStarted?s.dice:[],attacks:s.attacks||[],winner:s.winner};
 }

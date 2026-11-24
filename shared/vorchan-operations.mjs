@@ -52,7 +52,7 @@ export function applyHangar(s,ship,{launch=[],recover=[],loss=[]}){
  if(o.aboard.length-loss.length-launch.length+recover.length>o.capacity)fail('Insufficient intact hangar boxes');
  for(const id of loss){const x=s.shuttles.find(x=>x.id===id);x.status='destroyed';x.damage=10;log(s,'shuttle_lost_in_hangar',{shipId:ship.id,shuttleId:id});}
  for(const id of launch){const x=s.shuttles.find(x=>x.id===id);Object.assign(x,{status:'deployed',q:ship.q,r:ship.r,facing:ship.facing,motionFacing:ship.private_state.trial.movement?.state.motionFacing??ship.facing,speed:ship.speed,launchedTurn:s.turn});s.lastHexEntry[x.id]=s.lastHexEntry[ship.id];log(s,'shuttle_launched',{shipId:ship.id,shuttleId:id,q:x.q,r:x.r,facing:x.facing,speed:x.speed});}
- for(const id of recover){s.shuttles.find(x=>x.id===id).status='aboard';log(s,'shuttle_recovered',{shipId:ship.id,shuttleId:id});}
+ for(const id of recover){Object.assign(s.shuttles.find(x=>x.id===id),{status:'aboard',carrierId:ship.id});log(s,'shuttle_recovered',{shipId:ship.id,shuttleId:id});}
  if(launch.length||recover.length)ship.private_state.trial.hangarActionTurn=s.turn;
 }
 export function jumpCheck(s,ship,die){

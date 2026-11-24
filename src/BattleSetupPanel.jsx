@@ -47,7 +47,7 @@ export default function BattleSetupPanel({
         </select>
       </label>
     </div>
-    {gameSetup && hostCanEdit && <StartingPositions mapPreset={mapPreset} positions={positions} onChange={onPositionsChange} disabled={busy} />}
+
     <div className="battle-setup-local-model">
       <label>Optional Local STL Override
         <input type="file" accept=".stl" onChange={event => onLocalModel(event.target.files?.[0] || null)} />
@@ -58,7 +58,7 @@ export default function BattleSetupPanel({
   </section>;
 }
 
-function StartingPositions({mapPreset, positions, onChange, disabled}) {
+export function StartingPositions({mapPreset, positions, onChange, disabled,labels=[]}) {
   const [editing,setEditing]=useState(0);
   const {columns,rows}=MAP_PRESETS[mapPreset]||MAP_PRESETS.standard;
   const size=7, dx=Math.sqrt(3)*size, dy=1.5*size, margin=12;
@@ -68,17 +68,17 @@ function StartingPositions({mapPreset, positions, onChange, disabled}) {
   const setFacing=(i,value)=>choose(i,'facing',value);
   return <section className="starting-position" aria-labelledby="starting-position-title">
     <h3 id="starting-position-title">Starting Hexes And Facing</h3>
-    <p className="hint">Choose each player's starting hex and direction. Click a hex on the preview to set a position. The arrow shows the ship's facing.</p>
+    <p className="hint">Choose each ship’s starting hex and direction. Click a hex on the preview to set a position. The arrow shows the ship's facing.</p>
     <div className="starting-position-grid">
       <div className="starting-position-controls">{positions.map((p,i)=><fieldset key={i} disabled={disabled}>
-        <legend><button type="button" className={editing===i?'':'secondary'} onClick={()=>setEditing(i)} aria-pressed={editing===i}>Edit {i===0?'Host':'Opponent'} — Ship {i+1}</button></legend>
+        <legend><button type="button" className={editing===i?'':'secondary'} onClick={()=>setEditing(i)} aria-pressed={editing===i}>Edit {labels[i]||('Ship '+(i+1))}</button></legend>
         <p>Starting Hex: ({p.q}, {p.r})</p>
         <label>Facing<select value={p.facing} onChange={e=>setFacing(i,Number(e.target.value))}>{FACING_NAMES.map((v,n)=><option key={n} value={n}>{v}</option>)}</select></label>
       </fieldset>)}</div>
       <div className="starting-map-scroll"><svg viewBox={`0 0 ${width} ${height}`} className="starting-map" role="img" aria-label={`Starting position map, ${columns} columns by ${rows} rows`}>
         <rect width={width} height={height} rx="8" fill="#071328"/>
-        {Array.from({length:columns},(_,q)=>Array.from({length:rows},(_,r)=>{const p=xy(q,r);return <polygon key={`${q}-${r}`} onClick={()=>onChange(positions.map((item,j)=>j===editing?{...item,q,r}:item))} points={Array.from({length:6},(_,k)=>`${p.x+size*Math.cos((60*k-30)*Math.PI/180)},${p.y+size*Math.sin((60*k-30)*Math.PI/180)}`).join(' ')} fill="#0b1b30" stroke="#3d5978" strokeWidth=".7"/>}))}
-        {positions.map((p,i)=>{const c=xy(p.q,p.r);return <g key={i} transform={`translate(${c.x} ${c.y})`}><circle r="6" fill={i?'#d8ad77':'#82d3ed'} stroke="white"/><path d="M0 -12 L4 -4 L0 -6 L-4 -4 Z" fill="#fff" transform={`rotate(${facingSVGDegrees(p.facing)})`}/><text y="17" textAnchor="middle" fill="white" fontSize="8">{i?'P2':'P1'}</text></g>})}
+        {Array.from({length:columns},(_,q)=>Array.from({length:rows},(_,r)=>{const p=xy(q,r);return <polygon key={`${q}-${r}`} onClick={()=>!disabled&&onChange(positions.map((item,j)=>j===editing?{...item,q,r}:item))} points={Array.from({length:6},(_,k)=>`${p.x+size*Math.cos((60*k-30)*Math.PI/180)},${p.y+size*Math.sin((60*k-30)*Math.PI/180)}`).join(' ')} fill="#0b1b30" stroke="#3d5978" strokeWidth=".7"/>}))}
+        {positions.map((p,i)=>{const c=xy(p.q,p.r);return <g key={i} transform={`translate(${c.x} ${c.y})`}><circle r="6" fill={i?'#d8ad77':'#82d3ed'} stroke="white"/><path d="M0 -12 L4 -4 L0 -6 L-4 -4 Z" fill="#fff" transform={`rotate(${facingSVGDegrees(p.facing)})`}/><text y="17" textAnchor="middle" fill="white" fontSize="8">{labels[i]||('Ship '+(i+1))}</text></g>})}
       </svg></div>
     </div>
   </section>;
