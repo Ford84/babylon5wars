@@ -9,8 +9,8 @@ async function request(path,options={}){
 }
 test('worker serves health, phases and verified catalogue without authentication or database',async()=>{
  const health=await request('/api/health');
- assert.equal(health.status,200);assert.equal(health.body.ok,true);assert.equal(health.body.phaseCount,6);
- const phases=await request('/api/phases');assert.equal(phases.status,200);assert.equal(phases.body.length,6);
+ assert.equal(health.status,200);assert.equal(health.body.ok,true);assert.equal(health.body.phaseCount,7);
+ const phases=await request('/api/phases');assert.equal(phases.status,200);assert.equal(phases.body.length,7);
  const catalogue=await request('/api/ships/catalog');assert.equal(catalogue.status,200);
  assert.equal(catalogue.body.length,1);assert.equal(catalogue.body[0].automaticCombatReady,true);
 });

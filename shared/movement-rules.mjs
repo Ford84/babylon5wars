@@ -22,6 +22,12 @@ export function remainingTurnDelay({speed,delayRatio,hexesSinceTurn,shortenBy=0}
  const required=Math.max(0,Math.ceil(speed*delayRatio.numerator/delayRatio.denominator)-shortenBy);
  return {required,remaining:Math.max(0,required-hexesSinceTurn)};
 }
+// The inertial heading is distinct from hull facing while pivoted. Negative speed reverses travel.
+export function movementHeading({motionFacing,facing,speed}){
+ const heading=motionFacing??facing;
+ if(!Number.isInteger(heading)||heading<0||heading>5||!Number.isInteger(speed))throw new RangeError('Invalid movement heading');
+ return (heading+(speed<0?3:0))%6;
+}
 export function advanceHex({q,r},facing){
  if(!Number.isInteger(q)||!Number.isInteger(r)||!Number.isInteger(facing)||facing<0||facing>5)throw new RangeError('hex or facing');
  // Axial coordinates; 0 points north-east, clockwise.

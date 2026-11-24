@@ -37,13 +37,17 @@ export function projectTrial(trial,turn){
  return n;
 }
 export function rollDie(sides){const b=new Uint32Array(1),limit=Math.floor(4294967296/sides)*sides;do crypto.getRandomValues(b);while(b[0]>=limit);return b[0]%sides+1;}
-export function finishShipTurn(trial,turn,die=rollDie){
- const n=structuredClone(trial),c=n.condition,results=[];
- if(c.lastCriticalTurn===turn)return {trial:n,results};
- if(effectiveCondition(n,turn).shipDestroyed){c.lastCriticalTurn=turn;return {trial:n,results};}
- const damaged=new Set(c.damage.criticalCandidates||[]),e=c.effects;
- const apply=(id,roll,overthrust=null)=>{
-  const sys=SYSTEMS.get(id),marked=c.damage.tracks[id].marked,m=roll+marked,entry={systemId:id,roll,modifier:marked,total:m,kind:overthrust?'overthrust':'damage',effects:[]};
+export function criticalChecksForShip(trial,turn){
+ const c=trial.condition;if(c.lastCriticalTurn===turn||effectiveCondition(trial,turn).shipDestroyed)return [];
+ const checks=[];
+ for(const systemId of new Set(c.damage.criticalCandidates||[])){const sys=SYSTEMS.get(systemId);if(sys&&sys.kind!=='structure'&&sys.kind!=='jump-engine'&&c.damage.tracks[systemId].marked<sys.boxes)checks.push({id:systemId+':damage',systemId,kind:'damage',excess:0});}
+ for(const [systemId,l] of Object.entries(trial.movement?.turn===turn?trial.movement.thrusterLedger||{}:{}))if(l.used>l.rating&&c.damage.tracks[systemId].marked<SYSTEMS.get(systemId).boxes)checks.push({id:systemId+':overthrust',systemId,kind:'overthrust',excess:l.used-l.rating});
+ return checks;
+}
+export function resolveShipCritical(trial,turn,check,roll,secondaryRoll=null){
+ if(!Number.isInteger(roll)||roll<1||roll>20||secondaryRoll!==null&&(!Number.isInteger(secondaryRoll)||secondaryRoll<1||secondaryRoll>20))throw new RangeError('Invalid critical die');
+ const n=structuredClone(trial),c=n.condition,e=c.effects,id=check.systemId,sys=SYSTEMS.get(id),marked=c.damage.tracks[id].marked,m=roll+marked,overthrust=check.kind==='overthrust'?{excess:check.excess}:null;
+ const entry={systemId:id,roll,modifier:marked,total:m,kind:check.kind,effects:[]};
   if(sys.kind==='thruster'){
    // Ordinary damage checks and overthrust checks are independent.
    const total=m+(overthrust?.excess||0),outlet=total>=15&&total<=19||total>=25,efficiency=total>=20;
@@ -54,13 +58,14 @@ export function finishShipTurn(trial,turn,die=rollDie){
   }else if(sys.kind==='weapon'){
    const crit=weaponCritical({systemId:id,roll,marked});
    const w=e.weapons[id]||{rangeLoss:0,damageLoss:0};
-   if(crit.effects.includes('range_penalty_worsened'))w.rangeLoss++;
-   if(crit.effects.includes('damage_minus_2_per_die_minimum_1'))w.damageLoss+=2;
+   if(!(id.startsWith('twin_nose_')&&m>=20)&&crit.effects.includes('range_penalty_worsened'))w.rangeLoss++;
+   if(!(id.startsWith('twin_nose_')&&m>=20)&&crit.effects.includes('damage_minus_2_per_die_minimum_1'))w.damageLoss+=2;
    e.weapons[id]=w;entry.effects=crit.effects;
+   if(id.startsWith('twin_nose_')&&m>=20){const lost=w.destroyedGuns||[];const gun=lost.includes(2)?1:2;w.destroyedGuns=[...lost,gun];entry.effects=['Gun '+gun+' Destroyed'];if(w.destroyedGuns.length>=2){c.damage.tracks[id].marked=sys.boxes;entry.effects.push('Twin Array Destroyed');}}
    if(crit.requiresRuleClarification)entry.clarification='Printed weapon chart omits 13. This scenario treats 13 as no additional effect.';
   }else if(sys.kind==='engine'){
    if(m>=15&&m<=20||m>=28){e.engineLoss+=2;entry.effects.push('Free Thrust Reduced By 2');}
-   if(m>=21){const extra=die(20);e.engineShort={turn:turn+1,mode:extra<15?'off':'runaway'};entry.secondaryRoll=extra;entry.effects.push(extra<15?'Engine Offline Next Turn':'Forced Acceleration Next Turn');}
+   if(m>=21){if(secondaryRoll===null){entry.effects.push('Engine Short · Secondary Roll Required');return {trial:n,result:entry,requiresSecondary:true};}const extra=secondaryRoll;e.engineShort={turn:turn+1,mode:extra<15?'off':'runaway'};entry.secondaryRoll=extra;entry.effects.push(extra<15?'Engine Offline Next Turn':'Forced Acceleration Next Turn');}
   }else if(sys.kind==='sensor'){
    const loss=m<15?0:m<19?1:m<23?2:m<27?3:4;e.sensorLoss+=loss;if(loss)entry.effects.push('Sensor Output Reduced By '+loss);
   }else if(sys.kind==='reactor'){
@@ -79,15 +84,23 @@ export function finishShipTurn(trial,turn,die=rollDie){
    if(m>=13&&m<=18||m>=25){e.hangarSlow++;entry.effects.push('Docking Links Damaged');}
    if(m>=19){e.hangarCollapse++;entry.effects.push('Partial Bay Collapse');if(e.hangarCollapse>=3)c.damage.tracks[id].marked=sys.boxes;}
   }
-  results.push(entry);
- };
- for(const id of damaged){const sys=SYSTEMS.get(id);if(sys&&sys.kind!=='structure'&&sys.kind!=='jump-engine'&&c.damage.tracks[id].marked<sys.boxes)apply(id,die(20));}
- // Test against the rating used during movement, not a newly reduced rating.
- for(const [id,l] of Object.entries(n.movement?.turn===turn?n.movement.thrusterLedger||{}:{})){
-  if(l.used>l.rating&&c.damage.tracks[id].marked<SYSTEMS.get(id).boxes)apply(id,die(20),{excess:l.used-l.rating});
- }
- c.damage=vorchanPostTurnStructureLoss(c.damage);
- c.damage.sectionsLost=[...c.damage.destroyedSections];
+ return {trial:projectTrial(n,turn),result:entry,requiresSecondary:false};
+}
+export function finishCriticalUpkeep(trial,turn){
+ const n=structuredClone(trial),c=n.condition;
+ if(c.lastCriticalTurn===turn)return n;
+ c.damage=vorchanPostTurnStructureLoss(c.damage);c.damage.sectionsLost=[...c.damage.destroyedSections];
  c.damage.criticalCandidates=[];c.lastCriticalTurn=turn;
- return {trial:projectTrial(n,turn+1),results};
+ return projectTrial(n,turn+1);
+}
+export function finishShipTurn(trial,turn,die=rollDie){
+ if(trial.condition.lastCriticalTurn===turn)return {trial:structuredClone(trial),results:[]};
+ let n=structuredClone(trial);const results=[];
+ for(const check of criticalChecksForShip(n,turn)){
+  if(n.condition.damage.tracks[check.systemId].marked>=SYSTEMS.get(check.systemId).boxes)continue;
+  const roll=die(20);let resolved=resolveShipCritical(n,turn,check,roll);
+  if(resolved.requiresSecondary)resolved=resolveShipCritical(n,turn,check,roll,die(20));
+  n=resolved.trial;results.push(resolved.result);
+ }
+ return {trial:finishCriticalUpkeep(n,turn),results};
 }

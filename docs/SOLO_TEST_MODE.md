@@ -13,3 +13,5 @@ The snapshot, all automatic opponent actions, mirrored ship state and event jour
 Verification covers authenticated setup, three turns with only human commands, stationary/hold-fire behaviour, automatic damage choices, outsider rejection, disabled sign-in, closed invitations and deletion cleanup, alongside the existing multiplayer suite.
 
 Resetting live users/battles is a separate one-off maintenance operation, not an application endpoint or a migration. Deploying this mode does not delete existing user data.
+
+Critical checks now form a visible end-of-turn phase. The passive ship rolls automatically, but each result waits for the human player to acknowledge it, including any engine-short follow-up.

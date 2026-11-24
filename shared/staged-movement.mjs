@@ -1,7 +1,7 @@
 // Player-directed staged movement. The engine executes only the selected
 // segment, then waits for the next player choice. Compendium: Movement and
 // Speed; Turning; Turn Cost and Turn Delay.
-import {advanceHex} from './movement-rules.mjs';
+import {advanceHex,movementHeading} from './movement-rules.mjs';
 const integer=Number.isInteger;
 export function newStagedMovement({q,r,facing,speed,version=0}){
  if(![q,r,facing,speed,version].every(integer)||facing<0||facing>5||version<0)throw new RangeError('Invalid ship movement state');
@@ -20,7 +20,7 @@ export function stagedMove(state,action,limits){
  }
  if(action.type==='advance'){
   if(!integer(action.hexes)||action.hexes<1||action.hexes>state.remaining)throw new RangeError('Invalid movement segment');
-  const heading=state.speed<0?((state.motionFacing??state.facing)+3)%6:(state.motionFacing??state.facing);
+  const heading=movementHeading(state);
   let point={q:state.q,r:state.r};const path=[];
   for(let i=0;i<action.hexes;i++){point=advanceHex(point,heading);if(Math.abs(point.q)>10000||Math.abs(point.r)>10000)throw new RangeError('Coordinate limit');path.push(point);}
   return {...state,...point,remaining:state.remaining-action.hexes,moved:state.moved+action.hexes,turnDelayRemaining:Math.max(0,state.turnDelayRemaining-action.hexes),normalSinceSlide:true,started:true,version:state.version+1,history:[...state.history,{type:'advance',hexes:action.hexes,path}]};
@@ -29,7 +29,7 @@ export function stagedMove(state,action,limits){
   if(state.remaining<1||state.speed===0)throw new RangeError('Slide requires remaining movement');
   if(![-1,1].includes(action.direction)||state.slideDirection!==null&&state.slideDirection!==action.direction||!state.normalSinceSlide)throw new RangeError('Slide direction or forward-movement interval invalid');
   if(!integer(action.cost)||action.cost<1||state.thrustSpent+action.cost>limits.availableThrust)throw new RangeError('Insufficient slide thrust');
-  const motion=state.speed<0?((state.motionFacing??state.facing)+3)%6:(state.motionFacing??state.facing);
+  const motion=movementHeading(state);
   const destination=advanceHex({q:state.q,r:state.r},(motion+action.direction+6)%6);
   return {...state,...destination,remaining:state.remaining-1,moved:state.moved+1,thrustSpent:state.thrustSpent+action.cost,turnDelayRemaining:Math.max(0,state.turnDelayRemaining-1),slideDirection:action.direction,normalSinceSlide:false,started:true,version:state.version+1,history:[...state.history,{type:'slide',direction:action.direction,cost:action.cost,path:[destination]}]};
  }

@@ -22,7 +22,7 @@ test('a complete six-phase turn needs only tracked orders and automatically reso
  assert.equal(s.phase,'fire_commit');
  s=command(s,'p1',{type:'fire',fire:{shots:[]}});s=command(s,'p2',{type:'fire',fire:{shots:[]}});
  assert.equal(s.journal.some(e=>e.type==='defence_automatic'),true);
- assert.equal(s.phase,'power');assert.equal(s.turn,2);assert.equal(PLAY_PHASES.length,6);
+ assert.equal(s.phase,'power');assert.equal(s.turn,2);assert.equal(PLAY_PHASES.length,7);
  assert.equal(s.journal.some(e=>e.type==='critical_checks'),true);
  assert.throws(()=>command(s,'p1',{type:'manual-result',damage:100}),/not available/);
 });

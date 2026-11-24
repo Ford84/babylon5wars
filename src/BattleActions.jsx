@@ -1,3 +1,5 @@
+import CriticalActions from './CriticalActions.jsx';
+import {facingLabel} from '../shared/ship-facing.mjs';
 import React,{useState} from 'react';
 import {SYSTEM_POWER,effectiveCondition,labelSystem} from '../shared/ship-condition.mjs';
 import {extraEWCost} from '../shared/preturn.mjs';
@@ -13,6 +15,7 @@ export default function BattleActions({detail,userId,send,busy,onInitiative,onAt
  const ship=detail.ships.find(x=>x.owner_id===userId),t=ship?.private_state?.trial;
  if(!t||!detail.automated||detail.game.status!=='active')return null;
  const phase=detail.game.phase_id,turn=detail.game.turn;
+ if(phase==='critical_resolution'&&detail.criticalResolution)return <CriticalActions detail={detail} userId={userId} send={send} busy={busy}/>;
  if(phase==='fire_resolution'&&detail.resolution)return <GuidedCombat detail={detail} userId={userId} send={send} busy={busy} onAttackRevealed={onAttackRevealed}/>;
  if(!detail.needsAction)return <section className="panel"><h2>{detail.locked?'Orders Locked':'Waiting For Opponent'}</h2><p>{detail.locked?'Your choices are saved. The next step opens when both players are ready.':'The other player has the next required action.'}</p></section>;
  const props={ship,detail,send,busy,turn,t};
@@ -57,6 +60,8 @@ function Movement({t,ship,turn,detail,send,busy}){
  let destination=pick?.position;try{if(advanceAfter)destination=commitMovement({ship,turn,action:pick.action,advanceAfter,mapPreset:detail.game.map_preset}).nextShip;}catch{}
  return <><p>Speed <strong>{ship.speed}</strong> · {t.movement.state.remaining} Hexes Remaining · Thrust <strong>{spent}/{e.freeThrust+t.powerAllocation.purchasedThrust}</strong> · Turn Delay {t.movement.state.turnDelayRemaining}</p>
   <p>Speed Sets This Turn’s Total Travel. Normal Movement Uses Remaining Hexes; Extra Thrust Is For Manoeuvres.</p>
+  <p>Facing: {facingLabel(t.movement.state.facing)} · Travel Direction: {ship.public_state.travelFacing===null?'Stationary':facingLabel(ship.public_state.travelFacing)}</p>
+  {!t.movement.state.started?<p>Change Speed First If Desired. Starting Travel Or A Manoeuvre Keeps Your Current Speed And Closes Acceleration For This Turn. A Pivot May Begin Before Travel; Choose 0 Travel To Stay In This Hex.</p>:<p>Speed Is Fixed For This Turn. The Options Below Are Validated Against Your Remaining Movement, Thrust And Manoeuvres.</p>}
   {e.commandDisabled&&<p>Command Systems Disabled: Inertial Movement Only</p>}
   <label>Movement Type<select value={category} onChange={e=>{setCategory(e.target.value);setSelected('');setChoice(0);}}><option value="movement">Movement</option><option value="manoeuvre">Manoeuvre</option></select></label>
   {current?<><label>{category==='movement'?'Movement Action':'Legal Manoeuvre'}<select value={current.name} onChange={e=>{setSelected(e.target.value);setChoice(0);}}>{options.map(o=><option key={o.name} value={o.name}>{o.name}</option>)}</select></label>

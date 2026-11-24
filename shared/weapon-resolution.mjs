@@ -25,6 +25,7 @@ export function resolveVorchanShipFire({turn,ships,declarations,defences,rolls,b
   seen.add(id);
   const blockers=[],weapon=LIB.weapons.find(w=>w.id===mount.weaponId);
   const trial=source.private_state?.trial;
+  if(trial?.condition?.effects.weapons[shot.mountId]?.destroyedGuns?.includes(shot.gun))blockers.push('Gun destroyed by a critical hit');
   if(!trial||trial.libraryId!==LIB.id)blockers.push('Missing authoritative Vorchan state');
   if(trial?.destroyedSystems?.includes(shot.mountId))blockers.push('Destroyed weapon');
   if(trial?.powerAllocation?.deactivated?.includes(shot.mountId))blockers.push('Weapon deactivated');

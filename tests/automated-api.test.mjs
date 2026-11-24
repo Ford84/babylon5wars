@@ -46,8 +46,8 @@ async function fixture({solo=false,start=true,autoReview=true}={}){
  async function send(who,command,expected){
   const d=await get(who),result=await call('/games/'+gameId+'/battle-command',who,'POST',{expectedRevision:expected??d.game.revision,command});
   if(result.status===200&&autoReview)for(let i=0;i<100;i++){
-   const now=await get(),r=now.resolution;if(!r)break;
-   const c={type:r.stage.endsWith('_roll')?'combat-roll':r.stage.endsWith('_result')?'combat-ok':'combat-choice',stage:r.stage,attackId:r.attack.id,...(r.candidates?.length?{value:r.candidates[0]}:{})};
+   const now=await get(),r=now.criticalResolution||now.resolution;if(!r)break;
+   const c=now.criticalResolution?{type:r.stage.endsWith('_roll')?'critical-roll':'critical-ok',stage:r.stage,checkId:r.check.id}:{type:r.stage.endsWith('_roll')?'combat-roll':r.stage.endsWith('_result')?'combat-ok':'combat-choice',stage:r.stage,attackId:r.attack.id,...(r.candidates?.length?{value:r.candidates[0]}:{})};
    const response=await call('/games/'+gameId+'/battle-command',r.actorId,'POST',{expectedRevision:now.game.revision,command:c});assert.equal(response.status,200,JSON.stringify(response));
   }
   return result;
@@ -56,7 +56,7 @@ async function fixture({solo=false,start=true,autoReview=true}={}){
 }
 test('authenticated staging through two turns: no manual acknowledgements, no terrain entry, persistent server dice and private EW',async()=>{
  const {get,send,call,gameId,sqlite}=await fixture();
- let d=await get();assert.equal(d.automated,true);assert.equal(d.phases.length,6);
+ let d=await get();assert.equal(d.automated,true);assert.equal(d.phases.length,7);
  for(const p of ['p1','p2'])assert.equal((await send(p,{type:'power'})).status,200);
  for(const p of ['p1','p2'])assert.equal((await send(p,{type:'initiative'})).status,200);
  d=await get();const target=d.ships.find(s=>s.owner_id==='p2');
@@ -216,5 +216,20 @@ test('guided API preserves prompts through reload and rejects repeat rolls and t
   const c={type:r.stage.endsWith('_roll')?'combat-roll':r.stage.endsWith('_result')?'combat-ok':'combat-choice',stage:r.stage,attackId:r.attack.id,...(r.candidates.length?{value:r.candidates[0]}:{})};
   assert.equal((await send(r.actorId,c)).status,200);
  }
+ for(let i=0;i<50;i++){d=await get();const r=d.criticalResolution;if(!r)break;assert.equal((await send(r.actorId,{type:r.stage.endsWith('_roll')?'critical-roll':'critical-ok',stage:r.stage,checkId:r.check.id})).status,200);}
  d=await get();assert.equal(d.resolution,null);assert.ok(d.game.turn===2||d.game.status==='finished');sqlite.close();
+});
+test('critical prompts persist through the Worker API and enforce defender ownership and revision checks',async()=>{
+ const {get,send,call,gameId,sqlite}=await fixture({autoReview:false});
+ // Trusted scenario fixture: start at an end-of-turn engine check. All actions below use real API routes.
+ const {beginCriticals}=await import('../shared/guided-criticals.mjs');
+ const row=sqlite.prepare('SELECT state_json FROM battle_states WHERE game_id=?').get(gameId),state=JSON.parse(row.state_json),target=state.ships.find(s=>s.owner_id==='p2');
+ target.private_state.trial.condition.damage.tracks.engine.marked=8;target.private_state.trial.condition.damage.criticalCandidates=['engine'];beginCriticals(state);
+ sqlite.exec('BEGIN');sqlite.prepare('UPDATE battle_states SET state_json=?,revision=revision+1 WHERE game_id=?').run(JSON.stringify(state),gameId);sqlite.prepare("UPDATE games SET revision=revision+1,phase_id='critical_resolution' WHERE id=?").run(gameId);sqlite.exec('COMMIT');
+ let d=await get(),r=d.criticalResolution;assert.equal(d.game.phase_id,'critical_resolution');assert.equal(r.actorId,'p2');
+ const command={type:'critical-roll',stage:r.stage,checkId:r.check.id};assert.equal((await send('p1',command)).status,400);
+ assert.equal((await send('p2',command,d.game.revision)).status,200);const saved=(await get()).criticalResolution;assert.equal(saved.stage,'critical_result');assert.ok(Number.isInteger(saved.result.roll));
+ assert.equal((await send('p2',command,d.game.revision)).status,409);assert.deepEqual((await get()).criticalResolution,saved);
+ for(let i=0;i<8;i++){d=await get();r=d.criticalResolution;if(!r)break;assert.equal((await send(r.actorId,{type:r.stage.endsWith('_roll')?'critical-roll':'critical-ok',stage:r.stage,checkId:r.check.id})).status,200);}
+ d=await get();assert.equal(d.criticalResolution,null);assert.equal(d.game.turn,2);sqlite.close();
 });
