@@ -1,3 +1,4 @@
+import {effectiveCondition} from './ship-condition.mjs';
 // W4: deterministic, replayable Vorchan ship-weapon attack resolution.
 // B5W 2E Combat Sequence: ship tier is simultaneous; damage is a separate step.
 // This module never changes ship damage or invents defensive interception dice.
@@ -34,13 +35,16 @@ export function resolveVorchanShipFire({turn,ships,declarations,defences,rolls,b
   const attackerEW=trial?.ewAllocation?.turn===turn?trial.ewAllocation.offensive?.[target.id]??0:null;
   const defenderEW=target.private_state?.trial?.ewAllocation?.turn===turn?target.private_state.trial.ewAllocation.defensive:null;
   if(attackerEW===null||defenderEW===null)blockers.push('Missing committed EW');
+  const condition=trial?.condition?effectiveCondition(trial,turn):null;
+  const effects=condition?.weapons?.[shot.mountId];
+  const otherModifiers=condition?.fireModifier?[{value:condition.fireModifier,verified:true,reason:'Ship condition and manoeuvres'}]:[];
   const defenderDirection=defenderChoices[source.id+':'+target.id]??null;
   let preview=null;
   const targetLibraryId=target.public_state?.libraryId;
   const targetHullClass=targetLibraryId===LIB.id?LIB.class:target.public_state?.hullClass;
   const sourceLibraryId=source.public_state?.libraryId;
   const sourceHullClass=sourceLibraryId===LIB.id?LIB.class:source.public_state?.hullClass;
-  try{preview=vorchanTargetingPreview({shooter:{...source,libraryId:sourceLibraryId,hullClass:sourceHullClass},target:{...target,libraryId:targetLibraryId,hullClass:targetHullClass},mountId:shot.mountId,blockingHexes,verifiedTerrain:terrainVerified,defenderDirection,attackerOffensiveEW:attackerEW??0,targetDefensiveEW:defenderEW??0});blockers.push(...preview.blockers)}catch(e){blockers.push('Targeting unavailable: '+e.message)}
+  try{preview=vorchanTargetingPreview({shooter:{...source,libraryId:sourceLibraryId,hullClass:sourceHullClass},target:{...target,libraryId:targetLibraryId,hullClass:targetHullClass},mountId:shot.mountId,rangePenaltyAdjustment:effects?.rangeLoss||0,otherModifiers,blockingHexes,verifiedTerrain:terrainVerified,defenderDirection,attackerOffensiveEW:attackerEW??0,targetDefensiveEW:defenderEW??0});blockers.push(...preview.blockers)}catch(e){blockers.push('Targeting unavailable: '+e.message)}
   const defensive=defenceMap.get(id)??null;
   const intercept=intercepts[id]??{total:0,contributions:[]};
   const roll=rollMap.get(id);

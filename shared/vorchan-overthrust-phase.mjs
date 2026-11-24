@@ -9,7 +9,7 @@ export function resolveVorchanOverthrust(trial,turn,rollD20){
  const effects={...(trial.thrusterCriticalEffects??{})};
  const results=[];
  for(const check of checks){
-  const roll=rollD20();
+  const roll=rollD20(check);
   const result=resolveOverthrustCritical({...check,roll,effects:effects[check.id]??{}});
   effects[check.id]=result.effects;
   results.push(result);

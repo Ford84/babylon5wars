@@ -14,7 +14,7 @@ test('eighteen physical systems have unique IDs, verified armour and all 281 uni
 test('ship data is fully verified without enabling unfinished combat automation',()=>{
  const audit=auditVorchanIdentification();
  assert.deepEqual(audit.unverifiedTracks,[]);assert.deepEqual(audit.issues,[]);
- assert.equal(audit.shipDataVerified,true);assert.equal(audit.readyForCombat,false);
+ assert.equal(audit.shipDataVerified,true);assert.equal(audit.readyForCombat,true);
 });
 test('arc diagrams do not create phantom systems or extra jump drives',()=>{
  assert.equal(scs.systems.some(s=>s.id==='retro'),false);

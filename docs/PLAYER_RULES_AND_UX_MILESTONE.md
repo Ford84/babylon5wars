@@ -1,5 +1,7 @@
 # Player-first rules and combat UI milestone
 
+Historical milestone. For the current playable scenario and automated rules, see [Automated Vorchan Battle](AUTOMATED_VORCHAN_BATTLE.md).
+
 ## Rulebook comparison
 
 Compared against the supplied *Babylon 5 Wars Second Edition Rules Compendium* and *AOG Wars Kitchen Sink*, especially the tactical turn sequence, pre-turn power and EW, initiative, weapons fire, firing arcs, range modifiers, damage and hangar operations.

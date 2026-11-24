@@ -1,3 +1,4 @@
+import {effectiveCondition} from './ship-condition.mjs';
 // Vorchan 2E/SF SCS weapon readiness preflight; pure, conservative and non-mutating.
 // Do not infer charge/cooldown progress from a missing authoritative weapon history.
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
@@ -29,6 +30,8 @@ export function weaponReadiness({mountId,turn,trial,gun=1,chargeTurns=null}){
  if(!mount)throw new RangeError('Unknown Vorchan weapon mount');
  if(!Number.isInteger(turn)||turn<1||!Number.isInteger(gun)||gun<1||gun>mount.individualGuns)throw new RangeError('Invalid weapon turn or gun');
  const reasons=[];
+ if(trial?.condition){const condition=effectiveCondition(trial,turn);if(condition.shipDestroyed)reasons.push('Ship destroyed');if(condition.commandDisabled)reasons.push('Command systems disabled');if(condition.powerOff)reasons.push('Reactor shut down');}
+
  if(!trial||trial.libraryId!==LIB.id)reasons.push('Authoritative Vorchan SCS state missing');
  if(trial?.destroyedSystems?.includes(mountId))reasons.push('Mount destroyed');
  if(trial?.powerAllocation?.deactivated?.includes(mountId))reasons.push('Mount deactivated');
@@ -36,7 +39,7 @@ export function weaponReadiness({mountId,turn,trial,gun=1,chargeTurns=null}){
  const state=trial?.weaponReadiness?.[mountId]?.[gun];
  if(!state||!Number.isInteger(state.lastFiredTurn)||!Number.isInteger(state.lastActivatedTurn))reasons.push('Authoritative per-gun arming history unavailable');
  if(mount.weaponId==='plasma-accelerator'&&(!Number.isInteger(chargeTurns)||chargeTurns<1||chargeTurns>3))reasons.push('Choose one-, two- or three-turn plasma charge');
- if(state&&Number.isInteger(chargeTurns)&&turn-state.lastFiredTurn<chargeTurns)reasons.push('Plasma weapon has not armed for chosen firing interval');
+ if(state&&Number.isInteger(chargeTurns)&&(turn-state.lastFiredTurn<chargeTurns||turn-state.lastActivatedTurn+1<chargeTurns))reasons.push('Plasma weapon has not armed for chosen firing interval');
  if(state&&turn<=state.lastFiredTurn)reasons.push('Gun has already fired this turn');
  return {mountId,gun,turn,ready:reasons.length===0,reasons,individualGuns:mount.individualGuns,chargeTurns:mount.weaponId==='plasma-accelerator'?chargeTurns:null};
 }

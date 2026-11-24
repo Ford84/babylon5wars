@@ -2,11 +2,7 @@ import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
 import {VORCHAN_SCS_IDENTIFICATION} from './vorchan-scs-identification.mjs';
 // Only verified power diamonds on the three actual Vorchan weapon mounts.
 // Destroyed systems never release power; hangars and thrusters cannot be switched off.
-export const VORCHAN_SWITCHABLE_POWER=Object.freeze(Object.fromEntries(LIB.weaponMounts.map(m=>{
- const weapon=LIB.weapons.find(w=>w.id===m.weaponId);
- if(!weapon||!Number.isInteger(weapon.powerRequired))throw new Error('Unverified weapon power');
- return [m.id,weapon.powerRequired];
-})));
+export const VORCHAN_SWITCHABLE_POWER=Object.freeze({...Object.fromEntries(LIB.weaponMounts.map(m=>[m.id,LIB.weapons.find(w=>w.id===m.weaponId).powerRequired])),...Object.fromEntries(VORCHAN_SCS_IDENTIFICATION.systems.filter(s=>Number.isInteger(s.powerRequired)).map(s=>[s.id,s.powerRequired]))});
 const nonnegative=n=>Number.isInteger(n)&&n>=0;
 export function vorchanPowerBudget({trial,turn,deactivated=[],purchasedThrust=0,extraEWPower=0}){
  if(trial?.libraryId!==LIB.id||!nonnegative(turn)||turn<1||!Array.isArray(deactivated)||!nonnegative(purchasedThrust)||!nonnegative(extraEWPower))throw new RangeError('Invalid power state');
@@ -24,7 +20,8 @@ export function vorchanPowerBudget({trial,turn,deactivated=[],purchasedThrust=0,
  if(!nonnegative(reactorLoss)||!nonnegative(engineLoss))throw new RangeError('Unverified reactor/engine critical');
  if(Object.keys(trial.systemDamage??{}).some(id=>id==='engine'||id==='reactor')&&trial.criticalDamageAdjudicated!==true)throw new RangeError('Engine/reactor damage requires critical adjudication');
  const freedPower=deactivated.reduce((n,id)=>n+VORCHAN_SWITCHABLE_POWER[id],0);
- const availablePower=LIB.extraPower+freedPower-reactorLoss;
+ const shutdown=trial.condition&&trial.powerAllocation?.turn===turn&&trial.powerAllocation.reactorShutdown;
+ const availablePower=shutdown?0:LIB.extraPower+freedPower-reactorLoss;
  const thrustPower=purchasedThrust*LIB.engineEfficiency.power;
  const requiredPower=thrustPower+extraEWPower;
  const reactorShutdown=availablePower<0;

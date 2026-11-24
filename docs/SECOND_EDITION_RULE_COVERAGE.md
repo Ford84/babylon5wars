@@ -1,5 +1,7 @@
 # Second Edition rule coverage audit — 22 November 2026
 
+Historical milestone. For the current playable scenario and automated rules, see [Automated Vorchan Battle](AUTOMATED_VORCHAN_BATTLE.md).
+
 Authority: uploaded *Second Edition Rules Compendium* (Combat Sequence, Initiative, Allocation of EW Points, Movement & Maneuver), with *Kitchen Sink* as supplementary/optional procedures. This is a code coverage audit, not a claim of complete rules compliance.
 
 | Rules domain | Code now present | Still required before playable compliance |

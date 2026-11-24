@@ -36,7 +36,7 @@ export function vorchanHitToken({incoming,locationRoll,primaryRoll=null,sideChoi
  }
  return {requiresChoice:false,section,token,candidates:damageSystemCandidates(token,section)};
 }
-export function rollVorchanDamage({mountId,chargeTurns=3,dice,range}){
+export function rollVorchanDamage({mountId,chargeTurns=3,dice,range,damageLoss=0}){
  const mount=LIB.weaponMounts.find(m=>m.id===mountId);
  if(!mount||!int(range))throw new RangeError('Invalid weapon or range');
  const weapon=LIB.weapons.find(w=>w.id===mount.weaponId);
@@ -44,7 +44,7 @@ export function rollVorchanDamage({mountId,chargeTurns=3,dice,range}){
  if(!option)throw new RangeError('Invalid plasma charge');
  const {count,sides,bonus,perHex}=option.damageDice;
  if(!Array.isArray(dice)||dice.length!==count||dice.some(n=>!int(n,1)||n>sides))throw new RangeError('Damage dice mismatch');
- return {weaponId:weapon.id,dice:[...dice],range,raw:dice.reduce((a,b)=>a+b,bonus),damage:Math.max(0,dice.reduce((a,b)=>a+b,bonus)+range*perHex),plasma:weapon.class==='Plasma'};
+ return {weaponId:weapon.id,dice:[...dice],range,raw:dice.reduce((a,b)=>a+Math.max(1,b-damageLoss),bonus),damage:Math.max(0,dice.reduce((a,b)=>a+Math.max(1,b-damageLoss),bonus)+range*perHex),plasma:weapon.class==='Plasma'};
 }
 function applyToTrack(next,id,damage,plasma,trace){
  const s=systems.get(id);
@@ -59,14 +59,15 @@ function applyToTrack(next,id,damage,plasma,trace){
  trace.push({systemId:id,armour,damageIn:damage,marked,damageOut:Math.max(0,penetrated-marked),destroyed:previous+marked===s.boxes});
  return Math.max(0,penetrated-marked);
 }
-export function applyVorchanStandardVolley({state,damage,plasma=false,incoming,locationRoll,primaryRoll=null,sideChoice=null,systemChoice=null,shieldChoice=null}){
+export function applyVorchanStandardVolley({state,damage,plasma=false,incoming,locationRoll,primaryRoll=null,sideChoice=null,systemChoice=null,shieldChoice=null,eligibleSystemIds=null}){
  if(!state||!int(damage)||!['forward','aft','port','starboard'].includes(incoming)||typeof plasma!=='boolean')throw new RangeError('Invalid volley');
  if(shieldChoice!==null)throw new RangeError('Vorchan SCS has no verified shield system');
  if(state.shipDestroyed)throw new RangeError('Ship already destroyed');
  const hit=vorchanHitToken({incoming,locationRoll,primaryRoll,sideChoice});
  if(hit.requiresChoice)return {requiresChoice:true,...hit};
+ if(state.sectionsLost?.includes(hit.section)){hit.section='primary';hit.token=hitLocation(chart.primary,primaryRoll||locationRoll);hit.candidates=damageSystemCandidates(hit.token,'primary');}
  const next=structuredClone(state),trace=[];
- let candidates=hit.candidates.filter(id=>next.tracks[id]&&next.tracks[id].marked<systems.get(id).boxes);
+ let candidates=hit.candidates.filter(id=>(!eligibleSystemIds||eligibleSystemIds.includes(id))&&next.tracks[id]&&next.tracks[id].marked<systems.get(id).boxes);
  if(candidates.length>1&&(!systemChoice||!candidates.includes(systemChoice)))return {requiresChoice:true,choiceType:'system',token:hit.token,choices:candidates};
  if(systemChoice&&candidates.length&&!candidates.includes(systemChoice))throw new RangeError('Invalid defender system choice');
  const selected=systemChoice||candidates[0]||null;
@@ -78,7 +79,7 @@ export function applyVorchanStandardVolley({state,damage,plasma=false,incoming,l
  if(!selected||remaining>0){
   if(selected&&systems.get(selected).kind==='structure')structure=selected;
   // An overkill is routed to its own structural area, not necessarily the hit chart.
-  else if(selected)structure=systems.get(selected).section==='primary'?'primary_structure':systems.get(selected).section==='aft'?'aft_structure':'forward_structure';
+  else if(selected)structure=['primary','port','starboard'].includes(systems.get(selected).section)?'primary_structure':systems.get(selected).section==='aft'?'aft_structure':'forward_structure';
   if(!selected||systems.get(selected).kind!=='structure'){
    if(next.tracks[structure]?.marked===systems.get(structure)?.boxes)structure='primary_structure';
    if(remaining>0)remaining=applyToTrack(next,structure,remaining,plasma,trace);

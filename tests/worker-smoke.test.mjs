@@ -9,10 +9,10 @@ async function request(path,options={}){
 }
 test('worker serves health, phases and verified catalogue without authentication or database',async()=>{
  const health=await request('/api/health');
- assert.equal(health.status,200);assert.equal(health.body.ok,true);assert.equal(health.body.phaseCount,23);
- const phases=await request('/api/phases');assert.equal(phases.status,200);assert.equal(phases.body.length,23);
+ assert.equal(health.status,200);assert.equal(health.body.ok,true);assert.equal(health.body.phaseCount,6);
+ const phases=await request('/api/phases');assert.equal(phases.status,200);assert.equal(phases.body.length,6);
  const catalogue=await request('/api/ships/catalog');assert.equal(catalogue.status,200);
- assert.equal(catalogue.body.length,1);assert.equal(catalogue.body[0].automaticCombatReady,false);
+ assert.equal(catalogue.body.length,1);assert.equal(catalogue.body[0].automaticCombatReady,true);
 });
 test('worker rejects unauthenticated movement and cross-origin state changes',async()=>{
  const movement=await request('/api/games/demo/trial-movement',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});

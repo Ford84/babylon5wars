@@ -22,33 +22,33 @@ export default function BattleSetupPanel({
   const hostCanEdit = !gameSetup || game.host_id === user?.id;
 
   return <section className="panel battle-setup-panel" aria-labelledby="battle-setup-title">
-    <h2 id="battle-setup-title">Battlefield setup</h2>
+    <h2 id="battle-setup-title">Battlefield Setup</h2>
     <p>{gameSetup
       ? (hostCanEdit ? 'Choose the shared board size and ship model before the host starts the battle.' : 'The host sets the shared board size and ship model. You can choose your own 2D or 3D view.')
       : 'Set defaults for your next battle. The host can adjust its shared board and model before starting.'}</p>
     <div className="battle-setup-grid">
-      <label>Map size
+      <label>Map Size
         <select value={mapPreset} onChange={event => onMapPresetChange(event.target.value)} disabled={busy || !hostCanEdit}>
           {Object.entries(MAP_PRESETS).map(([id, preset]) => <option key={id} value={id}>{preset.label}</option>)}
         </select>
       </label>
-      <label>Ship model
+      <label>Ship Model
         {VORCHAN_MODELS.length === 1
           ? <span className="setup-fixed-value">{VORCHAN_MODELS[0].label}</span>
           : <select value={modelId} onChange={event => onModelChange(event.target.value)} disabled={busy || !hostCanEdit}>
               {VORCHAN_MODELS.map(model => <option key={model.id} value={model.id}>{model.label}</option>)}
             </select>}
       </label>
-      <label>Battlefield view
+      <label>Battlefield View
         <select value={mapMode} onChange={event => onMapModeChange(event.target.value)}>
-          <option value="3d">3D tactical board</option>
-          <option value="2d">Classic 2D board</option>
+          <option value="3d">3D Tactical Board</option>
+          <option value="2d">Classic 2D Board</option>
         </select>
       </label>
     </div>
     {gameSetup && hostCanEdit && <StartingPositions mapPreset={mapPreset} positions={positions} onChange={onPositionsChange} disabled={busy} />}
     <div className="battle-setup-local-model">
-      <label>Optional local STL override
+      <label>Optional Local STL Override
         <input type="file" accept=".stl" onChange={event => onLocalModel(event.target.files?.[0] || null)} />
       </label>
       <p className="hint">The selected public model is shared with the battle. A local STL override is visible only in this browser.</p>
@@ -67,12 +67,11 @@ function StartingPositions({mapPreset, positions, onChange, disabled}) {
   const setFacing=(i,value)=>choose(i,'facing',value);
   return <section className="starting-position" aria-labelledby="starting-position-title">
     <h3 id="starting-position-title">Starting Hexes And Facing</h3>
-    <p className="hint">Choose each player's starting hex and direction. Click a hex on the preview or enter coordinates. The arrow shows the ship's facing.</p>
+    <p className="hint">Choose each player's starting hex and direction. Click a hex on the preview to set a position. The arrow shows the ship's facing.</p>
     <div className="starting-position-grid">
       <div className="starting-position-controls">{positions.map((p,i)=><fieldset key={i} disabled={disabled}>
         <legend><button type="button" className={editing===i?'':'secondary'} onClick={()=>setEditing(i)} aria-pressed={editing===i}>Edit {i===0?'Host':'Opponent'} — Ship {i+1}</button></legend>
-        <label>Starting hex (q)<input type="number" min="0" max={columns-1} value={p.q} onChange={e=>choose(i,'q',Math.max(0,Math.min(columns-1,Number(e.target.value)||0)))}/></label>
-        <label>Starting hex (r)<input type="number" min="0" max={rows-1} value={p.r} onChange={e=>choose(i,'r',Math.max(0,Math.min(rows-1,Number(e.target.value)||0)))}/></label>
+        <p>Starting Hex: ({p.q}, {p.r})</p>
         <label>Facing<select value={p.facing} onChange={e=>setFacing(i,Number(e.target.value))}>{['North-East','East','South-East','South-West','West','North-West'].map((v,n)=><option key={n} value={n}>{v}</option>)}</select></label>
       </fieldset>)}</div>
       <div className="starting-map-scroll"><svg viewBox={`0 0 ${width} ${height}`} className="starting-map" role="img" aria-label={`Starting position map, ${columns} columns by ${rows} rows`}>

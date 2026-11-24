@@ -41,5 +41,5 @@ export function auditVorchanIdentification(){
   for(const box of s.damageBoxes){if(seen.has(box.id))issues.push('duplicate damage box '+box.id);seen.add(box.id);}
  }
  if(seen.size!==vector.totalBoxes)issues.push('whole-sheet damage box mismatch');
- return {systems:systems.length,damageBoxes:seen.size,verifiedTracks:systems.filter(s=>s.verified).length,unverifiedTracks:systems.filter(s=>!s.verified).map(s=>s.id),issues,shipDataVerified:issues.length===0,readyForCombat:false};
+ return {systems:systems.length,damageBoxes:seen.size,verifiedTracks:systems.filter(s=>s.verified).length,unverifiedTracks:systems.filter(s=>!s.verified).map(s=>s.id),issues,shipDataVerified:issues.length===0,readyForCombat:issues.length===0,supportedScenarios:['vorchan-clear-space-duel']};
 }

@@ -1,5 +1,7 @@
 # Two-player Vorchan trial — implementation and remaining blockers
 
+Historical milestone. For the current playable scenario and automated rules, see [Automated Vorchan Battle](AUTOMATED_VORCHAN_BATTLE.md).
+
 ## Source
 The one-page official **Centauri Vorchan Warship**, Version 3: 2E/SF, supplied in `centauri_official.zip`, has been inspected directly. The source-backed record is `shared/vorchan-trial-library.mjs`.
 

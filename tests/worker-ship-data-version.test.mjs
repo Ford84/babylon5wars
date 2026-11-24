@@ -8,6 +8,7 @@ function fixture(trial){
  const env={DB:{prepare(sql){return {
   bind(){return this},
   async first(){
+   if(sql.includes('FROM battle_states'))return null;
    if(sql.includes('FROM sessions'))return {id:'owner'};
    if(sql.startsWith('SELECT role FROM memberships'))return {role:'host'};
    if(sql.startsWith('SELECT * FROM games'))return {id:'battle',host_id:'owner',status:'active',phase_id:'power',turn:1,revision:1};
@@ -31,14 +32,14 @@ test('legacy ship data is rejected before any command writes or reinterpretation
  trial.damage={tracks:{reactor:{marked:5},retro:{marked:1}}};
  const before=JSON.stringify(trial),{env,record}=fixture(trial);
  const response=await order(env);
- assert.equal(response.status,409);
- assert.match((await response.json()).error,/superseded Vorchan ship data/);
+ assert.equal(response.status,410);
+ assert.match((await response.json()).error,/retired/);
  assert.equal(JSON.stringify(trial),before);
  assert.equal(record,JSON.stringify({trial}));
 });
-test('new revision passes data validation and reaches ordinary order validation',async()=>{
+test('manual order endpoint stays retired even when the ship data is current',async()=>{
  const {env}=fixture(newVorchanTrialState('s','owner',3,10,0));
  const response=await order(env);
- assert.equal(response.status,400);
- assert.match((await response.json()).error,/acknowledge/);
+ assert.equal(response.status,410);
+ assert.match((await response.json()).error,/retired/);
 });
