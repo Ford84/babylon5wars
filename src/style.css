@@ -132,3 +132,5 @@ h2,h3,h4,h5,h6{letter-spacing:.015em}
 .critical-review{border:2px solid #e9ba69;box-shadow:0 0 18px #d99a3520}.critical-review h2{color:#f4d59a}.rule-table{margin:1rem 0;border:1px solid #45617e;border-radius:8px;padding:.6rem}.rule-table summary{cursor:pointer;font-weight:700}.rule-table table{display:table;font-size:13px}.rule-table td:first-child{white-space:nowrap}.rolled-table-row{background:#28516c;color:#fff}
 
 .shuttle-damage-track{display:flex;gap:3px;margin:.5rem 0 1rem}.shuttle-damage-track span{border:1px solid #82a1b9;width:20px;height:22px;text-align:center}.shuttle-damage-track .marked{background:#681d30;color:#ffb5c0}
+
+.fleet-columns{display:grid;grid-template-columns:1fr 1fr;gap:1rem}.fleet-entry{border-bottom:1px solid #45617e;padding:.7rem 0}.fleet-entry input{max-width:7rem}@media(max-width:700px){.fleet-columns{grid-template-columns:1fr}}

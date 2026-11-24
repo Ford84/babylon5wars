@@ -1,8 +1,10 @@
+import {validateFleet} from '../shared/fleet-setup.mjs';
 import {enableOperations} from '../shared/vorchan-operations.mjs';
 import {createBattle,executeBattle,battleView,PLAY_PHASES} from '../shared/automated-battle.mjs';
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
 const error=(message,status=409)=>json({error:message},status);
 export async function automatedGame({req,db,game,members,user,route}){
+ if(route==='fleet-setup'&&game.status!=='setup')return error('Fleet setup is locked after battle start',409);
  if(['manual-combat-resolution','host-damage-override','initiative','combat-terrain'].includes(route))return error('Manual adjudication is retired. Use the available battle actions.',410);
  // Staging and account flows continue to use their existing routes.
  if(game.status==='setup'&&route!=='start')return null;
@@ -27,6 +29,7 @@ export async function automatedGame({req,db,game,members,user,route}){
    if(game.status!=='setup'||stored)return error('Battle already started');
    if(game.mode==='solo-test'&&(members.length!==2||members.filter(m=>m.role==='passive').length!==1))return error('Solo test requires its passive opponent');
    const rows=(await db.prepare('SELECT * FROM ships WHERE game_id=?').bind(game.id).all()).results;
+   validateFleet(rows.map(x=>({ownerId:x.owner_id,catalogId:JSON.parse(x.public_state_json).libraryId,q:x.q,r:x.r,facing:x.facing,speed:x.speed})),members,game.map_preset,game.deployment_mode||'free');
    s=createBattle(rows,members,game.map_preset,{operations:true,passivePlayerId:game.mode==='solo-test'?members.find(m=>m.role==='passive')?.user_id:null});s.journal=[{turn:1,phase:'power',type:'battle_started',scenario:s.scenario,mode:game.mode},...s.journal];
   }else{
    if(!s)return error('Start a new battle to use automated condition and rules; existing records are preserved.');

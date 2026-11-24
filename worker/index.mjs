@@ -1,3 +1,4 @@
+import {validateFleet,fleetTotals} from '../shared/fleet-setup.mjs';
 import {automatedGame} from './automated-game.mjs';
 import {PLAY_PHASES} from '../shared/automated-battle.mjs';
 import {getBuiltinShip,listBuiltinShips} from '../shared/ship-catalog.mjs';
@@ -124,6 +125,23 @@ export default {async fetch(req,env){try{
  if(!route&&req.method==='GET'){
   const shipRows=(await db.prepare('SELECT * FROM ships WHERE game_id=?').bind(gameId).all()).results;const templateRows=(await db.prepare('SELECT id,definition_json FROM scs_templates WHERE id IN (SELECT template_id FROM ships WHERE game_id=? AND template_id IS NOT NULL)').bind(gameId).all()).results;const templateById=new Map(templateRows.map(t=>[t.id,JSON.parse(t.definition_json)]));const ships=shipRows.map(s=>{const visible=safeShip(s,user.id);if(s.owner_id===user.id||game.host_id===user.id){if(JSON.parse(s.public_state_json||'{}').libraryId===VORCHAN_LIBRARY_RECORD.id)visible.library_stats={engineEfficiency:VORCHAN_LIBRARY_RECORD.engineEfficiency.power,accelerationCost:VORCHAN_LIBRARY_RECORD.accelerationCost,initiativeBonus:VORCHAN_LIBRARY_RECORD.initiativeBonus,source:VORCHAN_LIBRARY_RECORD.source};const definition=templateById.get(s.template_id);if(definition){visible.library_stats={engineEfficiency:definition.stats.engineEfficiency,accelerationCost:definition.stats.accelerationCost??null,initiativeBonus:definition.stats.initiativeBonus};}}return visible;});const orders=await completedOrders(db,game),completed=orders.map(o=>o.player_id),required=requiredPlayers(phase,members,completed);
   return json({game,phase,members,ships,readiness:members.map(m=>({id:m.user_id,name:m.display_name,submitted:completed.includes(m.user_id),required:required.includes(m.user_id)})),needsAction:required.includes(user.id),myOrder:orders.find(o=>o.player_id===user.id)?JSON.parse(orders.find(o=>o.player_id===user.id).payload_json):null});
+ }
+ if(route==='fleet-setup'&&req.method==='POST'){
+  if(game.host_id!==user.id)return fail('Only the battle host can build the fleets',403);
+  if(game.status!=='setup')return fail('Fleet setup is locked after battle start',409);
+  const b=await readBody(req);if(b.expectedRevision!==game.revision)return fail('Battle changed; reload',409);
+  let fleet;try{fleet=validateFleet(b.entries,members,game.map_preset,b.deploymentMode);}catch(e){return fail(e.message);}
+  const nextRevision=game.revision+1,ids=fleet.map(()=>uuid());
+  let result;try{result=await db.batch([
+   db.prepare('INSERT INTO fleet_setup_guards(game_id,expected_revision) VALUES(?,?)').bind(gameId,game.revision),
+   db.prepare("UPDATE games SET revision=revision+1,deployment_mode=? WHERE id=? AND revision=? AND status='setup'").bind(b.deploymentMode,gameId,game.revision),
+   db.prepare('DELETE FROM ships WHERE game_id=? AND EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(gameId,gameId,nextRevision),
+   ...fleet.map((x,i)=>{const trial=newVorchanTrialState(ids[i],x.ownerId,x.q,x.r,x.facing);return db.prepare('INSERT INTO ships(id,game_id,owner_id,label,q,r,facing,speed,public_state_json,private_state_json) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(ids[i],gameId,x.ownerId,getBuiltinShip(x.catalogId).name+' '+(i+1),x.q,x.r,x.facing,x.speed,JSON.stringify({libraryId:x.catalogId,trial:true,combatPoints:getBuiltinShip(x.catalogId).combatPoints}),JSON.stringify({trial}),gameId,nextRevision);}),
+   db.prepare('INSERT INTO events(id,game_id,turn,phase_id,actor_id,event_type,public_json) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(uuid(),gameId,1,'power',user.id,'fleets_saved',JSON.stringify({deploymentMode:b.deploymentMode,fleets:fleetTotals(fleet,members)}),gameId,nextRevision),
+   db.prepare('DELETE FROM fleet_setup_guards WHERE game_id=?').bind(gameId)
+  ]);}catch(e){if(/revision conflict|unique/i.test(String(e)))return fail('Battle changed; reload',409);throw e;}
+  if(result[0].meta.changes!==1)return fail('Battle changed; reload',409);
+  return json({saved:true,fleets:fleetTotals(fleet,members),shipIds:ids},201);
  }
  if(route==='trial-vorchan'&&req.method==='POST'){
   if(user.id!==game.host_id)return fail('Host only',403);

@@ -13,8 +13,13 @@ import {weaponReadiness} from '../shared/weapon-readiness.mjs';
 import {vorchanTargetingPreview,facingDirections,checkMountArc} from '../shared/weapon-targeting.mjs';
 const numbers=(max)=>Array.from({length:Math.max(0,Math.floor(max))+1},(_,i)=>i);
 function Amount({label,value,max,onChange}){return <label>{label}<select value={value} onChange={e=>onChange(Number(e.target.value))}>{numbers(max).map(n=><option key={n} value={n}>{n}</option>)}</select></label>;}
-export default function BattleActions({detail,userId,send,busy,onInitiative,onAttackRevealed}){
- const ship=detail.ships.find(x=>x.owner_id===userId),t=ship?.private_state?.trial;
+export default function BattleActions(props){
+ const {detail,userId,send}=props,[chosen,setChosen]=useState('');
+ const own=detail.ships.filter(x=>x.owner_id===userId&&!x.withdrawn&&!x.public_state.condition.shipDestroyed),movement=detail.game.phase_id==='movement',selected=movement?own.find(x=>x.id===detail.movingUnitId):own.find(x=>x.id===chosen&&!detail.unitPhaseLocks?.[x.id])||own.find(x=>!detail.unitPhaseLocks?.[x.id])||own[0];
+ return <>{!movement&&own.length>1&&detail.needsAction&&!detail.resolution&&!detail.criticalResolution&&detail.game.phase_id!=='initiative'&&<label>Acting Ship<select value={selected?.id} onChange={e=>setChosen(e.target.value)}>{own.filter(x=>!detail.unitPhaseLocks?.[x.id]).map(x=><option key={x.id} value={x.id}>{x.label}</option>)}</select></label>}<UnitBattleActions key={selected?.id+':'+detail.game.phase_id} {...props} activeShipId={selected?.id} send={c=>send({...c,shipId:selected?.id})}/></>;
+}
+function UnitBattleActions({detail,userId,send,busy,onInitiative,onAttackRevealed,activeShipId}){
+ const ship=detail.ships.find(x=>x.id===activeShipId)||detail.ships.find(x=>x.owner_id===userId),t=ship?.private_state?.trial;
  if(!t||!detail.automated||detail.game.status!=='active')return null;
  const phase=detail.game.phase_id,turn=detail.game.turn;
  if(phase==='critical_resolution'&&detail.criticalResolution)return <CriticalActions detail={detail} userId={userId} send={send} busy={busy}/>;
@@ -106,12 +111,12 @@ function Weapons({ship,t,turn,detail,send,busy}){
 }
 function Defence({ship,detail,send,busy}){
  const [assignments,setAssignments]=useState({}),[directions,setDirections]=useState({});
- const declarations=detail.declarations||[],incoming=declarations.flatMap(d=>d.fire.shots.filter(s=>s.role==='offensive'&&[...detail.ships,...(detail.shuttles||[])].some(x=>x.id===s.targetId&&x.owner_id===ship.owner_id))),reserves=declarations.find(d=>d.playerId===ship.owner_id)?.fire.shots.filter(s=>s.role==='defensive')||[];
+ const declarations=detail.declarations||[],incoming=declarations.flatMap(d=>d.fire.shots.filter(s=>s.role==='offensive'&&[...detail.ships,...(detail.shuttles||[])].some(x=>x.id===s.targetId&&x.owner_id===ship.owner_id))),reserves=declarations.filter(d=>d.playerId===ship.owner_id).flatMap(d=>d.fire.shots.filter(s=>s.role==='defensive'));
  const id=s=>s.shipId+':'+s.mountId+':'+s.gun;
  if(detail.pending.length){const p=detail.pending[0];return <><p>Allocate the confirmed hit to an eligible {p.type==='system'?'system':'hull section'}. The engine applies armour and damage.</p>{p.choices.map(value=><button key={value} disabled={busy} onClick={()=>send({type:'damage-choice',attackId:p.attackId,value})}>{labelSystem(value)}</button>)}</>;}
  const boundaries=new Map();for(const shot of incoming){const shooter=detail.ships.find(x=>x.id===shot.shipId);const target=[...detail.ships,...(detail.shuttles||[])].find(x=>x.id===shot.targetId),f=facingDirections(shooter,target,{sameHexPrevious:shooter.sameHexPrevious?.[target.id]});if(f.requiresChoice)boundaries.set(shooter.id+':'+target.id,{...f,shooter,target});}
  return <><p>{incoming.length} Incoming Attack{incoming.length===1?'':'s'} · {reserves.length} Reserved Gun{reserves.length===1?'':'s'}</p>
-  {reserves.map(r=><label key={id(r)}>{labelSystem(r.mountId)} · Gun {r.gun}<select value={assignments[id(r)]||''} onChange={e=>setAssignments(old=>({...old,[id(r)]:e.target.value}))}><option value="">Do Not Intercept</option>{incoming.filter(a=>a.targetId===ship.id).map(a=><option key={id(a)} value={id(a)}>{labelSystem(a.mountId)} · Gun {a.gun}</option>)}</select></label>)}
+  {reserves.map(r=><label key={id(r)}>{labelSystem(r.mountId)} · Gun {r.gun}<select value={assignments[id(r)]||''} onChange={e=>setAssignments(old=>({...old,[id(r)]:e.target.value}))}><option value="">Do Not Intercept</option>{incoming.filter(a=>a.targetId===r.shipId).map(a=><option key={id(a)} value={id(a)}>{labelSystem(a.mountId)} · Gun {a.gun}</option>)}</select></label>)}
   {[...boundaries].map(([key,f])=><label key={key}>Incoming Aspect On {f.target.label} From {f.shooter.label}<select value={directions[key]||''} onChange={e=>setDirections(old=>({...old,[key]:e.target.value}))}><option value="">Choose Boundary Aspect</option>{f.choices.map(c=><option key={c} value={c}>{labelSystem(c)}</option>)}</select></label>)}
   <p>After both players lock, the server rolls all attacks. Damage, criticals and the next turn follow automatically; the game pauses only for a required defender choice.</p>
   <button disabled={busy||[...boundaries.keys()].some(k=>!directions[k])} onClick={()=>send({type:'defence',directions,assignments:reserves.filter(r=>assignments[id(r)]).map(r=>({shipId:r.shipId,mountId:r.mountId,gun:r.gun,attackId:assignments[id(r)]}))})}>Lock Defence And Resolve Fire</button>

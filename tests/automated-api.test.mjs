@@ -249,3 +249,10 @@ test('jump tokens and launched shuttle inventory persist through the authenticat
  assert.equal((await send('p1',{type:'hangar',launch:[x.id]})).status,200);assert.equal((await call('/games/'+gameId+'/battle-command','p1','POST',{expectedRevision:rev,command:{type:'hangar',launch:[x.id]}})).status,409);
  await send('p2',{type:'hangar'});d=await get();assert.equal(d.game.turn,2);assert.equal(d.shuttles.find(y=>y.id===x.id).status,'deployed');assert.equal(d.jumpPoints[0].status,'open');assert.equal(d.shuttles.find(y=>y.id===x.id).public_state.damage.shuttleDamage,0);
 });
+test('host can build either fleet with catalogue points and meeting deployment, with locked ownership and revisions',async()=>{
+ const {get,call,gameId}=await fixture({start:false});let d=await get();const members=d.members;
+ const entries=[0,0,1].map((side,i)=>({ownerId:members[side].user_id,catalogId:'centauri-vorchan-v3-2e-sf',q:side?19:i,r:side?31:0,facing:side?5:2,speed:i+1}));
+ const path='/games/'+gameId+'/fleet-setup',body={expectedRevision:d.game.revision,entries,deploymentMode:'meeting'};
+ assert.equal((await call(path,'p2','POST',body)).status,403);let r=await call(path,'p1','POST',body);assert.equal(r.status,201,JSON.stringify(r));assert.deepEqual(r.body.fleets.map(x=>x.points).sort((a,b)=>a-b),[360,720]);assert.equal((await call(path,'p1','POST',body)).status,409);
+ d=await get();assert.equal(d.ships.length,3);assert.equal(d.game.deployment_mode,'meeting');assert.equal((await call('/games/'+gameId+'/start','p1','POST',{expectedRevision:d.game.revision})).status,200);d=await get();assert.equal(d.ships.length,3);assert.deepEqual(d.ships.map(x=>x.speed).sort(),[1,2,3]);assert.equal((await call(path,'p1','POST',{...body,expectedRevision:d.game.revision})).status,409);
+});

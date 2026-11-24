@@ -1,0 +1,5 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {gunzipSync} from 'node:zlib';
+test('first Larisi model has valid embedded GLB buffers, coloured geometry and the correct map axes',()=>{
+ const b=gunzipSync(readFileSync(new URL('../public/models/shuttle/centauri-larisi-rc1.glb.gz',import.meta.url)));assert.equal(b.readUInt32LE(0),0x46546c67);assert.equal(b.readUInt32LE(8),b.length);const j=JSON.parse(b.subarray(20,20+b.readUInt32LE(12)).toString());assert.equal(j.nodes[0].name,'CR-Larisi-RC1');assert.equal(j.images,undefined);assert.equal(j.buffers.length,1);assert.equal(j.buffers[0].uri,undefined);
+ const primitive=j.meshes[0].primitives[0],position=j.accessors[primitive.attributes.POSITION],colour=j.accessors[primitive.attributes.COLOR_0];assert.equal(position.count,57243);assert.deepEqual([position.min[2],position.max[2]],[-4,4]);assert.equal(position.min[1],0);assert.equal(colour.count,position.count);assert.equal(colour.normalized,true);assert.ok(j.accessors[primitive.indices].count>300000);
+});
