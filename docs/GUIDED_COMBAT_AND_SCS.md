@@ -23,3 +23,13 @@ System labels now use Plasma Accelerator (Mount 1), Twin Array (Mount 2/Port and
 Both map views provide zoom, pan, Show Whole Map and Find buttons for each ship. Zoom anchors to a ship and focus follows its current position; pan offsets persist until refocusing or resetting. The 3D camera reads current view state instead of a stale zoom closure and fits the board to the viewport aspect ratio. The 2D SVG fits the visible map panel so a centred ship cannot be hidden below a clipped SVG. Log numbering and padding sit inside each entry border, including on narrow screens.
 
 Validation: 253 tests and production build; browser checks of power labels, narrow log cards, 2D find/pan/zoom and the 3D controls. WebGL rendering is unavailable in the test browser, so the 3D renderer itself was not visually verified in this follow-up.
+
+## Facing, Thrust And Dice Presentation
+
+Ship summaries show the named facing. The setup preview and 2D map share the six facing labels/angles; the 3D model yaw now matches the movement engine's edge-centred axial directions. The source STL's nose axis is normalised before applying ship facing. Saved facing values and movement rules are unchanged.
+
+Power shows the current thrust total (condition-adjusted free thrust plus the selected extra purchase) beside Extra Thrust. Roll Initiative opens a modal with a roll for the player's ship, a tumbling d20, and the saved roll, modifiers and total. The modal persists when the engine advances to EW and waits for OK. This remains the supported one-Vorchan-per-player scenario.
+
+Attack results use the same animated d20 and reveal Hit/Miss and OK after it settles. Cosmetic intermediate faces do not determine the outcome: all final values come from existing server-generated saved rolls. Miss weapon effects are held until the attack die settles. Reduced-motion preferences skip tumbling and reveal the saved value immediately. Reloading never submits another roll.
+
+Validation: 255 engine/API/geometry tests and production build; browser checks of thrust purchase totals, facing labels, initiative modal ready/rolling/result states and attack ready/rolling/result states. Both dice settled on the fixture's saved value of 7 before the corresponding results appeared. Tests verify all six 2D/3D nose vectors against actual forward movement, plus source STL axis normalisation. WebGL rendering remains unavailable in the test browser.
