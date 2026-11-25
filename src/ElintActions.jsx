@@ -12,10 +12,12 @@ export function EWActions({t,ship,turn,detail,send,busy}){
  const enemies=groups.filter(x=>x.owner_id!==ship.owner_id),friends=groups.filter(x=>x.owner_id===ship.owner_id&&x.id!==ship.id);
  const fixed=fixedEWForUnits(e.ewLock,units);
  const [defensive,setDefensive]=useState(fixed?.defensive||0),[offensive,setOffensive]=useState(fixed?.offensive||{}),[elint,setElint]=useState(fixed?.elint||{defensive:{},disruption:{},blanket:0});
- const attack=sum(offensive),spent=defensive+attack+elintBudget(elint);
+ const [closeCombatReserve,setCloseCombatReserve]=useState(0);
+ const attack=sum(offensive),spent=defensive+attack+elintBudget(elint)+closeCombatReserve;
  let error='';try{validateElint({ship,units,offensive,elint,fixed:!!e.ewLock});}catch(err){error=err.message;}
  const update=(field,id,n)=>setElint(old=>({...old,[field]:{...old[field],[id]:n}}));
  return <><p><strong>{available}</strong> EW Available · <strong>{available-spent}</strong> Unallocated</p>{e.ewLock&&<p>Command Damage Fixes Last Turn’s Normal And ELINT Allocations; Reduce Points Only Where Output Has Fallen.</p>}{e.offensiveLimited&&<p>Command Damage Limits Normal Offensive EW To {limit}.</p>}
+ {!e.ewLock&&<Amount label="Reserve Close Combat EW" value={closeCombatReserve} max={available} onChange={setCloseCombatReserve}/>}
  <Amount label="Defensive EW" value={defensive} max={available} onChange={setDefensive}/>{enemies.map(x=><Amount key={x.id} label={'Offensive EW Against '+x.label} value={offensive[x.id]||0} max={limit} onChange={n=>setOffensive(old=>({...old,[x.id]:n}))}/>)}
  {enemies.some(x=>x.kind==='shuttle')&&<p>Each Shuttle Group Shares Its Offensive EW Lock-On (Up To Six Individual Shuttles).</p>}
  {scout&&<fieldset><legend>ELINT Fleet Support</legend><p>Support uses this same EW pool. Ranges for offensive, defensive and disruption support must be legal now and when weapons fire.</p>
@@ -28,7 +30,7 @@ export function EWActions({t,ship,turn,detail,send,busy}){
  {enemies.filter(x=>x.kind!=='shuttle'&&(hexDistance(ship,x)<=30||elint.disruption?.[x.id])).map(x=><Amount key={x.id} label={'Disrupt OEW · '+x.label} min={e.ewLock?1:3} value={elint.disruption?.[x.id]||0} max={available} onChange={n=>update('disruption',x.id,n)}/>)}</>}
  </fieldset>}
  {error&&<p className="error">{error}</p>}
- <button disabled={busy||!!error||spent>available||attack>limit} onClick={()=>send({type:'ew',defensive,offensive:Object.fromEntries(Object.entries(offensive).filter(([,n])=>n)),elint})}>Lock EW Allocation</button></>;
+ <button disabled={busy||!!error||spent>available||attack>limit} onClick={()=>send({type:'ew',defensive,closeCombatReserve,offensive:Object.fromEntries(Object.entries(offensive).filter(([,n])=>n)),elint})}>Lock EW Allocation</button></>;
 }
 export function ElintDisruption({detail,userId,send,busy}){
  const r=detail.elintDisruption,[removed,setRemoved]=useState({});if(!r)return null;
