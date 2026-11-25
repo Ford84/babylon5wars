@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {CENTAURI_HIT_CHARTS,validateHitChart,hitLocation,SENTRI_FLIGHT_DATA,RAZIK_FLIGHT_DATA,newSentriFlight,damageSentriFighter,newRazikFlight,newFighterFlight,damageFighter,eligibleFighterSlots,fighterFlightStatus,resolveFighterVolleys} from '../shared/centauri-combat-data.mjs';
+import {CENTAURI_HIT_CHARTS,validateHitChart,hitLocation,SENTRI_FLIGHT_DATA,RAZIK_FLIGHT_DATA,newSentriFlight,damageSentriFighter,newRazikFlight,newFighterFlight,damageFighter,eligibleFighterSlots,fighterFlightStatus,resolveFighterVolleys,resolveFlightAttack} from '../shared/centauri-combat-data.mjs';
 test('all transcribed d20 charts cover each face exactly once',()=>{
  for(const charts of Object.values(CENTAURI_HIT_CHARTS))for(const chart of Object.values(charts)){
   assert.equal(validateHitChart(chart),true);
@@ -135,4 +135,35 @@ test('invalid damage, type, slot, direction and flight size are rejected without
  for(const direction of ['rear','__proto__','constructor'])assert.throws(()=>resolveFighterVolleys(f,{slot:1,direction,volleys:[1]}));
  assert.throws(()=>resolveFighterVolleys(f,{slot:1,direction:'aft',volleys:[3,-1],linked:true}));
  assert.equal(f.fighters[0].damage,0);
+});
+
+test('flight attack covers all official margin boundaries for both fighter types',()=>{
+ for(const make of [newSentriFlight,newRazikFlight]){
+  for(const [margin,hits] of [[-9,0],[-5,0],[-4,1],[-3,1],[-2,2],[-1,2],[0,3],[1,3],[2,3],[3,4],[4,4],[5,5],[6,5],[7,6],[19,6]]){
+   const r=resolveFlightAttack(make(),10+margin,10);
+   assert.equal(r.hits,hits);assert.equal(r.gunHits,hits*2);assert.equal(r.misses,6-hits);assert.equal(r.linked,true);
+  }
+ }
+});
+test('flight attack rounds half up for every surviving flight size and band',()=>{
+ const expected=[[0,0,0,1,1,1,1],[0,0,1,1,1,2,2],[0,1,1,2,2,3,3],[0,1,1,2,3,3,4],[0,1,2,3,3,4,5],[0,1,2,3,4,5,6]];
+ for(let n=1;n<=6;n++)for(const [i,margin] of [-5,-4,-2,0,3,5,7].entries()){
+  const r=resolveFlightAttack(newRazikFlight(n),10+margin,10);
+  assert.equal(r.hits,expected[n-1][i]);
+  assert.equal(r.fraction,RAZIK_FLIGHT_DATA.flightLevelCombat[i].fraction);
+ }
+});
+test('destroyed and dropped-out fighters do not contribute to flight fire',()=>{
+ let f=damageFighter(newSentriFlight(),1,10);
+ f.fighters[1].droppedOut=true;
+ assert.equal(resolveFlightAttack(f,10,10).hits,2);
+ for(const slot of eligibleFighterSlots(f))f=damageFighter(f,slot,10);
+ assert.equal(resolveFlightAttack(f,30,1).hits,0);
+});
+test('flight attack preserves extreme target numbers and rejects invalid rolls',()=>{
+ const f=newSentriFlight();
+ assert.equal(resolveFlightAttack(f,27,20).hits,6);
+ assert.equal(resolveFlightAttack(f,-4,1).hits,0);
+ for(const roll of [0,21,1.5,NaN])assert.throws(()=>resolveFlightAttack(f,10,roll));
+ for(const chance of [NaN,Infinity,1.5])assert.throws(()=>resolveFlightAttack(f,chance,10));
 });
