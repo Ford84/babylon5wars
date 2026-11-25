@@ -108,3 +108,16 @@ export function resolveFighterVolleys(flight,{slot,direction,volleys,linked=fals
  }
  return {flight:next,results,status:fighterFlightStatus(next)};
 }
+
+// Rules Compendium: Fighter Flight Level Combat Resolution.
+// chanceToHit is the final modified target number, not clamped to the d20 range.
+export function resolveFlightAttack(flight,chanceToHit,roll){
+ if(!Number.isSafeInteger(chanceToHit))throw new RangeError('chance to hit');
+ if(!Number.isInteger(roll)||roll<1||roll>20)throw new RangeError('d20');
+ const data=fighterFlightData(flight.flightType);
+ const activeCount=eligibleFighterSlots(flight).length;
+ const margin=chanceToHit-roll;
+ const sixths=margin>=7?6:margin>=5?5:margin>=3?4:margin>=0?3:margin>=-2?2:margin>=-4?1:0;
+ const hits=Math.floor((activeCount*sixths+3)/6);
+ return {chanceToHit,roll,margin,activeCount,fraction:data.flightLevelCombat[sixths].fraction,hits,misses:activeCount-hits,weapon:data.weapon.name,gunHits:hits*data.weapon.guns,linked:data.weapon.linked};
+}
