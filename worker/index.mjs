@@ -1,4 +1,4 @@
-import {validateFleet,fleetTotals} from '../shared/fleet-setup.mjs';
+import {validateFleet,fleetTotals,fighterPurchase,fleetEntryPoints} from '../shared/fleet-setup.mjs';
 import {automatedGame} from './automated-game.mjs';
 import {PLAY_PHASES} from '../shared/automated-battle.mjs';
 import {getBuiltinShip,listBuiltinShips} from '../shared/ship-catalog.mjs';
@@ -136,7 +136,7 @@ export default {async fetch(req,env){try{
    db.prepare('INSERT INTO fleet_setup_guards(game_id,expected_revision) VALUES(?,?)').bind(gameId,game.revision),
    db.prepare("UPDATE games SET revision=revision+1,deployment_mode=? WHERE id=? AND revision=? AND status='setup'").bind(b.deploymentMode,gameId,game.revision),
    db.prepare('DELETE FROM ships WHERE game_id=? AND EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(gameId,gameId,nextRevision),
-   ...fleet.map((x,i)=>{const trial={...newVorchanTrialState(ids[i],x.ownerId,x.q,x.r,x.facing),libraryId:x.catalogId,shipDataRevision:getBuiltinShip(x.catalogId).dataRevision};return db.prepare('INSERT INTO ships(id,game_id,owner_id,label,q,r,facing,speed,public_state_json,private_state_json) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(ids[i],gameId,x.ownerId,getBuiltinShip(x.catalogId).name+' '+(i+1),x.q,x.r,x.facing,x.speed,JSON.stringify({libraryId:x.catalogId,trial:true,combatPoints:getBuiltinShip(x.catalogId).combatPoints}),JSON.stringify({trial}),gameId,nextRevision);}),
+   ...fleet.map((x,i)=>{const trial={...newVorchanTrialState(ids[i],x.ownerId,x.q,x.r,x.facing),libraryId:x.catalogId,shipDataRevision:getBuiltinShip(x.catalogId).dataRevision,fighterFlights:x.fighterFlights,fighterComplement:fighterPurchase(getBuiltinShip(x.catalogId),x.fighterFlights).flights};return db.prepare('INSERT INTO ships(id,game_id,owner_id,label,q,r,facing,speed,public_state_json,private_state_json) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(ids[i],gameId,x.ownerId,getBuiltinShip(x.catalogId).name+' '+(i+1),x.q,x.r,x.facing,x.speed,JSON.stringify({libraryId:x.catalogId,trial:true,combatPoints:fleetEntryPoints(x),fighterFlights:x.fighterFlights}),JSON.stringify({trial}),gameId,nextRevision);}),
    db.prepare('INSERT INTO events(id,game_id,turn,phase_id,actor_id,event_type,public_json) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM games WHERE id=? AND revision=?)').bind(uuid(),gameId,1,'power',user.id,'fleets_saved',JSON.stringify({deploymentMode:b.deploymentMode,fleets:fleetTotals(fleet,members)}),gameId,nextRevision),
    db.prepare('DELETE FROM fleet_setup_guards WHERE game_id=?').bind(gameId)
   ]);}catch(e){if(/revision conflict|unique/i.test(String(e)))return fail('Battle changed; reload',409);throw e;}
