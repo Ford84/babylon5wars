@@ -28,3 +28,27 @@ test('Sentri flight has six separately tracked fighters',()=>{
  assert.equal(SENTRI_FLIGHT_DATA.armour.aft,2);
  assert.throws(()=>newSentriFlight(7));
 });
+
+test('Sentri statistics match the official Version 3 2E/SF fighter sheet',()=>{
+ const s=SENTRI_FLIGHT_DATA;
+ assert.equal(s.name,'Sentri Medium Fighter');
+ assert.equal(s.faction,'Centauri');
+ assert.equal(s.class,'medium fighter');
+ assert.equal(s.serviceYear,2202);
+ assert.equal(s.combatPoints,42);
+ assert.equal(s.fullFlightCombatPoints,s.combatPoints*s.fighterCount);
+ assert.equal(s.fullFlightCombatPoints,252);
+ assert.equal(s.fighterCount,6);
+ assert.equal(s.flightsPerPrintedSheet,8);
+ assert.equal(s.rammingFactor,21);
+ assert.equal(s.structureBoxes,10);
+ assert.equal(s.jinkingLimit,8);
+ assert.equal(s.freeThrust,12);
+ assert.equal(s.initiativeBonus,18);
+ assert.equal(s.offensiveBonus,7);
+ assert.deepEqual(s.defence,{forward:7,aft:7,port:5,starboard:5});
+ assert.deepEqual(s.armour,{forward:3,port:3,starboard:3,aft:2});
+ assert.deepEqual([s.turnCostDivisor,s.turnDelay,s.accelerationCost,s.decelerationCost,s.pivotCost,s.rollCost],[3,0,1,1,1,1]);
+ assert.deepEqual(s.weapon,{name:'Light Particle Gun',guns:2,linked:true,damage:'1d6+2',rangePenaltyPerHex:-2,fireControl:null,rateOfFire:'once per turn',firingArc:'standard-fighter-forward'});
+ assert.deepEqual(s.flightLevelCombat.map(x=>x.fraction),['0','1/6','1/3','1/2','2/3','5/6','all']);
+});
