@@ -121,3 +121,19 @@ export function resolveFlightAttack(flight,chanceToHit,roll){
  const hits=Math.floor((activeCount*sixths+3)/6);
  return {chanceToHit,roll,margin,activeCount,fraction:data.flightLevelCombat[sixths].fraction,hits,misses:activeCount-hits,weapon:data.weapon.name,gunHits:hits*data.weapon.guns,linked:data.weapon.linked};
 }
+
+ // Compendium: Jinking, Fighter and Shuttle EW, Applying EW Modifiers.
+ export function fighterEWModifiers({attacker,target,range,ballistic=false,shipOffensiveEW=0,shipDefensiveEW=0,loanedOffensiveEW=0,loanedDefensiveEW=0,closeCombatEW=0}){
+  if(!Number.isInteger(range)||range<0)throw new RangeError('invalid range');
+  const af=attacker.kind==='fighter-flight',tf=target.kind==='fighter-flight';
+  if(!af&&!tf)throw new RangeError('fighter engagement required');
+  const jink=u=>{const j=u.jinking??0;if(!Number.isInteger(j)||j<0||j>fighterFlightData(u.flightType).jinkingLimit)throw new RangeError('invalid jinking');return j;};
+  for(const n of [shipOffensiveEW,shipDefensiveEW,loanedOffensiveEW,loanedDefensiveEW,closeCombatEW])if(!Number.isInteger(n)||n<0)throw new RangeError('invalid EW');
+  const attackerJinking=af?jink(attacker):0,targetJinking=tf?jink(target):0;
+  const modifiers={offensive:af?fighterFlightData(attacker.flightType).offensiveBonus:shipOffensiveEW,
+   ownJinking:-attackerJinking,targetJinking:tf&&!(af&&range===0&&attackerJinking===0)?-targetJinking:0,
+   defensive:tf||af&&!ballistic?0:-shipDefensiveEW,
+   elintOffensive:loanedOffensiveEW,elintDefensive:af&&!ballistic&&!tf?0:-loanedDefensiveEW,
+   closeCombat:!af&&tf&&range<=10?closeCombatEW:0};
+  return {...modifiers,total:Object.values(modifiers).reduce((a,b)=>a+b,0)};
+ }
