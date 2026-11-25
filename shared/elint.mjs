@@ -41,8 +41,9 @@ export function disruptionQueue(units,die){
   const best=Math.max(...candidates.map(u=>alloc(u).elint.disruption[target.id])),tied=candidates.filter(u=>alloc(u).elint.disruption[target.id]===best);
   const roll=tied.length>1?die(tied.length):1,scout=tied[roll-1];if(!scout)fail('Invalid ELINT tie-break roll');
   if(tied.length>1)journal.push({targetId:target.id,scoutIds:tied.map(x=>x.id),roll,chosenScoutId:scout.id});
-  const capacity=Math.min(Math.floor(best/3),sum(alloc(target).offensive));
-  if(capacity)queue.push({scoutId:scout.id,targetId:target.id,actorId:scout.owner_id,capacity,choices:{...alloc(target).offensive},removed:null});
+  const choices={...alloc(target).offensive};if(alloc(target).closeCombatReserve>0)choices['@ccew']=alloc(target).closeCombatReserve;
+  const capacity=Math.min(Math.floor(best/3),sum(choices));
+  if(capacity)queue.push({scoutId:scout.id,targetId:target.id,actorId:scout.owner_id,capacity,choices,removed:null});
  }
  return {queue,journal};
 }
@@ -78,3 +79,5 @@ export function fixedEWForUnits(lock,units){
  for(const m of [n.offensive,n.elint?.defensive,n.elint?.disruption])for(const [id,points] of Object.entries(m||{}))if(!ids.has(id)){n.defensive+=points;delete m[id];}
  return n;
 }
+
+export function effectiveCCEWReserve(unit,disruptions=[]){return Math.max(0,(alloc(unit).closeCombatReserve||0)-disruptions.filter(r=>r.targetId===unit.id).reduce((n,r)=>n+(r.removed?.['@ccew']||0),0));}
