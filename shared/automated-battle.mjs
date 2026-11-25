@@ -127,6 +127,12 @@ function initiativeOrder(s,die){
 }
 function attackShips(s){return s.ships.map(x=>({...x,private_state:{trial:projectTrial(trial(x),s.turn)},sameHexPrevious:s.approaches[x.id]||{}})).concat(s.operations?activeShuttles(s).map(x=>shuttleCombatUnit(x)):[]);}
 function endTurn(s,die){
+ if(s.operations&&s.fighterOrders&&s.fighterResolvedTurn!==s.turn){
+  const flights=activeFighterFlights(s),geometry=(a,b)=>{const g=fighterTargeting(a,b);return {...g,allowed:g.ready};};
+  const orders=Object.values(s.fighterOrders).flat().filter(o=>flights.some(f=>f.id===o.attackerId)&&flights.some(f=>f.id===o.targetId));
+  s.fighterResolvedTurn=s.turn;
+  if(orders.length){s.fighterExchange=prepareFighterExchange(flights,orders,geometry,die);record(s,'fighter_attacks_revealed',{attacks:s.fighterExchange.attacks});if(fighterExchangePrompt(s.fighterExchange)){next(s,'fighter_damage');return;}finishFighterCombat(s,die);return;}
+ }
  if(s.combatFlow!=='automatic'&&beginCriticals(s))return;
  for(const ship of s.ships){const resolved=finishShipTurn(trial(ship),s.turn,die);ship.private_state.trial=resolved.trial;record(s,'critical_checks',{shipId:ship.id,results:resolved.results});}
  postTurn(s);
@@ -203,14 +209,14 @@ function resolveTier(s,die){
  record(s,'damage_resolved',{outcomes:adjudication.outcomes,attacks:fire.results});endTurn(s,die);
 }
 function beginFighterOrders(s){
- const flights=activeFighterFlights(s);
+ const flights=activeFighterFlights(s);s.fighterOrders={};s.fighterExchange=null;
  if(new Set(flights.map(f=>f.owner_id)).size<2){next(s,'fire_commit');return;}
  s.fighterOrders={};s.fighterExchange=null;next(s,'fighter_orders');
 }
 function finishFighterCombat(s,die){
  const result=finishFighterExchange(s.fighterExchange,die);
  for(const f of result.flights){const existing=s.fighterFlights.find(x=>x.id===f.id);Object.assign(existing,f);}
- record(s,'fighter_exchange_resolved',{checks:result.checks,damage:result.damageLog});s.fighterExchange=null;next(s,'fire_commit');
+ record(s,'fighter_exchange_resolved',{checks:result.checks,damage:result.damageLog});s.fighterExchange=null;endTurn(s,die);
 }
 function settleAutomaticActions(s,die){
  // Iterate only through phases whose remaining work has no player decision.
@@ -275,11 +281,7 @@ function executeCommand(state,playerId,command,die=rollDie){
   if(command.type!=='fighter-orders')fail('Commit fighter orders');
   const flights=activeFighterFlights(s),geometry=(a,b)=>{const g=fighterTargeting(a,b);return {...g,allowed:g.ready};};
   s.fighterOrders=commitFighterOrders(flights,s.fighterOrders,playerId,command.orders,geometry);
-  if(fighterOrdersReady(flights,s.fighterOrders)){
-   s.fighterExchange=prepareFighterExchange(flights,Object.values(s.fighterOrders).flat(),geometry,die);
-   record(s,'fighter_attacks_revealed',{attacks:s.fighterExchange.attacks});
-   if(fighterExchangePrompt(s.fighterExchange))next(s,'fighter_damage');else finishFighterCombat(s,die);
-  }
+  if(fighterOrdersReady(flights,s.fighterOrders))next(s,'fire_commit');
   settleAutomaticActions(s,die);return s;
  }
  if(s.phase==='fighter_damage'){
