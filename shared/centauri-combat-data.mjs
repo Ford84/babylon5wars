@@ -33,17 +33,6 @@ export const SENTRI_FLIGHT_DATA={
  weapon:{name:'Light Particle Gun',guns:2,linked:true,damage:'1d6+2',rangePenaltyPerHex:-2,fireControl:null,rateOfFire:'once per turn',firingArc:'standard-fighter-forward'},
  flightLevelCombat:[{relative:'5 or more above',fraction:'0'},{relative:'3–4 above',fraction:'1/6'},{relative:'1–2 above',fraction:'1/3'},{relative:'0–2 below',fraction:'1/2'},{relative:'3–4 below',fraction:'2/3'},{relative:'5–6 below',fraction:'5/6'},{relative:'7 or more below',fraction:'all'}]
 };
-export function newSentriFlight(count=6){
- if(!Number.isInteger(count)||count<1||count>6)throw new RangeError('flight size 1–6');
- return {schemaVersion:1,flightType:SENTRI_FLIGHT_DATA.id,speed:0,initiative:null,thrustUsed:0,jinking:0,fighters:Array.from({length:count},(_,i)=>({slot:i+1,damage:0,droppedOut:false,destroyed:false}))};
-}
-export function damageSentriFighter(flight,slot,damage){
- if(!Number.isInteger(damage)||damage<0)throw new RangeError('damage');
- const fighter=flight.fighters.find(f=>f.slot===slot);
- if(!fighter||fighter.destroyed||fighter.droppedOut)throw new RangeError('ineligible fighter');
- return {...flight,fighters:flight.fighters.map(f=>f.slot===slot?{...f,damage:f.damage+damage}:f)};
-}
-
 // Source: centauri razik light fighter.pdf, Ships of the Fleet, Version 2: 2E/SF.
 export const RAZIK_FLIGHT_DATA={
  id:'centauri-razik-v2-2e-sf',name:'Razik Light Fighter',faction:'Centauri',class:'light fighter',serviceYear:2105,
@@ -55,3 +44,67 @@ export const RAZIK_FLIGHT_DATA={
  weapon:{name:'Ultralight Particle Beam',guns:2,linked:true,damage:'1d6+1',rangePenaltyPerHex:-2,fireControl:null,rateOfFire:'once per turn',firingArc:'standard-fighter-forward'},
  flightLevelCombat:[{relative:'5 or more above',fraction:'0'},{relative:'3–4 above',fraction:'1/6'},{relative:'1–2 above',fraction:'1/3'},{relative:'0–2 below',fraction:'1/2'},{relative:'3–4 below',fraction:'2/3'},{relative:'5–6 below',fraction:'5/6'},{relative:'7 or more below',fraction:'all'}]
 };
+
+// Fighter Flight Level Combat: Damage Tracks & Armour / Damage Allocation to Flights.
+export function fighterFlightData(flightType){
+ const data=[SENTRI_FLIGHT_DATA,RAZIK_FLIGHT_DATA].find(x=>x.id===flightType);
+ if(!data)throw new RangeError('unknown fighter type');
+ return data;
+}
+export function newFighterFlight(flightType,count=6){
+ const data=fighterFlightData(flightType);
+ if(!Number.isInteger(count)||count<1||count>data.fighterCount)throw new RangeError('flight size 1–6');
+ return {schemaVersion:1,flightType:data.id,speed:0,initiative:null,thrustUsed:0,jinking:0,fighters:Array.from({length:count},(_,i)=>({slot:i+1,damage:0,droppedOut:false,destroyed:false}))};
+}
+export function newSentriFlight(count=6){return newFighterFlight(SENTRI_FLIGHT_DATA.id,count);}
+export function newRazikFlight(count=6){return newFighterFlight(RAZIK_FLIGHT_DATA.id,count);}
+function active(fighter,data){return !fighter.destroyed&&!fighter.droppedOut&&fighter.damage<data.structureBoxes;}
+export function eligibleFighterSlots(flight){
+ const data=fighterFlightData(flight.flightType);
+ return flight.fighters.filter(f=>active(f,data)).map(f=>f.slot);
+}
+export function fighterFlightStatus(flight){
+ const data=fighterFlightData(flight.flightType);
+ const destroyed=flight.fighters.filter(f=>f.destroyed||f.damage>=data.structureBoxes).length;
+ const droppedOut=flight.fighters.filter(f=>f.droppedOut&&!f.destroyed&&f.damage<data.structureBoxes).length;
+ const activeSlots=eligibleFighterSlots(flight);
+ return {activeSlots,activeCount:activeSlots.length,destroyedCount:destroyed,droppedOutCount:droppedOut,eliminated:destroyed===flight.fighters.length,inactive:activeSlots.length===0};
+}
+function checkDamage(damage){if(!Number.isSafeInteger(damage)||damage<0)throw new RangeError('damage');}
+function selectedFighter(flight,slot){
+ const data=fighterFlightData(flight.flightType);
+ const fighter=flight.fighters.find(f=>f.slot===slot);
+ if(!fighter||!active(fighter,data))throw new RangeError('ineligible fighter');
+ return {data,fighter};
+}
+// Internal damage already reduced by armour. Preserve the existing Sentri API.
+export function damageFighter(flight,slot,damage){
+ checkDamage(damage);
+ const {data,fighter}=selectedFighter(flight,slot);
+ const total=fighter.damage+Math.min(damage,data.structureBoxes-fighter.damage);
+ return {...flight,fighters:flight.fighters.map(f=>f.slot===slot?{...f,damage:total,destroyed:total===data.structureBoxes}:f)};
+}
+export function damageSentriFighter(flight,slot,damage){
+ if(flight.flightType!==SENTRI_FLIGHT_DATA.id)throw new RangeError('not a Sentri flight');
+ return damageFighter(flight,slot,damage);
+}
+// One selection per standard volley, or per explicitly linked group. Direction is
+// supplied by the combat geometry layer; each linked shot penetrates armour separately.
+export function resolveFighterVolleys(flight,{slot,direction,volleys,linked=false}){
+ const {data}=selectedFighter(flight,slot);
+ if(!Object.hasOwn(data.armour,direction))throw new RangeError('invalid incoming direction');
+ if(!Array.isArray(volleys)||volleys.length===0||(!linked&&volleys.length!==1))throw new RangeError('one volley or a linked group required');
+ for(const damage of volleys)checkDamage(damage);
+ let next=flight;
+ const results=[];
+ for(const rawDamage of volleys){
+  const fighter=next.fighters.find(f=>f.slot===slot);
+  if(fighter.destroyed){results.push({slot,rawDamage,armourApplied:0,structureDamage:0,overkill:0,wasted:true,destroyed:true});continue;}
+  const armourApplied=Math.min(rawDamage,data.armour[direction]);
+  const penetrating=rawDamage-armourApplied;
+  const structureDamage=Math.min(penetrating,data.structureBoxes-fighter.damage);
+  next=damageFighter(next,slot,structureDamage);
+  results.push({slot,rawDamage,armourApplied,structureDamage,overkill:penetrating-structureDamage,wasted:false,destroyed:next.fighters.find(f=>f.slot===slot).destroyed});
+ }
+ return {flight:next,results,status:fighterFlightStatus(next)};
+}
