@@ -1,3 +1,4 @@
+import {fighterTargeting} from '../shared/fighter-targeting.mjs';
 import {guardianCanProtect,guardianPowerMode} from '../shared/guardian-array.mjs';
 import {EWActions,ElintDisruption} from './ElintActions.jsx';
 import {elintAttackEffects} from '../shared/elint.mjs';
@@ -20,6 +21,8 @@ function Amount({label,value,max,onChange}){return <label>{label}<select value={
 export default function BattleActions(props){
  const {detail,userId,send}=props,[chosen,setChosen]=useState('');
  if(detail.carrierEscape)return <CarrierEscape key={detail.carrierEscape.carrierId} options={detail.carrierEscape} userId={userId} send={send} busy={props.busy}/>;
+ if(detail.game.phase_id==='fighter_orders')return <FighterOrders key={detail.game.turn} {...props}/>;
+ if(detail.game.phase_id==='fighter_damage')return <FighterDamage {...props}/>;
  const own=detail.ships.filter(x=>x.owner_id===userId&&!x.withdrawn&&!x.public_state.condition.shipDestroyed),movement=detail.game.phase_id==='movement',selected=movement?own.find(x=>x.id===detail.movingUnitId):own.find(x=>x.id===chosen&&!detail.unitPhaseLocks?.[x.id])||own.find(x=>!detail.unitPhaseLocks?.[x.id])||own[0];
  return <>{!movement&&own.length>1&&detail.needsAction&&!detail.resolution&&!detail.criticalResolution&&!['initiative','ew_disruption'].includes(detail.game.phase_id)&&<label>Acting Ship<select value={selected?.id} onChange={e=>setChosen(e.target.value)}>{own.filter(x=>!detail.unitPhaseLocks?.[x.id]).map(x=><option key={x.id} value={x.id}>{x.label}</option>)}</select></label>}<UnitBattleActions key={selected?.id+':'+detail.game.phase_id} {...props} activeShipId={selected?.id} send={c=>send({...c,shipId:selected?.id})}/></>;
 }
@@ -129,3 +132,14 @@ function Defence({ship,detail,send,busy}){
 }
 
 function CarrierEscape({options:o,userId,send,busy}){const [selected,setSelected]=useState([]);return <section className="panel battle-actions"><h2>Carrier Escape</h2><p>D20: {o.roll} · {o.count} Of {o.craft.length} Craft May Escape</p>{o.actorId!==userId?<p>Waiting For The Carrier Owner To Select Survivors.</p>:<><p>Select exactly {o.count} surviving craft.</p>{o.craft.map(x=><label className="check-row" key={x.id}><input type="checkbox" checked={selected.includes(x.id)} disabled={busy||(!selected.includes(x.id)&&selected.length>=o.count)} onChange={e=>setSelected(old=>e.target.checked?[...old,x.id]:old.filter(id=>id!==x.id))}/>{x.label||x.id}</label>)}<button disabled={busy||selected.length!==o.count} onClick={()=>send({type:'carrier-escape',selected})}>Confirm Survivors ({selected.length}/{o.count})</button></>}</section>;}
+
+function FighterOrders({detail,userId,send,busy}){
+ const [targets,setTargets]=useState({});
+ const flights=(detail.fighterFlights||[]).filter(f=>f.status==='deployed'&&f.escapedTurn!==detail.game.turn&&f.fighters.some(x=>!x.destroyed&&!x.droppedOut));
+ const own=flights.filter(f=>f.owner_id===userId),enemy=flights.filter(f=>f.owner_id!==userId);
+ return <section className="panel battle-actions"><h2>Fighter Weapon Orders</h2>{!detail.needsAction?<p>Waiting For Opponent</p>:<>{own.map(f=><label key={f.id}>{f.label}<select value={targets[f.id]||''} onChange={e=>setTargets(old=>({...old,[f.id]:e.target.value}))}><option value="">Hold Fire</option>{enemy.map(t=>{const g=fighterTargeting(f,t);return g.ready?<option key={t.id} value={t.id}>{t.label} · {g.range} Hexes · Hit On {g.chanceToHit}</option>:null;})}</select></label>)}<button disabled={busy} onClick={()=>send({type:'fighter-orders',orders:own.filter(f=>targets[f.id]).map(f=>({attackerId:f.id,targetId:targets[f.id]}))})}>Lock Fighter Orders</button></>}</section>;
+}
+function FighterDamage({detail,userId,send,busy}){
+ const p=detail.fighterDamage,f=(detail.fighterFlights||[]).find(x=>x.id===p?.targetId);
+ return <section className="panel battle-actions"><h2>Fighter Damage</h2>{!p||p.actorId!==userId?<p>Waiting For Defender</p>:<><p>{f?.label||p.targetId} · Linked Weapon Damage: {p.volleys.join(' + ')}</p>{p.slots.map(slot=><button key={slot} disabled={busy} onClick={()=>send({type:'fighter-damage',slot})}>Fighter {slot} · {f?.fighters.find(x=>x.slot===slot)?.damage||0} Damage</button>)}</>}</section>;
+}
