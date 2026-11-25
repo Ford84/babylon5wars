@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {newSentriFlight,newRazikFlight} from '../shared/centauri-combat-data.mjs';
+import {prepareFighterExchange,normaliseFighterExchange,advanceFighterExchange,fighterExchangePrompt} from '../shared/fighter-combat.mjs';
+const a={...newSentriFlight(),id:'a',owner_id:'p1',kind:'fighter-flight',status:'deployed'};
+const b={...newRazikFlight(),id:'b',owner_id:'p2',kind:'fighter-flight',status:'deployed'};
+const geometry=()=>({allowed:true,range:0,direction:'forward'});
+const orders=[{attackerId:'a',targetId:'b'},{attackerId:'b',targetId:'a'}];
+test('both flights roll before any casualties',()=>{let s=normaliseFighterExchange(prepareFighterExchange([a,b],orders,geometry,n=>n===20?1:6));assert.equal(s.attacks.length,2);assert.equal(s.attacks[0].result.hits,6);assert.equal(s.attacks[1].result.hits,6);assert.throws(()=>advanceFighterExchange(s,'p1',1));while(fighterExchangePrompt(s)){const p=fighterExchangePrompt(s);s=advanceFighterExchange(s,p.actorId,p.slots[0]);}assert.equal(s.attacks[1].result.hits,6);assert.ok(s.damageLog.length>0);assert.equal(a.fighters[0].damage,0);});
+test('reject duplicate orders and invalid arc',()=>{assert.throws(()=>prepareFighterExchange([a,b],[orders[0],orders[0]],geometry,()=>1));assert.throws(()=>prepareFighterExchange([a,b],orders,()=>({...geometry(),allowed:false}),()=>1));});
