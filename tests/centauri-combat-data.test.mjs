@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {CENTAURI_HIT_CHARTS,validateHitChart,hitLocation,SENTRI_FLIGHT_DATA,RAZIK_FLIGHT_DATA,newSentriFlight,damageSentriFighter} from '../shared/centauri-combat-data.mjs';
+import {CENTAURI_HIT_CHARTS,validateHitChart,hitLocation,SENTRI_FLIGHT_DATA,RAZIK_FLIGHT_DATA,newSentriFlight,damageSentriFighter,newRazikFlight,newFighterFlight,damageFighter,eligibleFighterSlots,fighterFlightStatus,resolveFighterVolleys} from '../shared/centauri-combat-data.mjs';
 test('all transcribed d20 charts cover each face exactly once',()=>{
  for(const charts of Object.values(CENTAURI_HIT_CHARTS))for(const chart of Object.values(charts)){
   assert.equal(validateHitChart(chart),true);
@@ -65,4 +65,74 @@ test('Razik statistics match the official Version 2 2E/SF fighter sheet',()=>{
  assert.deepEqual(r.weapon,{name:'Ultralight Particle Beam',guns:2,linked:true,damage:'1d6+1',rangePenaltyPerHex:-2,fireControl:null,rateOfFire:'once per turn',firingArc:'standard-fighter-forward'});
  assert.deepEqual(r.flightLevelCombat,[{relative:'5 or more above',fraction:'0'},{relative:'3–4 above',fraction:'1/6'},{relative:'1–2 above',fraction:'1/3'},{relative:'0–2 below',fraction:'1/2'},{relative:'3–4 below',fraction:'2/3'},{relative:'5–6 below',fraction:'5/6'},{relative:'7 or more below',fraction:'all'}]);
  assert.notEqual(r.flightLevelCombat,SENTRI_FLIGHT_DATA.flightLevelCombat);
+});
+
+test('both types use independent immutable damage tracks and correct armour in every direction',()=>{
+ for(const [data,make] of [[SENTRI_FLIGHT_DATA,newSentriFlight],[RAZIK_FLIGHT_DATA,newRazikFlight]]){
+  for(const direction of ['forward','port','starboard','aft']){
+   const f=make();
+   const result=resolveFighterVolleys(f,{slot:4,direction,volleys:[5]});
+   assert.equal(result.flight.fighters[3].damage,5-data.armour[direction]);
+   assert.equal(result.results[0].armourApplied,data.armour[direction]);
+   assert.equal(f.fighters[3].damage,0);
+   assert.equal(result.flight.fighters[0].damage,0);
+   assert.equal(result.status.activeCount,6);
+  }
+ }
+});
+test('armour fully absorbs weaker shots and zero damage',()=>{
+ const f=newSentriFlight();
+ for(const raw of [0,2,3]){
+  const r=resolveFighterVolleys(f,{slot:1,direction:'forward',volleys:[raw]});
+  assert.equal(r.results[0].structureDamage,0);
+  assert.equal(r.flight.fighters[0].damage,0);
+ }
+});
+test('last box destroys fighter immediately; excess is discarded; legacy API is capped',()=>{
+ for(const [data,make] of [[SENTRI_FLIGHT_DATA,newSentriFlight],[RAZIK_FLIGHT_DATA,newRazikFlight]]){
+  const f=damageFighter(make(),2,data.structureBoxes-1);
+  const r=resolveFighterVolleys(f,{slot:2,direction:'aft',volleys:[20]});
+  assert.equal(r.flight.fighters[1].damage,data.structureBoxes);
+  assert.equal(r.flight.fighters[1].destroyed,true);
+  assert.equal(r.results[0].overkill,19-data.armour.aft);
+  assert.equal(r.status.activeCount,5);
+  assert.equal(r.flight.fighters[2].damage,0);
+  assert.throws(()=>resolveFighterVolleys(r.flight,{slot:2,direction:'aft',volleys:[1]}));
+ }
+ assert.equal(damageSentriFighter(newSentriFlight(),1,99).fighters[0].damage,10);
+});
+test('linked hits apply armour separately and waste remaining shots after destruction',()=>{
+ const f=newSentriFlight();
+ const r=resolveFighterVolleys(f,{slot:1,direction:'forward',volleys:[5,5],linked:true});
+ assert.equal(r.flight.fighters[0].damage,4);
+ const s=resolveFighterVolleys(damageFighter(f,1,9),{slot:1,direction:'forward',volleys:[5,8],linked:true});
+ assert.equal(s.results[0].structureDamage,1);
+ assert.equal(s.results[1].wasted,true);
+ assert.equal(s.results[1].structureDamage,0);
+ assert.equal(s.flight.fighters[1].damage,0);
+ assert.throws(()=>resolveFighterVolleys(f,{slot:1,direction:'forward',volleys:[5,5]}));
+});
+test('defender may allocate separate volleys to distinct eligible slots; whole flight elimination',()=>{
+ let f=newRazikFlight(2);
+ f=resolveFighterVolleys(f,{slot:2,direction:'aft',volleys:[9]}).flight;
+ assert.deepEqual(eligibleFighterSlots(f),[1]);
+ f=resolveFighterVolleys(f,{slot:1,direction:'aft',volleys:[9]}).flight;
+ assert.deepEqual(fighterFlightStatus(f),{activeSlots:[],activeCount:0,destroyedCount:2,droppedOutCount:0,eliminated:true,inactive:true});
+});
+test('drop-out flags exclude inactive fighters without counting them as destroyed',()=>{
+ const f=newRazikFlight(2);f.fighters[0].droppedOut=true;
+ const r=damageFighter(f,2,8);
+ assert.deepEqual(fighterFlightStatus(r),{activeSlots:[],activeCount:0,destroyedCount:1,droppedOutCount:1,eliminated:false,inactive:true});
+ assert.throws(()=>damageFighter(r,1,1));
+});
+test('invalid damage, type, slot, direction and flight size are rejected without changes',()=>{
+ const f=newRazikFlight();
+ for(const damage of [-1,1.5,NaN,Infinity])assert.throws(()=>damageFighter(f,1,damage));
+ assert.throws(()=>newFighterFlight('unknown'));
+ assert.throws(()=>newRazikFlight(0));assert.throws(()=>newRazikFlight(7));
+ assert.throws(()=>damageFighter(f,7,1));
+ assert.throws(()=>damageSentriFighter(f,1,1));
+ for(const direction of ['rear','__proto__','constructor'])assert.throws(()=>resolveFighterVolleys(f,{slot:1,direction,volleys:[1]}));
+ assert.throws(()=>resolveFighterVolleys(f,{slot:1,direction:'aft',volleys:[3,-1],linked:true}));
+ assert.equal(f.fighters[0].damage,0);
 });
