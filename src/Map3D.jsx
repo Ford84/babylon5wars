@@ -45,13 +45,27 @@ fighterGeometry.setAttribute('position',new THREE.Float32BufferAttribute([
  0,.65,-.8, 0,0,2, 1.5,0,1.3
 ],3));fighterGeometry.computeVertexNormals();
 const fighterMaterial=new THREE.MeshStandardMaterial({color:0x8062b0,metalness:.45,roughness:.48,side:THREE.DoubleSide});
+const sentriMaterial=new THREE.MeshStandardMaterial({vertexColors:true,metalness:.45,roughness:.48,side:THREE.DoubleSide});
+function colourSentri(g){
+ g.computeBoundingBox();const b=g.boundingBox,p=g.attributes.position,colors=[];
+ for(let i=0;i<p.count;i++){
+  const x=(p.getX(i)-b.min.x)/(b.max.x-b.min.x),y=Math.abs(p.getY(i)),z=Math.abs(p.getZ(i))/(Math.max(Math.abs(b.min.z),Math.abs(b.max.z))||1);
+  const shade=.83+.17*Math.cos(z*12+x*8)**2;
+  let rgb=[117*shade,83*shade,166*shade];
+  if(Math.abs(Math.sin((x+z*.32)*25))<.10||Math.abs(Math.sin(z*21))<.07)rgb=rgb.map(v=>v*.55);
+  if(z>.88)rgb=[150,137,174];
+  if(z<.10&&y>(b.max.y-b.min.y)*.32&&p.getY(i)>0)rgb=[35,54,76];
+  const col=new THREE.Color().setRGB(...rgb.map(v=>v/255),THREE.SRGBColorSpace);colors.push(col.r,col.g,col.b);
+ }
+ g.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
+}
 function makeFighterFormation(flight,sentriGeometry){
  const group=new THREE.Group();
  const positions=[[-3,-5],[3,-5],[-5,0],[5,0],[-3,5],[3,5]];
  for(const f of flight.fighters||[]){
   if(f.destroyed||f.droppedOut)continue;
   const p=positions[f.slot-1];if(!p)continue;
-  const mesh=new THREE.Mesh(flight.flightType==='centauri-sentri-v3-2e-sf'&&sentriGeometry?sentriGeometry:fighterGeometry,fighterMaterial);
+  const mesh=new THREE.Mesh(flight.flightType==='centauri-sentri-v3-2e-sf'&&sentriGeometry?sentriGeometry:fighterGeometry,flight.flightType==='centauri-sentri-v3-2e-sf'&&sentriGeometry?sentriMaterial:fighterMaterial);
   mesh.position.set(p[0],1,p[1]);group.add(mesh);
  }
  return group;
@@ -82,7 +96,7 @@ export default function Map3D({ships,selected,setSelected,preset='standard',mode
   const redraw=(modelFactory)=>{for(const item of models)scene.remove(item);models.length=0;pick.length=0;ships.forEach((s,i)=>{if(!Number.isInteger(s.q)||!Number.isInteger(s.r)||s.q<0||s.r<0||s.q>=cols||s.r>=rows)return;const p=hexPoint(s.q,s.r),model=s.kind==='jump-point'?makeJumpToken(s):s.kind==='fighter-flight'?makeFighterFormation(s,sentriGeometry):s.kind==='shuttle'?shuttleFactory():hullProfile(s.public_state?.libraryId)?.mapToken==='primus'?makePrimusToken():(hullFactories.get(s.public_state?.libraryId)?.()||modelFactory());model.position.set(p.x,1,p.z);model.rotation.y=facingYawRadians(s.facing||0);scene.add(model);models.push(model);model.traverse(o=>{if(o.isMesh){o.userData.shipId=s.id??i;pick.push(o);}});const ring=new THREE.Mesh(new THREE.RingGeometry(8,9,32),new THREE.MeshBasicMaterial({color:selected===(s.id??i)?0x8bdcff:0x446c9c,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.set(p.x,.1,p.z);scene.add(ring);models.push(ring);});updateCamera();};
   let factory=()=>makeVorchan(),alive=true;redraw(factory);
   for(const id of new Set(ships.map(x=>x.public_state?.libraryId))){const hull=hullProfile(id);if(hull?.modelUrl)loadColouredShip(hull.modelUrl).then(source=>{if(alive){hullFactories.set(id,()=>source.clone(true));setModelStatus('Ship Models Loaded');redraw(factory);}}).catch(()=>{if(alive)setModelStatus(hull.name+' Model Unavailable');});}
-  cachedPublicGeometry('/models/fighters/centauri-sentri-rc3.stl').then(source=>{if(!alive)return;const g=source.clone();g.center();g.rotateX(-Math.PI/2);g.rotateY(Math.PI/2);g.computeBoundingBox();const size=g.boundingBox.getSize(new THREE.Vector3());g.scale(4.8/Math.max(size.x,size.z),4.8/Math.max(size.x,size.z),4.8/Math.max(size.x,size.z));g.computeVertexNormals();sentriGeometry=g;redraw(factory);}).catch(()=>{});
+  cachedPublicGeometry('/models/fighters/centauri-sentri-rc3.stl').then(source=>{if(!alive)return;const g=source.clone();g.center();g.rotateX(-Math.PI/2);g.rotateY(Math.PI/2);g.computeBoundingBox();const size=g.boundingBox.getSize(new THREE.Vector3());g.scale(4.8/Math.max(size.x,size.z),4.8/Math.max(size.x,size.z),4.8/Math.max(size.x,size.z));g.computeVertexNormals();colourSentri(g);sentriGeometry=g;redraw(factory);}).catch(()=>{});
   loadLarisi().then(source=>{if(alive){shuttleFactory=()=>source.clone(true);redraw(factory);}}).catch(()=>{if(alive)setModelStatus('Shuttle Model Unavailable · Using Map Token');});
   const useGeometry=(geometry,label)=>{geometry.computeVertexNormals();geometry.computeBoundingBox();const size=geometry.boundingBox.getSize(new THREE.Vector3());const centre=geometry.boundingBox.getCenter(new THREE.Vector3());geometry.translate(-centre.x,-centre.y,-centre.z);applyVorchanColourScheme(geometry);const scale=14/Math.max(size.x,size.y,size.z,1);const material=getVorchanMaterial({detailed:true});factory=()=>{const group=new THREE.Group();const mesh=new THREE.Mesh(geometry,material);mesh.scale.setScalar(scale);mesh.rotation.set(-Math.PI/2,0,Math.PI);group.add(mesh);return group;};setModelStatus(hullFactories.size?'Ship Models Loaded':label);redraw(factory);};
   if(localModel){try{useGeometry(new STLLoader().parse(localModel),'Tyrel Lohr STL · this browser');}catch(e){setModelStatus('Unable to read STL: '+e.message);}}
