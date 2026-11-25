@@ -252,6 +252,15 @@ function executeCommand(state,playerId,command,die=rollDie){
  if(!requiredActors(s).includes(playerId))fail('Wait for your required action');
  if(s.carrierEscape){if(command.type!=='carrier-escape')fail('Resolve carrier escape first');const o=s.carrierEscape;applyCarrierEscape(s,o,playerId,command.selected);s.ships.find(x=>x.id===o.carrierId).escapeResolved=true;s.carrierEscape=null;record(s,'carrier_escape_resolved',{shipId:o.carrierId,selected:command.selected});checkVictory(s);if(!s.carrierEscape)settleAutomaticActions(s,die);return s;}
  const available=s.ships.filter(x=>x.owner_id===playerId&&(s.phase==='critical_resolution'||live(x,s.turn)));
+ if(command.type==='initiative'&&s.phase==='initiative'){
+  const unit=s.operations&&command.unitId? [...available,...activeSmallCraft(s)].find(x=>x.id===command.unitId&&x.owner_id===playerId):available.find(x=>trial(x).initiative?.turn!==s.turn)||activeSmallCraft(s).find(x=>x.owner_id===playerId&&x.initiative?.turn!==s.turn);
+  if(!unit)fail('Choose your unit');const shuttle=unit.kind==='shuttle'||unit.kind==='fighter-flight',old=shuttle?unit.initiative:trial(unit).initiative;if(old?.turn===s.turn)fail('This unit has already rolled initiative');
+  const result=unitInitiative({roll:die(20),printedBonus:unit.kind==='fighter-flight'?fighterFlightData(unit.flightType).initiativeBonus:shuttle?9:hullProfile(trial(unit).libraryId).initiativeBonus,speed:unit.speed,launchedOrLanded:!shuttle&&trial(unit).hangarActionTurn===s.turn-1,newlyLaunched:shuttle&&unit.launchedTurn===s.turn-1,otherModifiers:shuttle?0:effectiveCondition(trial(unit),s.turn).initiativeModifier});
+  if(shuttle)unit.initiative={...result,turn:s.turn};else trial(unit).initiative={...result,turn:s.turn};record(s,'initiative_rolled',{shipId:unit.id,...result});
+  if(!s.operations||[...available,...activeSmallCraft(s).filter(x=>x.owner_id===playerId)].every(x=>(['shuttle','fighter-flight'].includes(x.kind)?x.initiative:trial(x).initiative)?.turn===s.turn))s.locks[playerId]=true;
+  if(members(s).every(p=>s.locks[p])){initiativeOrder(s,die);next(s,'ew_commit');}
+   settleAutomaticActions(s,die);return s;
+ }
  const ship=s.operations&&s.phase==='movement'&&!['shuttle','fighter-flight'].includes(currentMover(s)?.kind)?currentMover(s):command.shipId?available.find(x=>x.id===command.shipId):available.find(x=>!s.unitPhaseLocks?.[x.id])||available[0];
  if(command.shipId&&(!ship||ship.owner_id!==playerId))fail('Choose your own active ship');
  if(!ship)fail('No surviving ship');
@@ -279,13 +288,6 @@ function executeCommand(state,playerId,command,die=rollDie){
   t.powerAllocation={turn:s.turn,purchasedThrust,extraEW,deactivated:inactive,reactorShutdown,unusedPower:available-spent,availablePower:available,thrustPower:purchasedThrust*2,ewPower:extraEWCost(hull.sensorStrength,extraEW)};
   t=projectTrial(t,s.turn);ship.private_state.trial=t;record(s,'power_committed',{shipId:ship.id,allocation:t.powerAllocation});lock();
   if(!checkVictory(s)&&members(s).every(p=>s.locks[p]))next(s,'initiative');
- }else if(command.type==='initiative'&&s.phase==='initiative'){
-  const unit=s.operations&&command.unitId? [...s.ships,...activeSmallCraft(s)].find(x=>x.id===command.unitId&&x.owner_id===playerId):available.find(x=>trial(x).initiative?.turn!==s.turn)||ship;
-  if(!unit)fail('Choose your unit');const shuttle=unit.kind==='shuttle'||unit.kind==='fighter-flight',old=shuttle?unit.initiative:trial(unit).initiative;if(old?.turn===s.turn)fail('This unit has already rolled initiative');
-  const result=unitInitiative({roll:die(20),printedBonus:unit.kind==='fighter-flight'?fighterFlightData(unit.flightType).initiativeBonus:shuttle?9:hullProfile(trial(unit).libraryId).initiativeBonus,speed:unit.speed,launchedOrLanded:!shuttle&&trial(unit).hangarActionTurn===s.turn-1,newlyLaunched:shuttle&&unit.launchedTurn===s.turn-1,otherModifiers:shuttle?0:effectiveCondition(trial(unit),s.turn).initiativeModifier});
-  if(shuttle)unit.initiative={...result,turn:s.turn};else trial(unit).initiative={...result,turn:s.turn};record(s,'initiative_rolled',{shipId:unit.id,...result});
-  if(!s.operations||[...available,...activeSmallCraft(s).filter(x=>x.owner_id===playerId)].every(x=>(['shuttle','fighter-flight'].includes(x.kind)?x.initiative:trial(x).initiative)?.turn===s.turn))s.locks[playerId]=true;
-  if(members(s).every(p=>s.locks[p])){initiativeOrder(s,die);next(s,'ew_commit');}
  }else if(command.type==='ew'&&s.phase==='ew_commit'){
   const defensive=command.defensive??0,offensive=command.offensive??{},available=e.sensorStrength+(e.sensorStrength>0?t.powerAllocation.extraEW:0);
   if(!int(defensive)||!offensive||Array.isArray(offensive)||typeof offensive!=='object'||Object.entries(offensive).some(([id,v])=>!int(v)||![...s.ships.filter(x=>live(x,s.turn)),...activeShuttles(s).map(x=>({...x,id:x.carrierId+'-shuttle-flight'}))].some(x=>x.id===id&&x.id!==ship.id&&(x.owner_id!==playerId||hullProfile(t.libraryId).elint))))fail('Invalid EW allocation');
