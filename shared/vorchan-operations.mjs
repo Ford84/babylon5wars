@@ -10,7 +10,9 @@ export const SHUTTLE=Object.freeze({id:'centauri-unarmed-shuttle',thrust:4,boxes
 const fail=m=>{throw new RangeError(m);};
 const log=(s,type,data)=>s.journal.push({turn:s.turn,phase:s.phase,type,...data});
 export const activeShuttles=s=>(s.shuttles||[]).filter(x=>x.status==='deployed');
-export const currentMover=s=>s.operations?(s.unitMoveOrder||[]).map(id=>[...s.ships,...activeShuttles(s)].find(x=>x.id===id)).find(x=>x&&!x.withdrawn&&!s.unitLocks?.[x.id]):null;
+export const activeFighterFlights=s=>(s.fighterFlights||[]).filter(x=>x.status==='deployed'&&fighterFlightStatus(x).activeCount>0);
+export const activeSmallCraft=s=>[...activeShuttles(s),...activeFighterFlights(s)];
+export const currentMover=s=>s.operations?(s.unitMoveOrder||[]).map(id=>[...s.ships,...activeSmallCraft(s)].find(x=>x.id===id)).find(x=>x&&!x.withdrawn&&!s.unitLocks?.[x.id]):null;
 export function enableOperations(s){
  s.operations=true;if(s.scenario)s.scenario={...s.scenario,scope:'Ship weapons, EW, movement, damage, criticals, jump points and unarmed shuttles. Ramming and boarding are not enabled.'};s.jumpPoints??=[];s.lastHexEntry??={};
  s.shuttles??=s.ships.flatMap(ship=>Array.from({length:hullProfile(ship.public_state?.libraryId)?.shuttles??2},(_,i)=>i+1).map(n=>({id:ship.id+'-shuttle-'+n,kind:'shuttle',owner_id:ship.owner_id,carrierId:ship.id,label:ship.label+' · Shuttle '+n,stats:{...SHUTTLE,thrust:hullProfile(ship.public_state?.libraryId)?.hangar?.shuttleThrust??4,armour:hullProfile(ship.public_state?.libraryId)?.hangar?.shuttleArmour??0},status:'aboard',damage:0,q:ship.q,r:ship.r,facing:ship.facing,motionFacing:ship.facing,speed:0})));
@@ -85,7 +87,7 @@ export function noteEntry(s,unit,from){if(unit.q!==from.q||unit.r!==from.r)s.las
 export function entryOptions(s,unit){return (s.jumpPoints||[]).filter(p=>p.status==='open'&&p.activeTurn<=s.turn&&p.q===unit.q&&p.r===unit.r&&(()=>{const from=s.lastHexEntry?.[unit.id],edge=advanceHex(p,p.facing);return from&&from.q===edge.q&&from.r===edge.r;})());}
 export function enterJump(s,unit,id){
  const p=entryOptions(s,unit).find(p=>p.id===id);if(!p)fail('Enter an active jump point through its marked entry side');
- if(unit.kind==='shuttle')unit.status='escaped';else{unit.withdrawn=true;unit.escaped=true;}
+ if(unit.kind==='shuttle'||unit.kind==='fighter-flight')unit.status='escaped';else{unit.withdrawn=true;unit.escaped=true;}
  if(unit.movement)unit.movement.remaining=0;
  if(unit.private_state?.trial.movement)unit.private_state.trial.movement.state.remaining=0;
  const own=s.jumpPoints.find(p=>p.shipId===unit.id&&p.status!=='closed');if(own)own.forcedClose=true;
@@ -138,4 +140,25 @@ export function shuttleMovementOptions(x){
  for(const direction of [-1,1])for(let initialThrust=Math.ceil(Math.max(1,Math.ceil(Math.abs(x.speed)/3))/4);initialThrust<Math.ceil(Math.abs(x.speed)/3)&&initialThrust<=4;initialThrust++)actions.push({type:'extended-start',direction,initialThrust});
  for(const direction of [-1,1])for(let shortenBy=1;shortenBy<Math.ceil(Math.abs(x.speed)/3)&&shortenBy<4;shortenBy++)actions.push({type:'turn',direction,shortenBy});
  return actions.flatMap(action=>{try{const next=moveShuttle(x,action);return [{action,next,cost:next.movement.spent-x.movement.spent}];}catch{return [];}});
+}
+
+export function newFighterMovement(x){newShuttleMovement(x);x.movement.turnDelay=0;x.thrustUsed=0;x.jinking=0;}
+export function moveFighter(x,action){
+ const n=structuredClone(x),m=n.movement,d=fighterFlightData(n.flightType),heading=movementHeading(n);
+ if(!m||!action)fail('Invalid fighter manoeuvre');
+ let cost=0;
+ switch(action.type){
+ case 'speed':if(m.started||!Number.isInteger(action.change)||!action.change||![0,3].includes((n.facing-n.motionFacing+6)%6))fail('Change speed before movement while aligned');cost=Math.abs(action.change);n.speed+=action.change;m.remaining=Math.abs(n.speed);break;
+ case 'advance':if(m.remaining<1)fail('No movement remains');Object.assign(n,advanceHex(n,heading));m.remaining--;m.normalSinceSlide=true;break;
+ case 'turn':{const steps=action.steps??action.direction;if(!Number.isInteger(steps)||!steps||Math.abs(steps)>3)fail('Invalid fighter turn');cost=Math.max(1,Math.ceil(Math.abs(n.speed)/3))*Math.abs(steps);n.facing=(heading+steps+6)%6;n.motionFacing=n.facing;n.speed=Math.abs(n.speed);break;}
+ case 'slide':if(![-1,1].includes(action.direction)||!m.remaining||!m.normalSinceSlide||m.slideDirection!==null&&m.slideDirection!==action.direction)fail('Invalid slide');cost=1;Object.assign(n,advanceHex(n,(heading+action.direction+6)%6));m.remaining--;m.slideDirection=action.direction;m.normalSinceSlide=false;break;
+ case 'pivot':if(!Number.isInteger(action.steps)||!action.steps||Math.abs(action.steps)>3)fail('Invalid pivot');cost=Math.abs(action.steps);n.facing=(n.facing+action.steps+6)%6;break;
+ case 'roll':cost=1;n.rolled=!n.rolled;break;
+ default:fail('Invalid fighter manoeuvre');
+ }
+ if(m.spent+cost>d.freeThrust)fail('Insufficient fighter thrust');m.spent+=cost;n.thrustUsed=m.spent;m.started=true;return n;
+}
+export function fighterMovementOptions(x){
+ const d=fighterFlightData(x.flightType),actions=[{type:'advance'},{type:'roll'},...[-3,-2,-1,1,2,3].flatMap(steps=>[{type:'turn',steps},{type:'pivot',steps}]),...[-1,1].map(direction=>({type:'slide',direction})),...Array.from({length:d.freeThrust*2+1},(_,i)=>i-d.freeThrust).filter(Boolean).map(change=>({type:'speed',change}))];
+ return actions.flatMap(action=>{try{const next=moveFighter(x,action);return [{action,next,cost:next.movement.spent-x.movement.spent}];}catch{return [];}});
 }
