@@ -65,6 +65,7 @@ function markShip(s,ship){s.unitPhaseLocks??={};s.unitPhaseLocks[ship.id]=true;i
 function next(s,phase){s.phase=phase;s.locks={};s.unitPhaseLocks={};s.unitPhaseStamp=s.turn+':'+phase;record(s,'phase_advanced',{to:phase});}
 function checkVictory(s){
  if(s.operations)for(const ship of s.ships)if(effectiveCondition(trial(ship),s.turn).shipDestroyed)for(const x of s.shuttles.filter(x=>x.carrierId===ship.id&&x.status==='aboard')){x.status='destroyed';x.damage=10;}
+ if(s.operations)for(const ship of s.ships)if(effectiveCondition(trial(ship),s.turn).shipDestroyed)for(const f of (s.fighterFlights||[]).filter(x=>x.carrierId===ship.id&&x.status==='aboard')){f.status='destroyed';for(const x of f.fighters){x.destroyed=true;x.damage=fighterFlightData(f.flightType).structureBoxes;}}
  const alive=s.ships.filter(x=>live(x,s.turn));
  if(new Set(alive.map(x=>x.owner_id)).size<2){s.status='finished';s.winner=alive[0]?.owner_id||null;record(s,'battle_finished',{winner:s.winner});return true;}return false;
 }
@@ -370,7 +371,7 @@ export function completePassiveActions(state,die=rollDie){
   else if(s.phase==='ew_disruption'){const r=s.elintDisruptions.find(x=>x.removed===null);let left=r.capacity;const removed={};for(const [key,n] of Object.entries(r.choices)){removed[key]=Math.min(n,left);left-=removed[key];}command={type:'elint-disrupt',scoutId:r.scoutId,targetId:r.targetId,removed};}
   else if(s.phase==='jump_formation')command={type:'jump',open:false};
   else if(s.phase==='vortex_closure')command={type:'vortex',maintain:false};
-  else if(s.phase==='hangar'){const o=hangarOptions(s,ship);command={type:'hangar',loss:o.aboard.slice(0,o.lossRequired)};}
+  else if(s.phase==='hangar'){const o=hangarOptions(s,ship);command={type:'hangar',loss:o.lossOptions.slice(0,o.lossRequired).map(x=>x.id)};}
   else if(s.phase==='movement'&&s.operations&&['shuttle','fighter-flight'].includes(currentMover(s)?.kind))command=currentMover(s).movement.remaining?{type:'move',action:{type:'advance'}}:{type:'movement-done'};
   else if(s.phase==='movement')command=trial(ship).movement.state.remaining?{type:'move',action:{type:'advance',hexes:trial(ship).movement.state.remaining}}:{type:'movement-done'};
   else if(s.phase==='critical_resolution'){const r=s.criticalResolution;command={type:r.stage.endsWith('_roll')?'critical-roll':'critical-ok',stage:r.stage,checkId:r.check.id};}
