@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {validateFleet,fleetTotals,defaultFleetPosition} from '../shared/fleet-setup.mjs';
+import {validateFleet,fleetTotals,defaultFleetPosition,fighterPurchase} from '../shared/fleet-setup.mjs';
 import {createBattle,executeBattle,requiredActors,battleView} from '../shared/automated-battle.mjs';
 import {newVorchanTrialState,VORCHAN_LIBRARY_RECORD as LIB} from '../shared/vorchan-trial-library.mjs';
 const members=[{user_id:'p1'},{user_id:'p2'}];
@@ -38,4 +38,19 @@ test('multiple firing ships retain separate declarations and simultaneous return
  for(let i=0;i<4;i++){const ship=s.ships[i],target=s.ships[i<2?i+2:i-2];s=executeBattle(s,ship.owner_id,{type:'fire',shipId:ship.id,fire:{shots:[{shipId:ship.id,targetId:target.id,mountId:'twin_nose_port',gun:1,role:'offensive',order:1}]}});}
  let seen=new Set();for(let i=0;s.resolution&&i<100;i++){const z=s.resolution;seen.add(z.attack.shipId);s=executeBattle(s,z.actorId,{type:z.stage.endsWith('_roll')?'combat-roll':z.stage.endsWith('_result')?'combat-ok':'combat-choice',stage:z.stage,attackId:z.attack.id,...(z.candidates.length?{value:z.candidates[0]}:{})},n=>n===10?8:z.stage==='location_roll'?6:1);}
  assert.equal(seen.size,4);assert.ok(s.ships.every(x=>x.private_state.trial.condition.damage.tracks.twin_nose_port.marked===6));assert.equal(s.phase,'hangar');
+});
+
+test('Primus purchases whole six-fighter flights with verified costs and capacity',()=>{
+ const e=entries(),sentri='centauri-sentri-v3-2e-sf',razik='centauri-razik-v2-2e-sf';
+ e[0].catalogId='centauri-primus-v3-2e-sf';e[0].fighterFlights={[sentri]:1,[razik]:1};
+ const validated=validateFleet(e,members,'standard','meeting');
+ assert.equal(fleetTotals(validated,members)[0].ships[0].points,1262);
+ assert.equal(fleetTotals(validated,members)[0].points,1622);
+ const p=fighterPurchase({hangar:{fighters:12}},e[0].fighterFlights);
+ assert.equal(p.count,12);assert.equal(p.points,432);assert.equal(p.flights.length,2);
+ assert.ok(p.flights.every(f=>f.fighters.length===6));
+ for(const bad of [{[sentri]:3},{[sentri]:2,[razik]:1},{[sentri]:0.5},{[razik]:-1},{unknown:1}]){
+  e[0].fighterFlights=bad;assert.throws(()=>validateFleet(e,members,'standard','meeting'));
+ }
+ e[0].catalogId=LIB.id;e[0].fighterFlights={[sentri]:1};assert.throws(()=>validateFleet(e,members,'standard','meeting'));
 });
