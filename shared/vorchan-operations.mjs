@@ -153,12 +153,13 @@ export function moveFighter(x,action){
  case 'turn':{const steps=action.steps??action.direction;if(!Number.isInteger(steps)||!steps||Math.abs(steps)>3)fail('Invalid fighter turn');cost=Math.max(1,Math.ceil(Math.abs(n.speed)/3))*Math.abs(steps);n.facing=(heading+steps+6)%6;n.motionFacing=n.facing;n.speed=Math.abs(n.speed);break;}
  case 'slide':if(![-1,1].includes(action.direction)||!m.remaining||!m.normalSinceSlide||m.slideDirection!==null&&m.slideDirection!==action.direction)fail('Invalid slide');cost=1;Object.assign(n,advanceHex(n,(heading+action.direction+6)%6));m.remaining--;m.slideDirection=action.direction;m.normalSinceSlide=false;break;
  case 'pivot':if(!Number.isInteger(action.steps)||!action.steps||Math.abs(action.steps)>3)fail('Invalid pivot');cost=Math.abs(action.steps);n.facing=(n.facing+action.steps+6)%6;break;
+ case 'jink':if(!Number.isInteger(action.levels)||action.levels<1||(n.jinking??0)+action.levels>d.jinkingLimit)fail('Invalid jinking level');cost=action.levels;n.jinking=(n.jinking??0)+cost;break;
  case 'roll':cost=1;n.rolled=!n.rolled;break;
  default:fail('Invalid fighter manoeuvre');
  }
- if(m.spent+cost>d.freeThrust)fail('Insufficient fighter thrust');m.spent+=cost;n.thrustUsed=m.spent;m.started=true;return n;
+ if(m.spent+cost>d.freeThrust)fail('Insufficient fighter thrust');m.spent+=cost;n.thrustUsed=m.spent;if(action.type!=='jink')m.started=true;return n;
 }
 export function fighterMovementOptions(x){
- const d=fighterFlightData(x.flightType),actions=[{type:'advance'},{type:'roll'},...[-3,-2,-1,1,2,3].flatMap(steps=>[{type:'turn',steps},{type:'pivot',steps}]),...[-1,1].map(direction=>({type:'slide',direction})),...Array.from({length:d.freeThrust*2+1},(_,i)=>i-d.freeThrust).filter(Boolean).map(change=>({type:'speed',change}))];
+ const d=fighterFlightData(x.flightType),actions=[{type:'advance'},{type:'roll'},...Array.from({length:d.jinkingLimit},(_,i)=>({type:'jink',levels:i+1})),...[-3,-2,-1,1,2,3].flatMap(steps=>[{type:'turn',steps},{type:'pivot',steps}]),...[-1,1].map(direction=>({type:'slide',direction})),...Array.from({length:d.freeThrust*2+1},(_,i)=>i-d.freeThrust).filter(Boolean).map(change=>({type:'speed',change}))];
  return actions.flatMap(action=>{try{const next=moveFighter(x,action);return [{action,next,cost:next.movement.spent-x.movement.spent}];}catch{return [];}});
 }
