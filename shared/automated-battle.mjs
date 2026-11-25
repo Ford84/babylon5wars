@@ -129,7 +129,7 @@ function initiativeOrder(s,die){
  }
  s.moveOrder=ordered.map(x=>x.owner_id);record(s,'initiative_order',{shipIds:ordered.map(x=>x.id)});
 }
-function attackShips(s){return s.ships.map(x=>({...x,private_state:{trial:projectTrial(trial(x),s.turn)},sameHexPrevious:s.approaches[x.id]||{}})).concat(s.operations?activeShuttles(s).map(x=>shuttleCombatUnit(x)):[]);}
+function attackShips(s){return s.ships.map(x=>{const t=projectTrial(trial(x),s.turn);const targets=s.closeCombatEW?.[x.id]?.targets||{};t.ewAllocation={...t.ewAllocation,closeCombatTargets:targets};return {...x,private_state:{trial:t},sameHexPrevious:s.approaches[x.id]||{}};}).concat(s.operations?activeShuttles(s).map(x=>shuttleCombatUnit(x)):[]);}
 function endTurn(s,die){
  if(s.operations&&s.fighterOrders&&s.fighterResolvedTurn!==s.turn){
   const flights=activeFighterFlights(s),geometry=(a,b)=>{const g=fighterTargeting(a,b,{defenderDirection:s.fighterAspects?.find(x=>x.attackerId===a.id&&x.targetId===b.id)?.direction});return {...g,allowed:g.ready};};
@@ -218,8 +218,10 @@ function beginFighterOrders(s){
  if(activeFighterFlights(s).length){next(s,'combat_pivot');return;}
  openFighterOrders(s);
 }
-function ccewEligible(s){return s.ships.filter(x=>live(x,s.turn)&&effectiveCCEWReserve(x,s.elintDisruptions)>0&&closeCombatTargets(x,activeFighterFlights(s)).length);}
+function ccewUnits(s){return [...activeFighterFlights(s),...activeShuttles(s).map(x=>({...x,id:x.carrierId+'-shuttle-flight',label:'Shuttle Group · '+(s.ships.find(y=>y.id===x.carrierId)?.label||x.carrierId)}))];}
+function ccewEligible(s){return s.ships.filter(x=>live(x,s.turn)&&effectiveCCEWReserve(x,s.elintDisruptions)>0&&closeCombatTargets(x,ccewUnits(s)).length);}
 function openFighterOrders(s){
+ s.closeCombatEW={};
  if(ccewEligible(s).length){s.closeCombatEW={};next(s,'close_combat_ew');return;}
  startFighterDeclarations(s);
 }
@@ -295,7 +297,7 @@ function executeCommand(state,playerId,command,die=rollDie){
  if(s.phase==='close_combat_ew'){
   const ship=ccewEligible(s).find(x=>x.id===command.shipId&&x.owner_id===playerId&&!Object.hasOwn(s.closeCombatEW,x.id));
   if(command.type!=='close-combat-ew'||!ship)fail('Choose eligible ship');
-  s.closeCombatEW[ship.id]=allocateCloseCombatEW(ship,activeFighterFlights(s),effectiveCCEWReserve(ship,s.elintDisruptions),command.allocation);
+  s.closeCombatEW[ship.id]=allocateCloseCombatEW(ship,ccewUnits(s),effectiveCCEWReserve(ship,s.elintDisruptions),command.allocation);
   if(ccewEligible(s).every(x=>Object.hasOwn(s.closeCombatEW,x.id))){record(s,'close_combat_ew_revealed',{allocations:s.closeCombatEW});startFighterDeclarations(s);}
   settleAutomaticActions(s,die);return s;
  }
@@ -517,5 +519,5 @@ export function battleView(s,playerId){
  });
  const shuttles=(s.shuttles||[]).map(x=>{const d=s.resolution?.states?.[x.id];return shuttleView(d?{...x,damage:d.shuttleDamage||0,status:d.shipDestroyed?'destroyed':x.status}:x);});
  const mover=currentMover(s);
- return {ships,closeCombatOptions:s.phase==='close_combat_ew'?ccewEligible(s).filter(x=>x.owner_id===playerId&&!Object.hasOwn(s.closeCombatEW,x.id)).map(x=>({shipId:x.id,label:x.label,reserved:effectiveCCEWReserve(x,s.elintDisruptions),targets:closeCombatTargets(x,activeFighterFlights(s)).map(f=>({id:f.id,label:f.label}))})):[],fighterAspect:s.phase==='fighter_aspect'?s.fighterAspects.find(x=>!x.direction):null,fighterOrders:s.phase==='fighter_orders'?fighterOrdersView(activeFighterFlights(s),s.fighterOrders,playerId):null,fighterDamage:s.phase==='fighter_damage'?fighterExchangePrompt(s.fighterExchange):null,carrierEscape:s.carrierEscape||null,elintContext:enemyEWRevealed?{initial:s.ewSnapshot||[],disruptions:s.elintDisruptions||[]}:null,elintDisruption:s.phase==='ew_disruption'?s.elintDisruptions.find(x=>x.removed===null):null,unitPhaseLocks:s.unitPhaseLocks||{},operations:!!s.operations,shuttles,fighterFlights:(s.fighterFlights||[]).filter(x=>x.status==='deployed'||x.owner_id===playerId),jumpPoints:(s.jumpPoints||[]).filter(p=>p.status!=='closed'),movingUnitId:mover?.id,entryPoints:mover?entryOptions(s,mover):[],jumpStatus:Object.fromEntries(s.ships.map(x=>[x.id,jumpAvailability(s,x)])),hangars:s.operations?Object.fromEntries(s.ships.filter(x=>x.owner_id===playerId).map(x=>[x.id,hangarOptions(s,x)])):{},criticalResolution:criticalView(s),resolution:guidedCombatView(s),phase:PLAY_PHASES.find(p=>p.id===s.phase),phases:PLAY_PHASES,scenario:s.scenario,needsAction:required.includes(playerId),required,locked:!!s.locks[playerId],declarations:s.phase==='fire_commit'?s.declarations.filter(d=>d.playerId===playerId):['fire_resolution'].includes(s.phase)?s.declarations:[],defences:s.phase==='fire_resolution'?s.defences.filter(d=>s.combatStarted||d.playerId===playerId):[],pending:s.pending||[],dice:s.combatStarted?s.dice:[],attacks:s.attacks||[],winner:s.winner};
+ return {ships,closeCombatOptions:s.phase==='close_combat_ew'?ccewEligible(s).filter(x=>x.owner_id===playerId&&!Object.hasOwn(s.closeCombatEW,x.id)).map(x=>({shipId:x.id,label:x.label,reserved:effectiveCCEWReserve(x,s.elintDisruptions),targets:closeCombatTargets(x,ccewUnits(s)).map(f=>({id:f.id,label:f.label}))})):[],fighterAspect:s.phase==='fighter_aspect'?s.fighterAspects.find(x=>!x.direction):null,fighterOrders:s.phase==='fighter_orders'?fighterOrdersView(activeFighterFlights(s),s.fighterOrders,playerId):null,fighterDamage:s.phase==='fighter_damage'?fighterExchangePrompt(s.fighterExchange):null,carrierEscape:s.carrierEscape||null,elintContext:enemyEWRevealed?{initial:s.ewSnapshot||[],disruptions:s.elintDisruptions||[]}:null,elintDisruption:s.phase==='ew_disruption'?s.elintDisruptions.find(x=>x.removed===null):null,unitPhaseLocks:s.unitPhaseLocks||{},operations:!!s.operations,shuttles,fighterFlights:(s.fighterFlights||[]).filter(x=>x.status==='deployed'||x.owner_id===playerId),jumpPoints:(s.jumpPoints||[]).filter(p=>p.status!=='closed'),movingUnitId:mover?.id,entryPoints:mover?entryOptions(s,mover):[],jumpStatus:Object.fromEntries(s.ships.map(x=>[x.id,jumpAvailability(s,x)])),hangars:s.operations?Object.fromEntries(s.ships.filter(x=>x.owner_id===playerId).map(x=>[x.id,hangarOptions(s,x)])):{},criticalResolution:criticalView(s),resolution:guidedCombatView(s),phase:PLAY_PHASES.find(p=>p.id===s.phase),phases:PLAY_PHASES,scenario:s.scenario,needsAction:required.includes(playerId),required,locked:!!s.locks[playerId],declarations:s.phase==='fire_commit'?s.declarations.filter(d=>d.playerId===playerId):['fire_resolution'].includes(s.phase)?s.declarations:[],defences:s.phase==='fire_resolution'?s.defences.filter(d=>s.combatStarted||d.playerId===playerId):[],pending:s.pending||[],dice:s.combatStarted?s.dice:[],attacks:s.attacks||[],winner:s.winner};
 }
