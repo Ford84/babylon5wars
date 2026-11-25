@@ -34,9 +34,9 @@ export function EWActions({t,ship,turn,detail,send,busy}){
 }
 export function ElintDisruption({detail,userId,send,busy}){
  const r=detail.elintDisruption,[removed,setRemoved]=useState({});if(!r)return null;
- const name=id=>detail.ships.find(x=>x.id===id)?.label||((detail.ships.find(x=>id===x.id+'-shuttle-flight')?.label||id)+' Shuttle Group');
+ const name=id=>id==='@ccew'?'Reserved Close Combat EW':detail.ships.find(x=>x.id===id)?.label||((detail.ships.find(x=>id===x.id+'-shuttle-flight')?.label||id)+' Shuttle Group');
  const own=r.actorId===userId;
  return <section className="panel battle-actions"><h2>ELINT Disruption</h2><p><strong>{name(r.scoutId)}</strong> can remove <strong>{r.capacity}</strong> OEW from {name(r.targetId)}. The scout’s player chooses now, before movement.</p>{own?<>
- {Object.entries(r.choices).filter(([,n])=>n>0).map(([id,n])=><Amount key={id} label={'Remove OEW Against '+name(id)+' · '+n+' Committed'} value={removed[id]||0} max={Math.min(n,r.capacity)} onChange={n=>setRemoved(old=>({...old,[id]:n}))}/>)}
+ {Object.entries(r.choices).filter(([,n])=>n>0).map(([id,n])=><Amount key={id} label={'Remove EW From '+name(id)+' · '+n+' Committed'} value={removed[id]||0} max={Math.min(n,r.capacity)} onChange={n=>setRemoved(old=>({...old,[id]:n}))}/>)}
  <p>{sum(removed)} / {r.capacity} Points Selected</p><button disabled={busy||sum(removed)!==r.capacity} onClick={()=>send({type:'elint-disrupt',scoutId:r.scoutId,targetId:r.targetId,removed})}>Commit Disruption</button></>:<p>Waiting For The Scout’s Player To Select Enemy OEW Points.</p>}</section>;
 }
