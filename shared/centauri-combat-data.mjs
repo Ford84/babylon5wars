@@ -1,4 +1,4 @@
-// Direct transcription from official Centauri Version 3: 2E/SF PDFs.
+// Direct transcription from official Centauri Versions 2 and 3: 2E/SF PDFs.
 // Inclusive d20 ranges; PRIMARY is a second roll on the primary chart.
 export const CENTAURI_HIT_CHARTS={
  'centauri-primus-v3-2e-sf':{
@@ -43,3 +43,15 @@ export function damageSentriFighter(flight,slot,damage){
  if(!fighter||fighter.destroyed||fighter.droppedOut)throw new RangeError('ineligible fighter');
  return {...flight,fighters:flight.fighters.map(f=>f.slot===slot?{...f,damage:f.damage+damage}:f)};
 }
+
+// Source: centauri razik light fighter.pdf, Ships of the Fleet, Version 2: 2E/SF.
+export const RAZIK_FLIGHT_DATA={
+ id:'centauri-razik-v2-2e-sf',name:'Razik Light Fighter',faction:'Centauri',class:'light fighter',serviceYear:2105,
+ fighterCount:6,flightsPerPrintedSheet:8,combatPoints:30,fullFlightCombatPoints:180,
+ rammingFactor:14,structureBoxes:8,jinkingLimit:10,freeThrust:14,initiativeBonus:20,offensiveBonus:5,
+ defence:{forward:6,aft:6,port:5,starboard:5},
+ turnCostDivisor:3,turnDelay:0,accelerationCost:1,decelerationCost:1,pivotCost:1,rollCost:1,
+ armour:{forward:1,port:2,starboard:2,aft:1},
+ weapon:{name:'Ultralight Particle Beam',guns:2,linked:true,damage:'1d6+1',rangePenaltyPerHex:-2,fireControl:null,rateOfFire:'once per turn',firingArc:'standard-fighter-forward'},
+ flightLevelCombat:[{relative:'5 or more above',fraction:'0'},{relative:'3–4 above',fraction:'1/6'},{relative:'1–2 above',fraction:'1/3'},{relative:'0–2 below',fraction:'1/2'},{relative:'3–4 below',fraction:'2/3'},{relative:'5–6 below',fraction:'5/6'},{relative:'7 or more below',fraction:'all'}]
+};
