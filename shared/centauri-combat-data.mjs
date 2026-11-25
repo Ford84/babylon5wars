@@ -131,7 +131,7 @@ export function resolveFlightAttack(flight,chanceToHit,roll){
   for(const n of [shipOffensiveEW,shipDefensiveEW,loanedOffensiveEW,loanedDefensiveEW,closeCombatEW])if(!Number.isInteger(n)||n<0)throw new RangeError('invalid EW');
   const attackerJinking=af?jink(attacker):0,targetJinking=tf?jink(target):0;
   const modifiers={offensive:af?fighterFlightData(attacker.flightType).offensiveBonus:shipOffensiveEW,
-   ownJinking:-attackerJinking,targetJinking:tf&&!(af&&range===0&&attackerJinking===0)?-targetJinking:0,
+   combatPivot:af&&attacker.combatPivoted?-1:0,ownJinking:-attackerJinking,targetJinking:tf&&!(af&&range===0&&attackerJinking===0)?-targetJinking:0,
    defensive:tf||af&&!ballistic?0:-shipDefensiveEW,
    elintOffensive:loanedOffensiveEW,elintDefensive:af&&!ballistic&&!tf?0:-loanedDefensiveEW,
    closeCombat:!af&&tf&&range<=10?closeCombatEW:0};
