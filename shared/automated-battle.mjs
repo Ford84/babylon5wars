@@ -3,7 +3,7 @@ import {fighterPurchase} from './fleet-setup.mjs';
 import {guardianPowerMode} from './guardian-array.mjs';
 import {elintBudget,validateElint,fixedEWForUnits,ewPositionSnapshot,disruptionQueue,selectDisruption} from './elint.mjs';
 import {hullProfile,hullSystems} from './vorchar.mjs';
-import {enableOperations,activeShuttles,activeSmallCraft,activeFighterFlights,newFighterMovement,moveFighter,currentMover,shuttleCombatUnit,shuttleView,jumpAvailability,hangarOptions,applyHangar,jumpCheck,openJumpPoint,checkPointRange,noteEntry,entryOptions,enterJump,closePoint,vortexClosure,newShuttleMovement,moveShuttle} from './vorchan-operations.mjs';
+import {enableOperations,activeShuttles,activeSmallCraft,activeFighterFlights,newFighterMovement,moveFighter,fighterCombatPivot,currentMover,shuttleCombatUnit,shuttleView,jumpAvailability,hangarOptions,applyHangar,jumpCheck,openJumpPoint,checkPointRange,noteEntry,entryOptions,enterJump,closePoint,vortexClosure,newShuttleMovement,moveShuttle} from './vorchan-operations.mjs';
 import {movementHeading} from './movement-rules.mjs';
 import {beginCriticals,advanceCriticals,criticalView} from './guided-criticals.mjs';
 import {commitMovement} from './movement-commit.mjs';
@@ -331,6 +331,8 @@ function executeCommand(state,playerId,command,die=rollDie){
   const mover=s.operations?currentMover(s):ship;
   if((['shuttle','fighter-flight'].includes(mover.kind)?mover.movement.remaining:trial(mover).movement.state.remaining)!==0)fail('Complete the unit’s remaining movement');
   if(s.operations){s.unitLocks[mover.id]=true;if(!currentMover(s))next(s,'fire_commit');}else{lock();if(members(s).every(p=>s.locks[p]))next(s,'fire_commit');}
+ }else if(command.type==='fighter-combat-pivot'&&s.phase==='fire_commit'&&s.operations){
+  const x=activeFighterFlights(s).find(x=>x.id===command.unitId&&x.owner_id===playerId);if(!x||s.locks[playerId])fail('Fighter combat pivot unavailable');Object.assign(x,fighterCombatPivot(x,command.steps));record(s,'fighter_combat_pivot',{flightId:x.id,facing:x.facing,thrustSpent:x.thrustUsed});
  }else if(command.type==='shuttle-combat-pivot'&&s.phase==='fire_commit'&&s.operations){
   const x=activeShuttles(s).find(x=>x.id===command.unitId&&x.owner_id===playerId);if(!x||![-1,1].includes(command.direction)||x.movement.spent+3>(x.stats?.thrust??4))fail('Insufficient Shuttle Thrust For Combat Pivot');x.facing=(x.facing+command.direction+6)%6;x.movement.spent+=3;record(s,'shuttle_combat_pivot',{shipId:x.id,facing:x.facing,thrustSpent:x.movement.spent});
  }else if(command.type==='fire'&&s.phase==='fire_commit'){
