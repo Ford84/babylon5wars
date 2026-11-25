@@ -34,7 +34,7 @@ function UnitBattleActions({detail,userId,send,busy,onInitiative,onAttackReveale
  if(phase==='jump_formation')return <JumpFormation {...props}/>;
  if(phase==='vortex_closure')return <VortexActions {...props}/>;
  if(phase==='hangar')return <HangarActions {...props}/>;
- if(phase==='movement'&&detail.shuttles?.some(x=>x.id===detail.movingUnitId))return <ShuttleMovement {...props}/>;
+ if(phase==='movement'&&[...(detail.shuttles||[]),...(detail.fighterFlights||[])].some(x=>x.id===detail.movingUnitId))return <ShuttleMovement {...props}/>;
  return <section className="panel battle-actions" id="battle-actions"><h2>{detail.phase.label}</h2>
   {phase==='power'&&<Power {...props}/>}{phase==='initiative'&&<><p>Roll this ship’s initiative. The server applies speed and command modifiers and resolves opposing ties.</p><button disabled={busy} onClick={onInitiative}>Roll Initiative</button></>}
   {phase==='ew_commit'&&<EWActions {...props}/>}{phase==='movement'&&<Movement {...props}/>}
