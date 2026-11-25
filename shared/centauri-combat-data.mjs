@@ -21,9 +21,16 @@ export function validateHitChart(chart){
 }
 export function hitLocation(chart,roll){if(!validateHitChart(chart))throw new RangeError('Invalid hit chart');if(!Number.isInteger(roll)||roll<1||roll>20)throw new RangeError('d20');return chart.find(([lo,hi])=>roll>=lo&&roll<=hi)[2];}
 export const SENTRI_FLIGHT_DATA={
- id:'centauri-sentri-v3-2e-sf',fighterCount:6,flightsPerPrintedSheet:8,
+ // Source: centauri sentri medium fighters.pdf, Ships of the Fleet, Version 3: 2E/SF.
+ id:'centauri-sentri-v3-2e-sf',name:'Sentri Medium Fighter',faction:'Centauri',class:'medium fighter',serviceYear:2202,
+ fighterCount:6,flightsPerPrintedSheet:8,combatPoints:42,fullFlightCombatPoints:252,
+ rammingFactor:21,structureBoxes:10,jinkingLimit:8,freeThrust:12,initiativeBonus:18,offensiveBonus:7,
+ defence:{forward:7,aft:7,port:5,starboard:5},
+ // Turn cost is the printed ratio; rounding belongs to the fighter movement engine.
+ turnCostDivisor:3,turnDelay:0,accelerationCost:1,decelerationCost:1,pivotCost:1,rollCost:1,
  armour:{forward:3,port:3,starboard:3,aft:2},
- weapon:{name:'Light Particle Gun',guns:2,linked:true,damage:'1d6+2',rangePenaltyPerHex:-2,rateOfFire:'once per turn'},
+ // The sheet uses the standard narrow fighter hex diagram, not a numeric ship arc.
+ weapon:{name:'Light Particle Gun',guns:2,linked:true,damage:'1d6+2',rangePenaltyPerHex:-2,fireControl:null,rateOfFire:'once per turn',firingArc:'standard-fighter-forward'},
  flightLevelCombat:[{relative:'5 or more above',fraction:'0'},{relative:'3–4 above',fraction:'1/6'},{relative:'1–2 above',fraction:'1/3'},{relative:'0–2 below',fraction:'1/2'},{relative:'3–4 below',fraction:'2/3'},{relative:'5–6 below',fraction:'5/6'},{relative:'7 or more below',fraction:'all'}]
 };
 export function newSentriFlight(count=6){
