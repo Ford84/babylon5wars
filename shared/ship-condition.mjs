@@ -14,7 +14,7 @@ export function systemPowerForHull(id){
   return power?[[system.id,power]]:[];
  }));
 }
-export const labelSystem=id=>({twin_primary:'Twin Array · Mount 6 (Primary)',plasma_stream:'Plasma Stream · Mount 1',matter_port:'Matter Cannon · Mount 2 (Port)',matter_starboard:'Matter Cannon · Mount 3 (Starboard)',twin_port:'Twin Array · Mount 4 (Port)',twin_starboard:'Twin Array · Mount 5 (Starboard)',guardian:'Guardian Array · Mount 6',twin_nose_centre:'Twin Array · Mount 1 (Nose)'}[id]||SYSTEMS.get(id)?.displayName)||id.replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase());
+export const labelSystem=id=> (/^laser_\d+$/.test(id)?'Battle Laser · Mount '+id.split('_')[1]:/^twin_\d+$/.test(id)?'Twin Array · Mount '+id.split('_')[1]:null)||({twin_primary:'Twin Array · Mount 6 (Primary)',plasma_stream:'Plasma Stream · Mount 1',matter_port:'Matter Cannon · Mount 2 (Port)',matter_starboard:'Matter Cannon · Mount 3 (Starboard)',twin_port:'Twin Array · Mount 4 (Port)',twin_starboard:'Twin Array · Mount 5 (Starboard)',guardian:'Guardian Array · Mount 6',twin_nose_centre:'Twin Array · Mount 1 (Nose)'}[id]||SYSTEMS.get(id)?.displayName)||id.replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase());
 export function newCondition(libraryId){return {damage:initialVorchanDamage(libraryId),effects:{weapons:{},thrusters:{},engineLoss:0,sensorLoss:0,reactorLoss:0,initiativeLoss:0,fireControlLoss:0,offensiveLimited:false,hangarSlow:0,hangarCollapse:0},lastCriticalTurn:0};}
 export function effectiveCondition(trial,turn){
  const c=trial.condition||newCondition(trial.libraryId),e=c.effects,d=c.damage;

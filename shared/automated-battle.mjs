@@ -135,7 +135,7 @@ function completeTurn(s){
  next(s,'power');
 }
 function combat(s,die){
- if((s.combatFlow==='guided'||s.declarations.some(d=>d.fire.shots.some(x=>x.mountId==='plasma_stream')))&&!s.combatStarted&&beginGuidedCombat(s,attackShips(s)))return;
+ if((s.combatFlow==='guided'||s.declarations.some(d=>d.fire.shots.some(x=>x.mountId==='plasma_stream'||['Raking','Piercing'].includes(x.mode))))&&!s.combatStarted&&beginGuidedCombat(s,attackShips(s)))return;
  resolveTier(s,die);
 }
 function resolveTier(s,die){
@@ -329,9 +329,9 @@ function executeCommand(state,playerId,command,die=rollDie){
   if((mover.kind==='shuttle'?mover.movement.remaining:trial(mover).movement.state.remaining)!==0)fail('Complete the unit’s remaining movement');
   if(s.operations){s.unitLocks[mover.id]=true;if(!currentMover(s))next(s,'fire_commit');}else{lock();if(members(s).every(p=>s.locks[p]))next(s,'fire_commit');}
  }else if(command.type==='shuttle-combat-pivot'&&s.phase==='fire_commit'&&s.operations){
-  const x=activeShuttles(s).find(x=>x.id===command.unitId&&x.owner_id===playerId);if(!x||![-1,1].includes(command.direction)||x.movement.spent+3>4)fail('Insufficient Shuttle Thrust For Combat Pivot');x.facing=(x.facing+command.direction+6)%6;x.movement.spent+=3;record(s,'shuttle_combat_pivot',{shipId:x.id,facing:x.facing,thrustSpent:x.movement.spent});
+  const x=activeShuttles(s).find(x=>x.id===command.unitId&&x.owner_id===playerId);if(!x||![-1,1].includes(command.direction)||x.movement.spent+3>(x.stats?.thrust??4))fail('Insufficient Shuttle Thrust For Combat Pivot');x.facing=(x.facing+command.direction+6)%6;x.movement.spent+=3;record(s,'shuttle_combat_pivot',{shipId:x.id,facing:x.facing,thrustSpent:x.movement.spent});
  }else if(command.type==='fire'&&s.phase==='fire_commit'){
-  const ships=attackShips(s),fire=validateFireDeclaration({playerId,ships,fire:command.fire,turn:s.turn});
+  const ships=attackShips(s),fire=validateFireDeclaration({ewSnapshot:s.ewSnapshot,elintDisruptions:s.elintDisruptions,playerId,ships,fire:command.fire,turn:s.turn});
   if(fire.shots.some(x=>x.shipId!==ship.id))fail('Commit this ship’s weapons separately');
   for(const shot of fire.shots){const r=weaponReadiness({mountId:shot.mountId,gun:shot.gun,turn:s.turn,trial:projectTrial(t,s.turn),chargeTurns:shot.mountId==='plasma_forward'?shot.chargeTurns:null});if(!r.ready)fail(r.reasons.join('; '));}
   s.declarations.push({playerId,fire});lock();record(s,'fire_committed',{playerId});

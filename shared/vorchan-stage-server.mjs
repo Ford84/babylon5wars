@@ -1,3 +1,4 @@
+import {thrusterGroups} from './manoeuvre-thrusters.mjs';
 import {hullProfile,hullThrusters} from './vorchar.mjs';
 // Strict server-side staged Vorchan movement adapter. Player submits intent,
 // never turn cost, turn delay, or thrust limits.
@@ -41,7 +42,7 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[],m
  }
  if(action.type==='turn'||action.type==='extended-start'){
   const speed=Math.abs(old.speed);
-  const delay=vorchanTurnDelayAtSpeed(old.speed,hull.turnDelay);
+  const delay=vorchanTurnDelayAtSpeed(old.speed,hull.turnDelay,hull.turnDelayDivisor||3);
   if(action.shortenBy!==undefined&&(!Number.isInteger(action.shortenBy)||action.shortenBy<0||action.shortenBy>Math.max(0,delay-1)))throw new RangeError('Invalid turn shortening');
   if(action.type==='turn')moveAction={type:'turn',direction:action.direction,cost:turnCostAtSpeed(old.speed,hull.turnCost,hull.turnCostDivisor||2)*(hull.agile&&old.pivotActive?1:action.steps||1),delay,shortenBy:action.shortenBy??0};
  }
@@ -60,10 +61,10 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[],m
   const needed=ext.totalCost-ext.initialThrust;
   const damage=trial.thrusterCriticalEffects??{};
   const dead=new Set(trial.destroyedSystems??[]);
-  const eligible=ext.direction===1?['aft_port_thrust','aft_starboard_thrust','port_thrust']:['aft_port_thrust','aft_starboard_thrust','starboard_thrust'];
+  const groups=thrusterGroups(trial.libraryId),mainIds=old.speed<0?groups.forward:groups.aft,sideId=(old.speed<0?-ext.direction:ext.direction)===1?'port_thrust':'starboard_thrust';
   const rating=id=>dead.has(id)?0:effectiveThrusterRating(ratings[id],damage[id]);
-  const side=rating(eligible[2])*2;
-  const main=(rating(eligible[0])+rating(eligible[1]))*2;
+  const side=rating(sideId)*2;
+  const main=mainIds.reduce((n,id)=>n+rating(id)*2,0);
   const physicalMaximum=Math.min(side,Math.ceil(needed/2)) + Math.min(main,Math.ceil(needed/2));
   if(!power.engineDestroyed&&needed<=limits.availableThrust&&physicalMaximum>=needed)throw new RangeError('Voluntary extended-turn cancellation prohibited');
   next={...old,extendedTurn:null,started:true,version:old.version+1,history:[...old.history,{type:'extended-cancel',reason:'verified physical thrust shortfall',forfeitedThrust:ext.initialThrust}]};
@@ -77,7 +78,7 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[],m
  }else if(action.type==='extended-complete'){
   const ext=old.extendedTurn;
   if(!ext||ext.startedTurn!==turn-1||old.moved!==0||old.thrustSpent!==0)throw new RangeError('Extended turn must complete at start of following movement turn');
-  const delay=vorchanTurnDelayAtSpeed(old.speed,hull.turnDelay);
+  const delay=vorchanTurnDelayAtSpeed(old.speed,hull.turnDelay,hull.turnDelayDivisor||3);
   const shortenBy=action.shortenBy??0;
   if(!Number.isInteger(shortenBy)||shortenBy<0||shortenBy>Math.max(0,delay-1))throw new RangeError('Invalid extended turn shortening');
   const cost=ext.totalCost-ext.initialThrust+shortenBy;
@@ -121,7 +122,7 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[],m
  }
  if(action.type==='turn')next={...next,turnDelayOriginal:moveAction.delay-moveAction.shortenBy,hexesSinceTurn:0};
  if((action.type==='advance'||action.type==='slide')&&old.turnDelayRemaining>0)next={...next,turnDelayOriginal:old.turnDelayOriginal,hexesSinceTurn:(old.hexesSinceTurn??0)+(action.type==='slide'?1:action.hexes)};
- if(action.type==='speed'&&old.turnDelayRemaining>0){const speed=Math.abs(next.speed);const delay=vorchanTurnDelayAtSpeed(next.speed,hull.turnDelay);next={...next,turnDelayRemaining:adjustTurnDelay({oldRequired:old.turnDelayOriginal??old.turnDelayRemaining,hexesSinceTurn:old.hexesSinceTurn??0,newRequired:delay}).remaining,turnDelayOriginal:delay};}
+ if(action.type==='speed'&&old.turnDelayRemaining>0){const speed=Math.abs(next.speed);const delay=vorchanTurnDelayAtSpeed(next.speed,hull.turnDelay,hull.turnDelayDivisor||3);next={...next,turnDelayRemaining:adjustTurnDelay({oldRequired:old.turnDelayOriginal??old.turnDelayRemaining,hexesSinceTurn:old.hexesSinceTurn??0,newRequired:delay}).remaining,turnDelayOriginal:delay};}
  const newPath=next.history.at(-1)?.path||[];
  for(const point of newPath){
   if(!allowExit&&(point.q<0||point.q>=mapBounds.columns||point.r<0||point.r>=mapBounds.rows))throw new RangeError('Outside trial map bounds');
@@ -132,7 +133,7 @@ export function applyVorchanStage({ship,privateState,action,turn,otherShips=[],m
  if(manoeuvreCost<0)throw new RangeError('Movement thrust cannot decrease');
  const allocation=action.thrusters??{};
  if(Object.values(allocation).some(v=>!Number.isInteger(v)||v<0)||Object.values(allocation).reduce((a,b)=>a+b,0)!==manoeuvreCost)throw new RangeError('Thruster allocation must exactly equal manoeuvre cost');
- validateManoeuvreThrusters({action,oldState:old,cost:manoeuvreCost,allocation});
+ validateManoeuvreThrusters({action,oldState:old,cost:manoeuvreCost,allocation,libraryId:trial.libraryId});
  const previousLedger=(trial.movement?.turn===turn?trial.movement.thrusterLedger:null);
  const criticalEffects=trial.thrusterCriticalEffects??{};
  assertVorchanMovementDamageConsistent(trial);

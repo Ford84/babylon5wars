@@ -13,6 +13,7 @@ export function attackCalculation(attack){
  add(`DEW ${signed(b.defensiveEW)}`,b.defensiveEW);
  if(b.elintDefensive)add(`ELINT DEW ${signed(-b.elintDefensive)}`,-b.elintDefensive);
  add(`Fire Control ${signed(b.fireControl)}`,b.fireControl);
+ if(b.modeModifier)add(`Piercing ${signed(b.modeModifier)}`,b.modeModifier);
  if(b.extra)add(`Condition / Other ${signed(b.extra)}`,b.extra);
  if(attack.intercept?.total)add(`Interception ${signed(attack.intercept.total)}`,attack.intercept.total);
  return steps;
@@ -25,5 +26,5 @@ export function damageCalculation(result){
  const formula=`${f.count}d${f.sides}${f.bonus?' '+term(f.bonus):''}${f.perHex?' '+term(rangeLoss)+' Range':''}`;
  const adjusted=dice.map(n=>Math.max(1,n-f.damageLoss));
  const arithmetic=`${adjusted.join(' + ')}${f.bonus?' '+term(f.bonus):''}${rangeLoss?' '+term(rangeLoss):''} = ${damage}${result.raw+rangeLoss<0?' (Minimum 0)':''}`;
- return {formula,arithmetic,penalty:f.damageLoss?`Critical Damage: −${f.damageLoss} Per Die, Minimum 1 · Adjusted Dice: ${adjusted.join(', ')}`:null};
+ return {formula,arithmetic,penalty:f.damageLoss?`${f.piercingLoss?'Piercing / Critical Damage':'Critical Damage'}: −${f.damageLoss} Per Die, Minimum 1 · Adjusted Dice: ${adjusted.join(', ')}`:null};
 }

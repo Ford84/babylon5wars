@@ -49,7 +49,7 @@ export function resolveVorchanShipFire({turn,ships,declarations,defences,rolls,b
   const sourceLibraryId=source.public_state?.libraryId;
   const sourceHullClass=hullProfile(sourceLibraryId)?.class??source.public_state?.hullClass;
   try{
-   const args={shooter:{...source,libraryId:sourceLibraryId,hullClass:sourceHullClass},target:{...target,libraryId:targetLibraryId,hullClass:targetHullClass},mountId:shot.mountId,rangePenaltyAdjustment:effects?.rangeLoss||0,otherModifiers,blockingHexes,verifiedTerrain:terrainVerified,defenderDirection,attackerOffensiveEW:attackerEW??0,targetDefensiveEW:defenderEW??0};
+   const args={shooter:{...source,libraryId:sourceLibraryId,hullClass:sourceHullClass},target:{...target,libraryId:targetLibraryId,hullClass:targetHullClass},mountId:shot.mountId,mode:shot.mode,rangePenaltyAdjustment:effects?.rangeLoss||0,otherModifiers,blockingHexes,verifiedTerrain:terrainVerified,defenderDirection,attackerOffensiveEW:attackerEW??0,targetDefensiveEW:defenderEW??0};
    preview=vorchanTargetingPreview(args);
    const elint=elintAttackEffects({shooter:source,target,units:ships,initial:ewSnapshot||ships,disruptions:elintDisruptions,baseDefence:preview.breakdown.baseDefence??0});
    preview=vorchanTargetingPreview({...args,attackerOffensiveEW:elint.ownOffensive,elintOffensive:elint.offensive,elintDefensive:elint.defensive,disruptedEW:elint.disrupted});

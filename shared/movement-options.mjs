@@ -1,3 +1,4 @@
+import {thrusterGroups} from './manoeuvre-thrusters.mjs';
 import {hullProfile} from './vorchar.mjs';
 import {applyVorchanStage} from './vorchan-stage-server.mjs';
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
@@ -6,14 +7,15 @@ import {MAP_PRESETS} from './battle-setup.mjs';
 import {turnCostAtSpeed,vorchanTurnDelayAtSpeed} from './staged-movement.mjs';
 export function movementOptions(ship,turn,mapPreset='standard'){
  const t=ship.private_state.trial,hull=hullProfile(t.libraryId),state=t.movement.state,e=effectiveCondition(t,turn),speed=ship.speed,reverse=speed<0;
- const forward=['forward_port_thrust','forward_starboard_thrust'],aft=['aft_port_thrust','aft_starboard_thrust'];
+ const {forward,aft}=thrusterGroups(t.libraryId);
  const side=d=>(reverse?-d:d)===1?'port_thrust':'starboard_thrust';
  const templates=[];
  const add=(name,action,cost,groups)=>{
+  if(cost>e.freeThrust+(t.powerAllocation?.purchasedThrust||0))return;
   const allocations=[];
-  const distribute=(ids,n)=>ids.length===1?[{[ids[0]]:n}]:Array.from({length:n+1},(_,i)=>({[ids[0]]:i,[ids[1]]:n-i}));
+  const distribute=(ids,n)=>ids.length===1?[{[ids[0]]:n}]:Array.from({length:n+1},(_,i)=>distribute(ids.slice(1),n-i).map(rest=>({[ids[0]]:i,...rest}))).flat();
   if(action.type==='advance'||action.type==='extended-cancel')allocations.push({});
-  else if(groups.length===1)for(const ids of groups[0].length>2?groups[0].map(id=>[id]):[groups[0]])allocations.push(...distribute(ids,cost));
+  else if(groups.length===1)allocations.push(...distribute(groups[0],cost));
   else for(const n of new Set([Math.ceil(cost/2),Math.floor(cost/2)]))for(const a of distribute(groups[0],n))for(const b of distribute(groups[1],cost-n))allocations.push({...a,...b});
   const choices=[];
   for(const allocation of allocations){
@@ -25,11 +27,11 @@ export function movementOptions(ship,turn,mapPreset='standard'){
  };
  for(const hexes of new Set([1,state.remaining]))if(hexes>0)add(hexes===1?'Advance One Hex':'Complete Straight Movement',{type:'advance',hexes},0,[]);
  if(e.commandDisabled||e.powerOff)return templates;
- if(!state.started)for(const change of Array.from({length:10},(_,i)=>[i+1,-i-1]).flat())add((change>0?'Accelerate +':'Decelerate ')+change,{type:'speed',change,purchasedThrust:t.powerAllocation.purchasedThrust},Math.abs(change)*2,[change>0?aft:forward]);
+ if(!state.started)for(const change of Array.from({length:10},(_,i)=>[i+1,-i-1]).flat())add((change>0?'Accelerate +':'Decelerate ')+change,{type:'speed',change,purchasedThrust:t.powerAllocation.purchasedThrust},Math.abs(change)*hull.accelerationCost,[change>0?aft:forward]);
  for(const d of [-1,1]){
   const name=d===-1?'Port':'Starboard';
   add('Slide '+name,{type:'slide',direction:d},Math.ceil(Math.abs(speed)/5),[[side(d)]]);
-  const delay=vorchanTurnDelayAtSpeed(speed,hull.turnDelay),cost=turnCostAtSpeed(speed,hull.turnCost,hull.turnCostDivisor||2);
+  const delay=vorchanTurnDelayAtSpeed(speed,hull.turnDelay,hull.turnDelayDivisor||3),cost=turnCostAtSpeed(speed,hull.turnCost,hull.turnCostDivisor||2);
   for(const steps of (hull.agile?[1,2,3]:[1]))for(let shorter=0;shorter<=Math.max(0,delay-1);shorter++)add((state.pivotActive?'Turn Into Pivot · ':steps>1?'Snap Turn '+steps*60+'° · ':'Turn ')+name+(shorter?' · Shorten Delay '+shorter:''),{type:'turn',direction:d,shortenBy:shorter,...(hull.agile?{steps}:{})},cost*(hull.agile&&state.pivotActive?1:steps)+shorter,[reverse?forward:aft,[side(d)]]);
   if(!state.extendedTurn)for(let initial=Math.ceil(cost/4);initial<cost;initial++)add('Begin Extended Turn '+name+' · Pay '+initial,{type:'extended-start',direction:d,initialThrust:initial},initial,[reverse?forward:aft,[side(d)]]);
  }
@@ -37,11 +39,11 @@ export function movementOptions(ship,turn,mapPreset='standard'){
  for(const pair of ['forward-port','aft-starboard','forward-starboard','aft-port']){
   const [main,sideName]=pair.split('-');const direction=['forward-port','aft-starboard'].includes(pair)?1:-1;
   if(hull.agile)for(const steps of [1,2,3])add('Pivot '+steps*60+'° '+(direction===1?'Clockwise':'Anticlockwise')+' · '+pair,{type:'agile-pivot',direction,steps,thrusterPair:pair},hull.pivotCost[0]*steps,[main==='forward'?forward:aft,[sideName+'_thrust']]);
-  if(!hull.agile)add('Start Pivot '+(direction===1?'Clockwise':'Anticlockwise')+' · '+pair,{type:'pivot-start',direction,thrusterPair:pair},2,[main==='forward'?forward:aft,[sideName+'_thrust']]);
-  if(!hull.agile)add('Halt Pivot · '+pair,{type:'pivot-halt',thrusterPair:pair},2,[main==='forward'?forward:aft,[sideName+'_thrust']]);
+  if(!hull.agile)for(const oddTo of ['main','side'])add('Start Pivot '+(direction===1?'Clockwise':'Anticlockwise')+' · '+pair,{type:'pivot-start',direction,thrusterPair:pair,oddTo},hull.pivotCost[0],[main==='forward'?forward:aft,[sideName+'_thrust']]);
+  if(!hull.agile)for(const oddTo of ['main','side'])add('Halt Pivot · '+pair,{type:'pivot-halt',thrusterPair:pair,oddTo},hull.pivotCost[1],[main==='forward'?forward:aft,[sideName+'_thrust']]);
  }
  if(hull.agile)add('Roll 180° Immediately',{type:'agile-roll'},hull.rollCost[0],[Object.keys(e.thrusterRatings)]);
- if(!hull.agile)add('Start Roll',{type:'roll-start'},1,[Object.keys(e.thrusterRatings)]);if(!hull.agile)add('Halt Roll',{type:'roll-halt'},1,[Object.keys(e.thrusterRatings)]);
+ if(!hull.agile)add('Start Roll',{type:'roll-start'},hull.rollCost[0],[Object.keys(e.thrusterRatings)]);if(!hull.agile)add('Halt Roll',{type:'roll-halt'},hull.rollCost[1],[Object.keys(e.thrusterRatings)]);
  return templates;
 }
 

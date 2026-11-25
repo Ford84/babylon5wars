@@ -71,7 +71,7 @@ export function targetFireControlIndex(hullClass){
  if(['fighter','shuttle'].includes(hullClass))return 2;
  throw new RangeError('Unverified target hull class');
 }
-export function vorchanTargetingPreview({shooter,target,mountId,arc,blockingHexes=[],sameHexPrevious=null,defenderDirection=null,attackerOffensiveEW=0,targetDefensiveEW=0,otherModifiers=[],verifiedTerrain=true,rangePenaltyAdjustment=0,elintOffensive=0,elintDefensive=0,disruptedEW=0}){
+export function vorchanTargetingPreview({shooter,target,mountId,arc,blockingHexes=[],sameHexPrevious=null,defenderDirection=null,attackerOffensiveEW=0,targetDefensiveEW=0,otherModifiers=[],verifiedTerrain=true,rangePenaltyAdjustment=0,elintOffensive=0,elintDefensive=0,disruptedEW=0,mode=null}){
  if(!shooter||!target||shooter.id===target.id)throw new RangeError('Distinct ships required');
  const shooterHull=hullProfile(shooter.libraryId),targetHull=hullProfile(target.libraryId);
  if(!shooterHull||shooter.hullClass!==shooterHull.class)throw new RangeError('Shooter SCS weapon profile is not verified');
@@ -89,13 +89,17 @@ export function vorchanTargetingPreview({shooter,target,mountId,arc,blockingHexe
  const rangePenalty=weaponRangePenalty({range:distance,penaltyPerStep:weapon.rangePenaltyPerHex-rangePenaltyAdjustment,hexesPerStep:weapon.rangeHexesPerStep||1});
  const ew=ewAttackModifier({attackerOffensive:attackerOffensiveEW,targetDefensive:targetDefensiveEW,rangePenalty});
  if(!Array.isArray(otherModifiers)||otherModifiers.some(x=>!x||!int(x.value)||x.verified!==true||typeof x.reason!=='string'))throw new RangeError('Unverified additional modifier');
+ const firingMode=mode||weapon.modes[0],modeModifier=firingMode==='Piercing'?-4:0;
  const extra=otherModifiers.reduce((n,m)=>n+m.value,0);
- const total=defence===null?null:defence+fireControl+ew.total+extra+elintOffensive-elintDefensive;
+ const total=defence===null?null:defence+fireControl+ew.total+extra+elintOffensive-elintDefensive+modeModifier;
  const blockers=[];
+ if(!weapon.modes.includes(firingMode))blockers.push('Unsupported firing mode');
+ if(firingMode==='Piercing'&&(target.hullClass==='shuttle'||target.hullClass==='fighter'))blockers.push('Piercing cannot target fighters or shuttles');
+ if(firingMode==='Piercing'&&attackerOffensiveEW+elintOffensive<4)blockers.push('Piercing requires at least 4 effective offensive EW on this target');
  if(fireControl===null)blockers.push('This weapon can only attack fighters or shuttles');
  if(!attackArc.allowed)blockers.push(attackArc.reason||'Arc decision pending');
  if(!los.clear)blockers.push(los.reason||'Line of sight blocked');
  if(!direction)blockers.push('Defender must choose incoming boundary direction');
- return {readyForHitRoll:blockers.length===0,blockers,mountId,weaponId:weapon.id,distance,attackArc,incoming,chosenDirection:direction,los,breakdown:{baseDefence:defence,rangeStepHexes:weapon.rangeHexesPerStep||1,rangeStepPenalty:(weapon.rangePenaltyPerHex-rangePenaltyAdjustment)*(ew.lockedOn?1:2),elintOffensive,elintDefensive,disruptedEW,distance,rangePerHex:distance?ew.adjustedRangePenalty/distance:weapon.rangePenaltyPerHex-rangePenaltyAdjustment,lockedOn:ew.lockedOn,offensiveEW:ew.offensiveBonus,defensiveEW:ew.defensivePenalty,fireControl,rangePenalty:ew.adjustedRangePenalty,extra,total},hitOnD20AtOrBelow:total};
+ return {readyForHitRoll:blockers.length===0,blockers,mountId,weaponId:weapon.id,distance,attackArc,incoming,chosenDirection:direction,los,breakdown:{baseDefence:defence,rangeStepHexes:weapon.rangeHexesPerStep||1,rangeStepPenalty:(weapon.rangePenaltyPerHex-rangePenaltyAdjustment)*(ew.lockedOn?1:2),elintOffensive,elintDefensive,disruptedEW,distance,rangePerHex:distance?ew.adjustedRangePenalty/distance:weapon.rangePenaltyPerHex-rangePenaltyAdjustment,lockedOn:ew.lockedOn,offensiveEW:ew.offensiveBonus,defensiveEW:ew.defensivePenalty,fireControl,rangePenalty:ew.adjustedRangePenalty,extra,modeModifier,total},hitOnD20AtOrBelow:total};
 }
 export function resolveToHit(preview,roll){if(!preview?.readyForHitRoll)throw new RangeError('Targeting preview not validated');if(!int(roll)||roll<1||roll>20)throw new RangeError('d20 must be 1–20');return {roll,hit:roll<=preview.hitOnD20AtOrBelow,targetNumber:preview.hitOnD20AtOrBelow,breakdown:preview.breakdown};}

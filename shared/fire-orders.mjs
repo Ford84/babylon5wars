@@ -1,3 +1,4 @@
+import {elintAttackEffects} from './elint.mjs';
 import {guardianCanProtect} from './guardian-array.mjs';
 import {hullProfile} from './vorchar.mjs';
 // W3: authoritative fire declarations and defensive reservations, without attack rolls.
@@ -8,9 +9,9 @@ import {checkMountArc,lineOfSight} from './weapon-targeting.mjs';
 const mounts=new Map(LIB.weaponMounts.map(m=>[m.id,m]));
 const isId=x=>typeof x==='string'&&x.length>0&&x.length<=128;
 const integer=x=>Number.isInteger(x);
-export function validateFireDeclaration({playerId,ships,fire,turn}){
+export function validateFireDeclaration({playerId,ships,fire,turn,ewSnapshot,elintDisruptions=[]}){
  if(!Array.isArray(ships)||!isId(playerId)||!integer(turn)||turn<1||!fire||typeof fire!=='object'||Array.isArray(fire))throw new RangeError('Invalid fire declaration');
- if(!Array.isArray(fire.shots)||fire.shots.length>ships.length*8||fire.shots.length>200)throw new RangeError('Invalid fire shots');
+ if(!Array.isArray(fire.shots)||fire.shots.length>ships.reduce((n,s)=>n+(hullProfile(s.public_state?.libraryId)?.weaponMounts.reduce((a,m)=>a+(m.weaponId==='twin-array'?2:1),0)||0),0)||fire.shots.length>1000)throw new RangeError('Invalid fire shots');
  const byId=new Map(ships.map(s=>[s.id,s])),used=new Set(),out=[];
  for(const shot of fire.shots){
   if(!shot||!isId(shot.shipId)||!isId(shot.mountId)||!integer(shot.gun)||!['offensive','defensive'].includes(shot.role))throw new RangeError('Invalid gun declaration');
@@ -28,6 +29,7 @@ export function validateFireDeclaration({playerId,ships,fire,turn}){
    const arc=checkMountArc({shooter:ship,target,arc:mount.arc});
    if(!arc.allowed)throw new RangeError(arc.reason||'Target outside weapon arc');
    if(shot.mode!==undefined&&!weapon.modes.includes(shot.mode))throw new RangeError('Unsupported firing mode');
+   if(shot.mode==='Piercing'){const ew=elintAttackEffects({shooter:ship,target,units:ships,initial:ewSnapshot||ships,disruptions:elintDisruptions,baseDefence:0});if(target.kind==='shuttle'||ew.ownOffensive+ew.offensive<4)throw new RangeError('Piercing requires a ship target and at least 4 effective offensive EW');}
    if(shot.calledShot!==undefined&&shot.calledShot!==null)throw new RangeError('Called shots require separate verified rules');
    if(!integer(shot.order)||shot.order<1||shot.order>100)throw new RangeError('Declare firing order before dice');
   }else if(!weapon.intercept||weapon.id==='guardian-array'&&ship.private_state?.trial?.guardianMode?.mode!=='defensive')throw new RangeError(weapon.name+' cannot intercept in its current mode');
@@ -36,7 +38,7 @@ export function validateFireDeclaration({playerId,ships,fire,turn}){
    if(shot.role==='defensive')throw new RangeError('Plasma accelerator cannot intercept');
    if(![1,2,3].includes(shot.chargeTurns))throw new RangeError('Plasma charge interval must be 1, 2 or 3 turns');
   }else if(shot.chargeTurns!==undefined)throw new RangeError('Twin Array has no plasma charge');
-  out.push({...shot,mode:weapon.modes[0]});
+  out.push({...shot,mode:shot.mode||weapon.modes[0]});
  }
  const orders=new Map();
  for(const shot of out.filter(s=>s.role==='offensive')){
@@ -62,6 +64,7 @@ export function validateDefensiveAssignment({playerId,ships,declarations,assignm
   const key=a.shipId+':'+a.mountId+':'+a.gun,defender=reserves.get(key),attack=attacks.get(a.attackId);
   if(used.has(key)||!defender||defender.playerId!==playerId||!attack||attack.playerId===playerId)throw new RangeError('Defence must use a unique reserved gun against an incoming attack');
   if(!byId.has(attack.shipId)||!byId.has(a.shipId))throw new RangeError('Unknown ship in defensive assignment');
+  const attackingHull=hullProfile(byId.get(attack.shipId)?.public_state?.libraryId),attackingMount=attackingHull?.weaponMounts.find(m=>m.id===attack.mountId);if(attackingHull?.weapons.find(w=>w.id===attackingMount?.weaponId)?.class==='Laser')throw new RangeError('Laser weapons cannot be intercepted');
   const mount=hullProfile(byId.get(a.shipId)?.public_state?.libraryId)?.weaponMounts.find(m=>m.id===a.mountId),weapon=hullProfile(byId.get(a.shipId)?.public_state?.libraryId)?.weapons.find(w=>w.id===mount?.weaponId);
   if(!weapon||weapon.intercept===null)throw new RangeError('Gun cannot intercept');
   if(!guardianCanProtect({defender:byId.get(a.shipId),source:byId.get(attack.shipId),target:byId.get(attack.targetId),mount,direction:directions[attack.shipId+':'+attack.targetId]}))throw new RangeError('Incoming attacker outside defensive firing arc or Guardian protection geometry');

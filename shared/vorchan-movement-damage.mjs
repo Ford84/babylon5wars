@@ -6,14 +6,14 @@ const whole=n=>Number.isInteger(n)&&n>=0;
 const THRUSTERS=new Set(['forward_port_thrust','forward_starboard_thrust','port_thrust','starboard_thrust','aft_port_thrust','aft_starboard_thrust']);
 export function adjudicateVorchanMovementDamage(trial,{systemId,markedBoxes=0,destroyed=false,reactorPowerLoss=0,engineThrustLoss=0}={}){
  if(!trial||typeof systemId!=='string'||!systemId||!whole(markedBoxes)||!whole(reactorPowerLoss)||!whole(engineThrustLoss)||typeof destroyed!=='boolean')throw new RangeError('Invalid damage adjudication');
- if(!THRUSTERS.has(systemId)&&!hullSystems(trial.libraryId).some(s=>s.id===systemId))throw new RangeError('Unknown Vorchan system');
+ if(!hullSystems(trial.libraryId).some(s=>s.id===systemId&&s.kind==='thruster')&&!hullSystems(trial.libraryId).some(s=>s.id===systemId))throw new RangeError('Unknown Vorchan system');
  const track=hullSystems(trial.libraryId).find(s=>s.id===systemId);
  if(!track?.verified||!Number.isInteger(track.boxes))throw new RangeError('Unverified SCS damage track: '+systemId);
  if(markedBoxes>track.boxes||destroyed&&markedBoxes<track.boxes)throw new RangeError('Damage exceeds track or destruction lacks full marked boxes');
  if(systemId!=='reactor'&&reactorPowerLoss!==0||systemId!=='engine'&&engineThrustLoss!==0)throw new RangeError('Critical loss assigned to wrong system');
  const systemDamage={...(trial.systemDamage??{}),[systemId]:markedBoxes};
  const thrusterDamageBoxes={...(trial.thrusterDamageBoxes??{})};
- if(THRUSTERS.has(systemId))thrusterDamageBoxes[systemId]=markedBoxes;
+ if(hullSystems(trial.libraryId).some(s=>s.id===systemId&&s.kind==='thruster'))thrusterDamageBoxes[systemId]=markedBoxes;
  const destroyedSystems=[...new Set([...(trial.destroyedSystems??[]),...(destroyed?[systemId]:[])])];
  return {...trial,systemDamage,thrusterDamageBoxes,destroyedSystems,
   verifiedReactorPowerLoss:systemId==='reactor'?reactorPowerLoss:(trial.verifiedReactorPowerLoss??0),
@@ -22,7 +22,7 @@ export function adjudicateVorchanMovementDamage(trial,{systemId,markedBoxes=0,de
 }
 export function assertVorchanMovementDamageConsistent(trial){
  for(const [id,boxes] of Object.entries(trial.thrusterDamageBoxes??{})){
-  if(!THRUSTERS.has(id)||!whole(boxes))throw new RangeError('Unverified thruster damage');
+  if(!hullSystems(trial.libraryId).some(s=>s.id===id&&s.kind==='thruster')||!whole(boxes))throw new RangeError('Unverified thruster damage');
  }
  for(const [id,marked] of Object.entries(trial.systemDamage??{})){
   const track=hullSystems(trial.libraryId).find(s=>s.id===id);
