@@ -278,6 +278,11 @@ function executeCommand(state,playerId,command,die=rollDie){
  if(!requiredActors(s).includes(playerId))fail('Wait for your required action');
  if(s.carrierEscape){if(command.type!=='carrier-escape')fail('Resolve carrier escape first');const o=s.carrierEscape;applyCarrierEscape(s,o,playerId,command.selected);s.ships.find(x=>x.id===o.carrierId).escapeResolved=true;s.carrierEscape=null;record(s,'carrier_escape_resolved',{shipId:o.carrierId,selected:command.selected});checkVictory(s);if(!s.carrierEscape)settleAutomaticActions(s,die);return s;}
  if(s.phase==='fighter_orders'){
+  if(command.type==='fighter-combat-pivot'){
+   const f=activeFighterFlights(s).find(x=>x.id===command.unitId&&x.owner_id===playerId);
+   if(!f||Object.keys(s.fighterOrders||{}).length)fail('Combat pivots must precede weapon commitments');
+   Object.assign(f,fighterCombatPivot(f,command.steps));record(s,'fighter_combat_pivot',{flightId:f.id,facing:f.facing,thrustSpent:f.thrustUsed});return s;
+  }
   if(command.type!=='fighter-orders')fail('Commit fighter orders');
   const flights=activeFighterFlights(s),geometry=(a,b)=>{const g=fighterTargeting(a,b);return {...g,allowed:g.ready};};
   s.fighterOrders=commitFighterOrders(flights,s.fighterOrders,playerId,command.orders,geometry);
