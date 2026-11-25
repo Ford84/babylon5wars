@@ -261,6 +261,22 @@ function executeCommand(state,playerId,command,die=rollDie){
   if(members(s).every(p=>s.locks[p])){initiativeOrder(s,die);next(s,'ew_commit');}
    settleAutomaticActions(s,die);return s;
  }
+ if(s.operations&&s.phase==='movement'&&['shuttle','fighter-flight'].includes(currentMover(s)?.kind)){
+  const mover=currentMover(s);
+  if(mover.owner_id!==playerId)fail('Wait for your unit');
+  if(command.type==='move'){
+  const unit=currentMover(s),before={q:unit.q,r:unit.r};Object.assign(unit,unit.kind==='fighter-flight'?moveFighter(unit,command.action):moveShuttle(unit,command.action));noteEntry(s,unit,before);
+  if(command.enterPointId)enterJump(s,unit,command.enterPointId);
+  const bounds=MAP_PRESETS[s.mapPreset];if(unit.q<0||unit.r<0||unit.q>=bounds.columns||unit.r>=bounds.rows)unit.status='escaped';
+  record(s,unit.kind==='fighter-flight'?'fighter_moved':'shuttle_moved',{shipId:unit.id,q:unit.q,r:unit.r,facing:unit.facing,speed:unit.speed,thrustSpent:unit.movement.spent});
+ 
+  }else if(command.type==='movement-done'){
+   if(mover.movement.remaining!==0)fail('Complete the unit’s remaining movement');
+   s.unitLocks[mover.id]=true;
+  }else if(command.type==='enter-jump'){enterJump(s,mover,command.pointId);s.unitLocks[mover.id]=true;checkVictory(s);}
+  else fail('Choose a small craft movement action');
+  settleAutomaticActions(s,die);return s;
+ }
  const ship=s.operations&&s.phase==='movement'&&!['shuttle','fighter-flight'].includes(currentMover(s)?.kind)?currentMover(s):command.shipId?available.find(x=>x.id===command.shipId):available.find(x=>!s.unitPhaseLocks?.[x.id])||available[0];
  if(command.shipId&&(!ship||ship.owner_id!==playerId))fail('Choose your own active ship');
  if(!ship)fail('No surviving ship');
@@ -318,11 +334,6 @@ function executeCommand(state,playerId,command,die=rollDie){
   applyHangar(s,ship,command);lock();if(members(s).every(p=>s.locks[p]))completeTurn(s);
  }else if(command.type==='enter-jump'&&s.phase==='movement'&&s.operations){
   const unit=currentMover(s);enterJump(s,unit,command.pointId);s.unitLocks[unit.id]=true;checkVictory(s);
- }else if(command.type==='move'&&s.phase==='movement'&&s.operations&&['shuttle','fighter-flight'].includes(currentMover(s)?.kind)){
-  const unit=currentMover(s),before={q:unit.q,r:unit.r};Object.assign(unit,unit.kind==='fighter-flight'?moveFighter(unit,command.action):moveShuttle(unit,command.action));noteEntry(s,unit,before);
-  if(command.enterPointId)enterJump(s,unit,command.enterPointId);
-  const bounds=MAP_PRESETS[s.mapPreset];if(unit.q<0||unit.r<0||unit.q>=bounds.columns||unit.r>=bounds.rows)unit.status='escaped';
-  record(s,unit.kind==='fighter-flight'?'fighter_moved':'shuttle_moved',{shipId:unit.id,q:unit.q,r:unit.r,facing:unit.facing,speed:unit.speed,thrustSpent:unit.movement.spent});
  }else if(command.type==='move'&&s.phase==='movement'){
   const action=command.action,advanceAfter=command.advanceAfter??0;
   if(!int(advanceAfter)||advanceAfter>10000||advanceAfter&&['advance','slide','extended-cancel'].includes(action?.type))fail('Invalid automatic movement segment');
