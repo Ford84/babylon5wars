@@ -202,6 +202,11 @@ function settleAutomaticActions(s,die){
  for(let step=0;step<12&&s.status==='active';step++){
   if(s.carrierEscape)break;
   const phase=s.phase;let changed=false;
+  // Ship-only phases must not require orders from owners without operational ships.
+  if(s.operations&&['power','ew_commit','jump_formation','vortex_closure','hangar'].includes(phase)){
+   for(const id of new Set([...s.ships,...activeSmallCraft(s)].map(x=>x.owner_id)))if(!s.ships.some(x=>x.owner_id===id&&live(x,s.turn))&&!s.locks[id]){s.locks[id]=true;changed=true;}
+  }
+  if(phase==='power'&&members(s).every(p=>s.locks[p])){next(s,'initiative');continue;}
   if(s.operations&&phase==='jump_formation'){
    for(const ship of s.ships.filter(x=>x.kind!=='shuttle'&&live(x,s.turn)&&!s.locks[x.owner_id]&&!s.unitPhaseLocks?.[x.id]))if(!jumpAvailability(s,ship).ready){const p=s.jumpPoints.find(p=>p.shipId===ship.id&&p.status==='open');if(p&&hullProfile(trial(ship).libraryId).jumpDelay&&!effectiveCondition(trial(ship),s.turn).powerOff&&!effectiveCondition(trial(ship),s.turn).destroyedSystems.includes('jump_aft_centre'))jumpCheck(s,ship,die);markShip(s,ship);changed=true;}
    if(checkVictory(s)){changed=true;}else if(members(s).every(p=>s.locks[p])){startMovement(s);changed=true;}
