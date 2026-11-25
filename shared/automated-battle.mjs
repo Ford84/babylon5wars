@@ -29,7 +29,7 @@ import {newCondition,effectiveCondition,projectTrial,systemPowerForHull,rollDie,
 export const PLAY_PHASES=Object.freeze([
  {id:'power',label:'Ship Power',group:'initial'}, {id:'initiative',label:'Initiative',group:'initial'},
  {id:'ew_commit',label:'Electronic Warfare',group:'initial'}, {id:'ew_disruption',label:'ELINT Disruption',group:'initial'}, {id:'jump_formation',label:'Jump Point Formation',group:'initial'}, {id:'movement',label:'Unit Movement',group:'movement'},
- {id:'fighter_orders',label:'Fighter Weapon Orders',group:'combat'}, {id:'fighter_damage',label:'Fighter Damage',group:'combat'}, {id:'fire_commit',label:'Weapon Orders',group:'combat'}, {id:'fire_resolution',label:'Defence And Damage',group:'combat'}, {id:'critical_resolution',label:'Critical Checks',group:'end'}, {id:'vortex_closure',label:'Jump Point Closure',group:'end'}, {id:'hangar',label:'Hangar Operations',group:'end'}
+ {id:'combat_pivot',label:'Combat Pivots',group:'combat'}, {id:'fighter_orders',label:'Fighter Weapon Orders',group:'combat'}, {id:'fighter_damage',label:'Fighter Damage',group:'combat'}, {id:'fire_commit',label:'Weapon Orders',group:'combat'}, {id:'fire_resolution',label:'Defence And Damage',group:'combat'}, {id:'critical_resolution',label:'Critical Checks',group:'end'}, {id:'vortex_closure',label:'Jump Point Closure',group:'end'}, {id:'hangar',label:'Hangar Operations',group:'end'}
 ]);
 export const RULES_REVISION=1;
 export const SCENARIO_RULES={id:'vorchan-clear-space-duel',label:'Centauri Fleet Battle',terrain:'Clear Space',weaponCritical13:'No additional effect (the supplied printed chart omits 13).',scope:'Ship weapons, EW, movement, damage and criticals. Jump points and unarmed shuttles are tracked. Ramming and boarding are not enabled in this scenario.'};
@@ -57,6 +57,7 @@ export function createBattle(rows,players,mapPreset='standard',{passivePlayerId=
 export function requiredActors(s){
  if(s.status!=='active')return [];
  if(s.carrierEscape)return [s.carrierEscape.actorId];
+ if(s.phase==='combat_pivot')return [...new Set(activeFighterFlights(s).map(f=>f.owner_id))].filter(id=>!s.locks[id]);
  if(s.phase==='fighter_orders')return [...new Set(activeFighterFlights(s).map(f=>f.owner_id))].filter(id=>!Object.hasOwn(s.fighterOrders||{},id));
  if(s.phase==='fighter_damage')return [fighterExchangePrompt(s.fighterExchange)?.actorId].filter(Boolean);
  if(s.phase==='critical_resolution'&&s.criticalResolution)return [s.criticalResolution.actorId];
@@ -209,6 +210,10 @@ function resolveTier(s,die){
  record(s,'damage_resolved',{outcomes:adjudication.outcomes,attacks:fire.results});endTurn(s,die);
 }
 function beginFighterOrders(s){
+ if(activeFighterFlights(s).length){next(s,'combat_pivot');return;}
+ openFighterOrders(s);
+}
+function openFighterOrders(s){
  const flights=activeFighterFlights(s);s.fighterOrders={};s.fighterExchange=null;
  if(new Set(flights.map(f=>f.owner_id)).size<2){next(s,'fire_commit');return;}
  s.fighterOrders={};s.fighterExchange=null;next(s,'fighter_orders');
@@ -277,12 +282,16 @@ function executeCommand(state,playerId,command,die=rollDie){
  if(!command||typeof command.type!=='string')fail('Choose an available action');
  if(!requiredActors(s).includes(playerId))fail('Wait for your required action');
  if(s.carrierEscape){if(command.type!=='carrier-escape')fail('Resolve carrier escape first');const o=s.carrierEscape;applyCarrierEscape(s,o,playerId,command.selected);s.ships.find(x=>x.id===o.carrierId).escapeResolved=true;s.carrierEscape=null;record(s,'carrier_escape_resolved',{shipId:o.carrierId,selected:command.selected});checkVictory(s);if(!s.carrierEscape)settleAutomaticActions(s,die);return s;}
- if(s.phase==='fighter_orders'){
+ if(s.phase==='combat_pivot'){
   if(command.type==='fighter-combat-pivot'){
    const f=activeFighterFlights(s).find(x=>x.id===command.unitId&&x.owner_id===playerId);
-   if(!f||Object.keys(s.fighterOrders||{}).length)fail('Combat pivots must precede weapon commitments');
-   Object.assign(f,fighterCombatPivot(f,command.steps));record(s,'fighter_combat_pivot',{flightId:f.id,facing:f.facing,thrustSpent:f.thrustUsed});return s;
-  }
+   if(!f)fail('Choose your fighter flight');
+   Object.assign(f,fighterCombatPivot(f,command.steps));record(s,'fighter_combat_pivot',{flightId:f.id,facing:f.facing,thrustSpent:f.thrustUsed});
+  }else if(command.type==='combat-pivot-done'){s.locks[playerId]=true;if(activeFighterFlights(s).every(f=>s.locks[f.owner_id]))openFighterOrders(s);}
+  else fail('Choose combat pivot or finish');
+  settleAutomaticActions(s,die);return s;
+ }
+ if(s.phase==='fighter_orders'){
   if(command.type!=='fighter-orders')fail('Commit fighter orders');
   const flights=activeFighterFlights(s),geometry=(a,b)=>{const g=fighterTargeting(a,b);return {...g,allowed:g.ready};};
   s.fighterOrders=commitFighterOrders(flights,s.fighterOrders,playerId,command.orders,geometry);
@@ -438,6 +447,7 @@ export function completePassiveActions(state,die=rollDie){
   if(!id||!requiredActors(s).includes(id)){s.journal=journal;return s;}
   const candidates=s.ships.filter(x=>x.owner_id===id&&live(x,s.turn));const ship=s.operations&&s.phase==='movement'&&!['shuttle','fighter-flight'].includes(currentMover(s)?.kind)?currentMover(s):candidates.find(x=>!s.unitPhaseLocks?.[x.id])||candidates[0];let command;
   if(s.carrierEscape)command={type:'carrier-escape',selected:s.carrierEscape.craft.slice(0,s.carrierEscape.count).map(x=>x.id)};
+  else if(s.phase==='combat_pivot')command={type:'combat-pivot-done'};
   else if(s.phase==='fighter_orders')command={type:'fighter-orders',orders:[]};
   else if(s.phase==='fighter_damage')command={type:'fighter-damage',slot:fighterExchangePrompt(s.fighterExchange).slots[0]};
   else if(s.phase==='power')command={type:'power'};
