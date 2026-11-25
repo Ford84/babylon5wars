@@ -1,3 +1,4 @@
+import {fighterFlightStatus,fighterFlightData} from './centauri-combat-data.mjs';
 import {hullProfile,hullSystems} from './vorchar.mjs';
 // Compendium: Jump Engines / Opening, Closing and Maintaining a Jump Point;
 // Hangars / Launching and Landing; Fighter/Shuttle Movement. Vorchan v3 SCS.
@@ -13,6 +14,7 @@ export const currentMover=s=>s.operations?(s.unitMoveOrder||[]).map(id=>[...s.sh
 export function enableOperations(s){
  s.operations=true;if(s.scenario)s.scenario={...s.scenario,scope:'Ship weapons, EW, movement, damage, criticals, jump points and unarmed shuttles. Ramming and boarding are not enabled.'};s.jumpPoints??=[];s.lastHexEntry??={};
  s.shuttles??=s.ships.flatMap(ship=>Array.from({length:hullProfile(ship.public_state?.libraryId)?.shuttles??2},(_,i)=>i+1).map(n=>({id:ship.id+'-shuttle-'+n,kind:'shuttle',owner_id:ship.owner_id,carrierId:ship.id,label:ship.label+' · Shuttle '+n,stats:{...SHUTTLE,thrust:hullProfile(ship.public_state?.libraryId)?.hangar?.shuttleThrust??4,armour:hullProfile(ship.public_state?.libraryId)?.hangar?.shuttleArmour??0},status:'aboard',damage:0,q:ship.q,r:ship.r,facing:ship.facing,motionFacing:ship.facing,speed:0})));
+ s.fighterFlights??=s.ships.flatMap(ship=>(ship.private_state.trial.fighterComplement||[]).map((flight,i)=>({...structuredClone(flight),id:ship.id+'-flight-'+(i+1),kind:'fighter-flight',owner_id:ship.owner_id,carrierId:ship.id,label:fighterFlightData(flight.flightType).name+' '+(i+1),status:'aboard',q:ship.q,r:ship.r,facing:ship.facing,motionFacing:ship.facing,speed:0})));
  for(const x of s.ships){const t=x.private_state.trial;t.jump??={readyTurn:1,powered:!t.powerAllocation?.reactorShutdown&&!t.powerAllocation?.deactivated?.includes('jump_aft_centre')};if(effectiveCondition(t,s.turn).shipDestroyed||t.condition.damage.tracks.hangar.marked>=hullSystems(t.libraryId).find(x=>x.id==='hangar').boxes)for(const c of s.shuttles.filter(c=>c.carrierId===x.id&&c.status==='aboard')){c.status='destroyed';c.damage=10;}}
  if(s.phase==='movement'&&!s.unitMoveOrder){s.unitMoveOrder=(s.moveOrder||s.ships.map(x=>x.owner_id)).map(id=>s.ships.find(x=>x.owner_id===id)?.id).filter(Boolean);s.unitLocks=Object.fromEntries(s.ships.filter(x=>s.locks[x.owner_id]).map(x=>[x.id,true]));}
  return s;
@@ -43,19 +45,24 @@ export function hangarOptions(s,ship){
  if(!rate)reasons.push('Launch / Recovery Rate Reduced To Zero');
  const heading=x=>Math.abs(x.speed)===0?null:movementHeading(x);
  const recover=activeShuttles(s).filter(x=>x.owner_id===ship.owner_id&&x.q===ship.q&&x.r===ship.r&&heading(x)===heading({...ship,motionFacing:m.motionFacing})&&Math.abs(x.speed)>=Math.abs(ship.speed)&&Math.abs(x.speed)<=Math.abs(ship.speed)+(x.stats?.thrust??SHUTTLE.thrust));
- return {capacity,rate,aboard:aboard.map(x=>x.id),recover:recover.map(x=>x.id),lossRequired:Math.max(0,aboard.length-capacity),reasons,available:!reasons.length};
+ const fighterAboard=(s.fighterFlights||[]).filter(x=>x.carrierId===ship.id&&x.status==='aboard');
+ return {fighterAboard:fighterAboard.map(x=>({id:x.id,label:x.label,count:fighterFlightStatus(x).activeCount})),capacity,rate,aboard:aboard.map(x=>x.id),recover:recover.map(x=>x.id),lossRequired:Math.max(0,aboard.length-capacity),reasons,available:!reasons.length};
 }
-export function applyHangar(s,ship,{launch=[],recover=[],loss=[]}){
+export function applyHangar(s,ship,{launch=[],recover=[],loss=[],launchFighters=[]}){
  const o=hangarOptions(s,ship),unique=a=>Array.isArray(a)&&new Set(a).size===a.length;
- if(![launch,recover,loss].every(unique))fail('Invalid hangar selection');
+ if(![launch,recover,loss,launchFighters].every(unique))fail('Invalid hangar selection');
  if(loss.length!==o.lossRequired||loss.some(id=>!o.aboard.includes(id)))fail('Select the shuttles lost with occupied hangar boxes');
- if((launch.length||recover.length)&&(!o.available||launch.length+recover.length>o.rate))fail(o.reasons.join('; ')||'Hangar launch / recovery rate exceeded');
+ const selected=launchFighters.map(id=>o.fighterAboard.find(x=>x.id===id));
+ if(selected.some(x=>!x||!x.count))fail('Fighter flight is not eligible for launch');
+ const fighterCount=selected.reduce((n,x)=>n+x.count,0);
+ if((launch.length||recover.length||fighterCount)&&(!o.available||launch.length+recover.length+fighterCount>o.rate))fail(o.reasons.join('; ')||'Hangar launch / recovery rate exceeded');
  if(launch.some(id=>!o.aboard.includes(id)||loss.includes(id))||recover.some(id=>!o.recover.includes(id)))fail('Shuttle is not eligible for this hangar action');
  if(o.aboard.length-loss.length-launch.length+recover.length>o.capacity)fail('Insufficient intact hangar boxes');
  for(const id of loss){const x=s.shuttles.find(x=>x.id===id);x.status='destroyed';x.damage=10;log(s,'shuttle_lost_in_hangar',{shipId:ship.id,shuttleId:id});}
  for(const id of launch){const x=s.shuttles.find(x=>x.id===id);Object.assign(x,{status:'deployed',q:ship.q,r:ship.r,facing:ship.facing,motionFacing:ship.private_state.trial.movement?.state.motionFacing??ship.facing,speed:ship.speed,launchedTurn:s.turn});s.lastHexEntry[x.id]=s.lastHexEntry[ship.id];log(s,'shuttle_launched',{shipId:ship.id,shuttleId:id,q:x.q,r:x.r,facing:x.facing,speed:x.speed});}
  for(const id of recover){Object.assign(s.shuttles.find(x=>x.id===id),{status:'aboard',carrierId:ship.id});log(s,'shuttle_recovered',{shipId:ship.id,shuttleId:id});}
- if(launch.length||recover.length)ship.private_state.trial.hangarActionTurn=s.turn;
+ for(const id of launchFighters){const x=s.fighterFlights.find(x=>x.id===id);Object.assign(x,{status:'deployed',q:ship.q,r:ship.r,facing:ship.facing,motionFacing:ship.private_state.trial.movement?.state.motionFacing??ship.facing,speed:ship.speed,launchedTurn:s.turn});s.lastHexEntry[x.id]=s.lastHexEntry[ship.id];log(s,'fighter_flight_launched',{shipId:ship.id,flightId:id,count:fighterFlightStatus(x).activeCount,q:x.q,r:x.r,facing:x.facing,speed:x.speed});}
+ if(launch.length||recover.length||fighterCount)ship.private_state.trial.hangarActionTurn=s.turn;
 }
 export function jumpCheck(s,ship,die){
  const marked=ship.private_state.trial.condition.damage.tracks.jump_aft_centre.marked,risk=Math.floor(marked*100/hullSystems(ship.private_state.trial.libraryId).find(x=>x.id==='jump_aft_centre').boxes);
