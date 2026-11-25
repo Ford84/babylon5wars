@@ -1,3 +1,4 @@
+import {carrierEscapeOptions,applyCarrierEscape} from './carrier-escape.mjs';
 import {fighterFlightData} from './centauri-combat-data.mjs';
 import {fighterPurchase} from './fleet-setup.mjs';
 import {guardianPowerMode} from './guardian-array.mjs';
@@ -52,6 +53,7 @@ export function createBattle(rows,players,mapPreset='standard',{passivePlayerId=
 }
 export function requiredActors(s){
  if(s.status!=='active')return [];
+ if(s.carrierEscape)return [s.carrierEscape.actorId];
  if(s.phase==='critical_resolution'&&s.criticalResolution)return [s.criticalResolution.actorId];
  if(s.phase==='ew_disruption')return [s.elintDisruptions.find(x=>x.removed===null)?.actorId].filter(Boolean);
  const players=members(s);
@@ -64,8 +66,17 @@ export function requiredActors(s){
 function markShip(s,ship){s.unitPhaseLocks??={};s.unitPhaseLocks[ship.id]=true;if(s.ships.filter(x=>x.owner_id===ship.owner_id&&live(x,s.turn)).every(x=>s.unitPhaseLocks[x.id]))s.locks[ship.owner_id]=true;}
 function next(s,phase){s.phase=phase;s.locks={};s.unitPhaseLocks={};s.unitPhaseStamp=s.turn+':'+phase;record(s,'phase_advanced',{to:phase});}
 function checkVictory(s){
- if(s.operations)for(const ship of s.ships)if(effectiveCondition(trial(ship),s.turn).shipDestroyed)for(const x of s.shuttles.filter(x=>x.carrierId===ship.id&&x.status==='aboard')){x.status='destroyed';x.damage=10;}
- if(s.operations)for(const ship of s.ships)if(effectiveCondition(trial(ship),s.turn).shipDestroyed)for(const f of (s.fighterFlights||[]).filter(x=>x.carrierId===ship.id&&x.status==='aboard')){f.status='destroyed';for(const x of f.fighters){x.destroyed=true;x.damage=fighterFlightData(f.flightType).structureBoxes;}}
+ if(s.operations){
+  if(s.carrierEscape)return false;
+  for(const ship of s.ships){
+   if(!effectiveCondition(trial(ship),s.turn).shipDestroyed||ship.escapeResolved)continue;
+   const o=carrierEscapeOptions(s,ship,rollDie(20));
+   if(!o.craft.length){ship.escapeResolved=true;continue;}
+   record(s,'carrier_escape_roll',{shipId:ship.id,roll:o.roll,count:o.count});
+   if(o.count>0&&o.count<o.craft.length){s.carrierEscape=o;return false;}
+   applyCarrierEscape(s,o,o.actorId,o.count?o.craft.map(x=>x.id):[]);ship.escapeResolved=true;
+  }
+ }
  const alive=s.ships.filter(x=>live(x,s.turn));
  if(new Set(alive.map(x=>x.owner_id)).size<2){s.status='finished';s.winner=alive[0]?.owner_id||null;record(s,'battle_finished',{winner:s.winner});return true;}return false;
 }
@@ -189,6 +200,7 @@ function resolveTier(s,die){
 function settleAutomaticActions(s,die){
  // Iterate only through phases whose remaining work has no player decision.
  for(let step=0;step<12&&s.status==='active';step++){
+  if(s.carrierEscape)break;
   const phase=s.phase;let changed=false;
   if(s.operations&&phase==='jump_formation'){
    for(const ship of s.ships.filter(x=>x.kind!=='shuttle'&&live(x,s.turn)&&!s.locks[x.owner_id]&&!s.unitPhaseLocks?.[x.id]))if(!jumpAvailability(s,ship).ready){const p=s.jumpPoints.find(p=>p.shipId===ship.id&&p.status==='open');if(p&&hullProfile(trial(ship).libraryId).jumpDelay&&!effectiveCondition(trial(ship),s.turn).powerOff&&!effectiveCondition(trial(ship),s.turn).destroyedSystems.includes('jump_aft_centre'))jumpCheck(s,ship,die);markShip(s,ship);changed=true;}
@@ -238,6 +250,7 @@ function executeCommand(state,playerId,command,die=rollDie){
  if(s.status!=='active')fail('This battle has finished');
  if(!command||typeof command.type!=='string')fail('Choose an available action');
  if(!requiredActors(s).includes(playerId))fail('Wait for your required action');
+ if(s.carrierEscape){if(command.type!=='carrier-escape')fail('Resolve carrier escape first');const o=s.carrierEscape;applyCarrierEscape(s,o,playerId,command.selected);s.ships.find(x=>x.id===o.carrierId).escapeResolved=true;s.carrierEscape=null;record(s,'carrier_escape_resolved',{shipId:o.carrierId,selected:command.selected});checkVictory(s);if(!s.carrierEscape)settleAutomaticActions(s,die);return s;}
  const available=s.ships.filter(x=>x.owner_id===playerId&&(s.phase==='critical_resolution'||live(x,s.turn)));
  const ship=s.operations&&s.phase==='movement'&&!['shuttle','fighter-flight'].includes(currentMover(s)?.kind)?currentMover(s):command.shipId?available.find(x=>x.id===command.shipId):available.find(x=>!s.unitPhaseLocks?.[x.id])||available[0];
  if(command.shipId&&(!ship||ship.owner_id!==playerId))fail('Choose your own active ship');
@@ -367,7 +380,8 @@ export function completePassiveActions(state,die=rollDie){
   const id=s.passivePlayerId;
   if(!id||!requiredActors(s).includes(id)){s.journal=journal;return s;}
   const candidates=s.ships.filter(x=>x.owner_id===id&&live(x,s.turn));const ship=s.operations&&s.phase==='movement'&&!['shuttle','fighter-flight'].includes(currentMover(s)?.kind)?currentMover(s):candidates.find(x=>!s.unitPhaseLocks?.[x.id])||candidates[0];let command;
-  if(s.phase==='power')command={type:'power'};
+  if(s.carrierEscape)command={type:'carrier-escape',selected:s.carrierEscape.craft.slice(0,s.carrierEscape.count).map(x=>x.id)};
+  else if(s.phase==='power')command={type:'power'};
   else if(s.phase==='initiative'){const units=[...candidates,...activeSmallCraft(s).filter(x=>x.owner_id===id)];const unit=units.find(x=>(['shuttle','fighter-flight'].includes(x.kind)?x.initiative:trial(x).initiative)?.turn!==s.turn);command={type:'initiative',unitId:unit?.id};}
   else if(s.phase==='ew_commit')command={type:'ew',defensive:0,offensive:{}};
   else if(s.phase==='ew_disruption'){const r=s.elintDisruptions.find(x=>x.removed===null);let left=r.capacity;const removed={};for(const [key,n] of Object.entries(r.choices)){removed[key]=Math.min(n,left);left-=removed[key];}command={type:'elint-disrupt',scoutId:r.scoutId,targetId:r.targetId,removed};}
@@ -408,5 +422,5 @@ export function battleView(s,playerId){
  });
  const shuttles=(s.shuttles||[]).map(x=>{const d=s.resolution?.states?.[x.id];return shuttleView(d?{...x,damage:d.shuttleDamage||0,status:d.shipDestroyed?'destroyed':x.status}:x);});
  const mover=currentMover(s);
- return {ships,elintContext:enemyEWRevealed?{initial:s.ewSnapshot||[],disruptions:s.elintDisruptions||[]}:null,elintDisruption:s.phase==='ew_disruption'?s.elintDisruptions.find(x=>x.removed===null):null,unitPhaseLocks:s.unitPhaseLocks||{},operations:!!s.operations,shuttles,fighterFlights:(s.fighterFlights||[]).filter(x=>x.status==='deployed'||x.owner_id===playerId),jumpPoints:(s.jumpPoints||[]).filter(p=>p.status!=='closed'),movingUnitId:mover?.id,entryPoints:mover?entryOptions(s,mover):[],jumpStatus:Object.fromEntries(s.ships.map(x=>[x.id,jumpAvailability(s,x)])),hangars:s.operations?Object.fromEntries(s.ships.filter(x=>x.owner_id===playerId).map(x=>[x.id,hangarOptions(s,x)])):{},criticalResolution:criticalView(s),resolution:guidedCombatView(s),phase:PLAY_PHASES.find(p=>p.id===s.phase),phases:PLAY_PHASES,scenario:s.scenario,needsAction:required.includes(playerId),required,locked:!!s.locks[playerId],declarations:s.phase==='fire_commit'?s.declarations.filter(d=>d.playerId===playerId):['fire_resolution'].includes(s.phase)?s.declarations:[],defences:s.phase==='fire_resolution'?s.defences.filter(d=>s.combatStarted||d.playerId===playerId):[],pending:s.pending||[],dice:s.combatStarted?s.dice:[],attacks:s.attacks||[],winner:s.winner};
+ return {ships,carrierEscape:s.carrierEscape||null,elintContext:enemyEWRevealed?{initial:s.ewSnapshot||[],disruptions:s.elintDisruptions||[]}:null,elintDisruption:s.phase==='ew_disruption'?s.elintDisruptions.find(x=>x.removed===null):null,unitPhaseLocks:s.unitPhaseLocks||{},operations:!!s.operations,shuttles,fighterFlights:(s.fighterFlights||[]).filter(x=>x.status==='deployed'||x.owner_id===playerId),jumpPoints:(s.jumpPoints||[]).filter(p=>p.status!=='closed'),movingUnitId:mover?.id,entryPoints:mover?entryOptions(s,mover):[],jumpStatus:Object.fromEntries(s.ships.map(x=>[x.id,jumpAvailability(s,x)])),hangars:s.operations?Object.fromEntries(s.ships.filter(x=>x.owner_id===playerId).map(x=>[x.id,hangarOptions(s,x)])):{},criticalResolution:criticalView(s),resolution:guidedCombatView(s),phase:PLAY_PHASES.find(p=>p.id===s.phase),phases:PLAY_PHASES,scenario:s.scenario,needsAction:required.includes(playerId),required,locked:!!s.locks[playerId],declarations:s.phase==='fire_commit'?s.declarations.filter(d=>d.playerId===playerId):['fire_resolution'].includes(s.phase)?s.declarations:[],defences:s.phase==='fire_resolution'?s.defences.filter(d=>s.combatStarted||d.playerId===playerId):[],pending:s.pending||[],dice:s.combatStarted?s.dice:[],attacks:s.attacks||[],winner:s.winner};
 }
