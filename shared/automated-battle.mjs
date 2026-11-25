@@ -1,8 +1,9 @@
+import {fighterFlightData} from './centauri-combat-data.mjs';
 import {fighterPurchase} from './fleet-setup.mjs';
 import {guardianPowerMode} from './guardian-array.mjs';
 import {elintBudget,validateElint,fixedEWForUnits,ewPositionSnapshot,disruptionQueue,selectDisruption} from './elint.mjs';
 import {hullProfile,hullSystems} from './vorchar.mjs';
-import {enableOperations,activeShuttles,currentMover,shuttleCombatUnit,shuttleView,jumpAvailability,hangarOptions,applyHangar,jumpCheck,openJumpPoint,checkPointRange,noteEntry,entryOptions,enterJump,closePoint,vortexClosure,newShuttleMovement,moveShuttle} from './vorchan-operations.mjs';
+import {enableOperations,activeShuttles,activeSmallCraft,activeFighterFlights,newFighterMovement,moveFighter,currentMover,shuttleCombatUnit,shuttleView,jumpAvailability,hangarOptions,applyHangar,jumpCheck,openJumpPoint,checkPointRange,noteEntry,entryOptions,enterJump,closePoint,vortexClosure,newShuttleMovement,moveShuttle} from './vorchan-operations.mjs';
 import {movementHeading} from './movement-rules.mjs';
 import {beginCriticals,advanceCriticals,criticalView} from './guided-criticals.mjs';
 import {commitMovement} from './movement-commit.mjs';
@@ -89,11 +90,11 @@ function startMovement(s){
   if(!Object.keys(t.movement.thrusterLedger).length)t.movement.thrusterLedger=Object.fromEntries(Object.entries(e.thrusterRatings).map(([id,rating])=>[id,{rating,used:0}]));
   ship.private_state.trial=projectTrial(t,s.turn);
  }
- if(s.operations)for(const x of activeShuttles(s))newShuttleMovement(x);
+ if(s.operations){for(const x of activeShuttles(s))newShuttleMovement(x);for(const x of activeFighterFlights(s))newFighterMovement(x);}
  checkVictory(s);
 }
 function initiativeOrder(s,die){
- const units=s.operations?[...s.ships.filter(x=>live(x,s.turn)),...activeShuttles(s).map(x=>({...x,private_state:{trial:{initiative:x.initiative}}}))]:s.ships.filter(x=>live(x,s.turn));
+ const units=s.operations?[...s.ships.filter(x=>live(x,s.turn)),...activeSmallCraft(s).map(x=>({...x,private_state:{trial:{initiative:x.initiative}}}))]:s.ships.filter(x=>live(x,s.turn));
  const ordered=units.sort((a,b)=>trial(a).initiative.total-trial(b).initiative.total);
  if(!s.operations&&ordered.length===2&&trial(ordered[0]).initiative.total===trial(ordered[1]).initiative.total){
   const rolls=[];let a,b;do{a=die(20);b=die(20);rolls.push([a,b]);if(rolls.length>200)fail('Initiative roll-off could not resolve');}while(a===b);
@@ -206,7 +207,7 @@ function settleAutomaticActions(s,die){
    if(members(s).every(p=>s.locks[p])){finishEW(s,die);changed=true;}
   }else if(phase==='movement'){
    const actor=requiredActors(s)[0],ship=s.operations?currentMover(s):s.ships.find(x=>x.owner_id===actor);
-   if(ship&&(!s.operations||currentMover(s)?.kind!=='shuttle')&&trial(ship).movement.state.remaining===0&&movementOptions(ship,s.turn,s.mapPreset).length===0){if(s.operations)s.unitLocks[ship.id]=true;else s.locks[actor]=true;record(s,'movement_automatic',{shipId:ship.id,reason:'No Remaining Movement Or Working Manoeuvre'});changed=true;}
+   if(ship&&(!s.operations||!['shuttle','fighter-flight'].includes(currentMover(s)?.kind))&&trial(ship).movement.state.remaining===0&&movementOptions(ship,s.turn,s.mapPreset).length===0){if(s.operations)s.unitLocks[ship.id]=true;else s.locks[actor]=true;record(s,'movement_automatic',{shipId:ship.id,reason:'No Remaining Movement Or Working Manoeuvre'});changed=true;}
    if(s.operations?!currentMover(s):members(s).every(p=>s.locks[p])){next(s,'fire_commit');changed=true;}
   }else if(phase==='fire_commit'){
    const ships=attackShips(s);
@@ -237,7 +238,7 @@ function executeCommand(state,playerId,command,die=rollDie){
  if(!command||typeof command.type!=='string')fail('Choose an available action');
  if(!requiredActors(s).includes(playerId))fail('Wait for your required action');
  const available=s.ships.filter(x=>x.owner_id===playerId&&(s.phase==='critical_resolution'||live(x,s.turn)));
- const ship=s.operations&&s.phase==='movement'&&currentMover(s)?.kind!=='shuttle'?currentMover(s):command.shipId?available.find(x=>x.id===command.shipId):available.find(x=>!s.unitPhaseLocks?.[x.id])||available[0];
+ const ship=s.operations&&s.phase==='movement'&&!['shuttle','fighter-flight'].includes(currentMover(s)?.kind)?currentMover(s):command.shipId?available.find(x=>x.id===command.shipId):available.find(x=>!s.unitPhaseLocks?.[x.id])||available[0];
  if(command.shipId&&(!ship||ship.owner_id!==playerId))fail('Choose your own active ship');
  if(!ship)fail('No surviving ship');
  let t=trial(ship),e=effectiveCondition(t,s.turn);
@@ -265,11 +266,11 @@ function executeCommand(state,playerId,command,die=rollDie){
   t=projectTrial(t,s.turn);ship.private_state.trial=t;record(s,'power_committed',{shipId:ship.id,allocation:t.powerAllocation});lock();
   if(!checkVictory(s)&&members(s).every(p=>s.locks[p]))next(s,'initiative');
  }else if(command.type==='initiative'&&s.phase==='initiative'){
-  const unit=s.operations&&command.unitId? [...s.ships,...activeShuttles(s)].find(x=>x.id===command.unitId&&x.owner_id===playerId):available.find(x=>trial(x).initiative?.turn!==s.turn)||ship;
-  if(!unit)fail('Choose your unit');const shuttle=unit.kind==='shuttle',old=shuttle?unit.initiative:trial(unit).initiative;if(old?.turn===s.turn)fail('This unit has already rolled initiative');
-  const result=unitInitiative({roll:die(20),printedBonus:shuttle?9:hullProfile(trial(unit).libraryId).initiativeBonus,speed:unit.speed,launchedOrLanded:!shuttle&&trial(unit).hangarActionTurn===s.turn-1,newlyLaunched:shuttle&&unit.launchedTurn===s.turn-1,otherModifiers:shuttle?0:effectiveCondition(trial(unit),s.turn).initiativeModifier});
+  const unit=s.operations&&command.unitId? [...s.ships,...activeSmallCraft(s)].find(x=>x.id===command.unitId&&x.owner_id===playerId):available.find(x=>trial(x).initiative?.turn!==s.turn)||ship;
+  if(!unit)fail('Choose your unit');const shuttle=unit.kind==='shuttle'||unit.kind==='fighter-flight',old=shuttle?unit.initiative:trial(unit).initiative;if(old?.turn===s.turn)fail('This unit has already rolled initiative');
+  const result=unitInitiative({roll:die(20),printedBonus:unit.kind==='fighter-flight'?fighterFlightData(unit.flightType).initiativeBonus:shuttle?9:hullProfile(trial(unit).libraryId).initiativeBonus,speed:unit.speed,launchedOrLanded:!shuttle&&trial(unit).hangarActionTurn===s.turn-1,newlyLaunched:shuttle&&unit.launchedTurn===s.turn-1,otherModifiers:shuttle?0:effectiveCondition(trial(unit),s.turn).initiativeModifier});
   if(shuttle)unit.initiative={...result,turn:s.turn};else trial(unit).initiative={...result,turn:s.turn};record(s,'initiative_rolled',{shipId:unit.id,...result});
-  if(!s.operations||[...available,...activeShuttles(s).filter(x=>x.owner_id===playerId)].every(x=>(x.kind==='shuttle'?x.initiative:trial(x).initiative)?.turn===s.turn))s.locks[playerId]=true;
+  if(!s.operations||[...available,...activeSmallCraft(s).filter(x=>x.owner_id===playerId)].every(x=>(['shuttle','fighter-flight'].includes(x.kind)?x.initiative:trial(x).initiative)?.turn===s.turn))s.locks[playerId]=true;
   if(members(s).every(p=>s.locks[p])){initiativeOrder(s,die);next(s,'ew_commit');}
  }else if(command.type==='ew'&&s.phase==='ew_commit'){
   const defensive=command.defensive??0,offensive=command.offensive??{},available=e.sensorStrength+(e.sensorStrength>0?t.powerAllocation.extraEW:0);
@@ -301,11 +302,11 @@ function executeCommand(state,playerId,command,die=rollDie){
   applyHangar(s,ship,command);lock();if(members(s).every(p=>s.locks[p]))completeTurn(s);
  }else if(command.type==='enter-jump'&&s.phase==='movement'&&s.operations){
   const unit=currentMover(s);enterJump(s,unit,command.pointId);s.unitLocks[unit.id]=true;checkVictory(s);
- }else if(command.type==='move'&&s.phase==='movement'&&s.operations&&currentMover(s)?.kind==='shuttle'){
-  const unit=currentMover(s),before={q:unit.q,r:unit.r};Object.assign(unit,moveShuttle(unit,command.action));noteEntry(s,unit,before);
+ }else if(command.type==='move'&&s.phase==='movement'&&s.operations&&['shuttle','fighter-flight'].includes(currentMover(s)?.kind)){
+  const unit=currentMover(s),before={q:unit.q,r:unit.r};Object.assign(unit,unit.kind==='fighter-flight'?moveFighter(unit,command.action):moveShuttle(unit,command.action));noteEntry(s,unit,before);
   if(command.enterPointId)enterJump(s,unit,command.enterPointId);
   const bounds=MAP_PRESETS[s.mapPreset];if(unit.q<0||unit.r<0||unit.q>=bounds.columns||unit.r>=bounds.rows)unit.status='escaped';
-  record(s,'shuttle_moved',{shipId:unit.id,q:unit.q,r:unit.r,facing:unit.facing,speed:unit.speed,thrustSpent:unit.movement.spent});
+  record(s,unit.kind==='fighter-flight'?'fighter_moved':'shuttle_moved',{shipId:unit.id,q:unit.q,r:unit.r,facing:unit.facing,speed:unit.speed,thrustSpent:unit.movement.spent});
  }else if(command.type==='move'&&s.phase==='movement'){
   const action=command.action,advanceAfter=command.advanceAfter??0;
   if(!int(advanceAfter)||advanceAfter>10000||advanceAfter&&['advance','slide','extended-cancel'].includes(action?.type))fail('Invalid automatic movement segment');
@@ -327,7 +328,7 @@ function executeCommand(state,playerId,command,die=rollDie){
   record(s,'ship_moved',{shipId:ship.id,action:action.type,advanceAfter,q:ship.q,r:ship.r,facing:ship.facing,speed:ship.speed,thrustSpent:result.engineThrustSpent});
  }else if(command.type==='movement-done'&&s.phase==='movement'){
   const mover=s.operations?currentMover(s):ship;
-  if((mover.kind==='shuttle'?mover.movement.remaining:trial(mover).movement.state.remaining)!==0)fail('Complete the unit’s remaining movement');
+  if((['shuttle','fighter-flight'].includes(mover.kind)?mover.movement.remaining:trial(mover).movement.state.remaining)!==0)fail('Complete the unit’s remaining movement');
   if(s.operations){s.unitLocks[mover.id]=true;if(!currentMover(s))next(s,'fire_commit');}else{lock();if(members(s).every(p=>s.locks[p]))next(s,'fire_commit');}
  }else if(command.type==='shuttle-combat-pivot'&&s.phase==='fire_commit'&&s.operations){
   const x=activeShuttles(s).find(x=>x.id===command.unitId&&x.owner_id===playerId);if(!x||![-1,1].includes(command.direction)||x.movement.spent+3>(x.stats?.thrust??4))fail('Insufficient Shuttle Thrust For Combat Pivot');x.facing=(x.facing+command.direction+6)%6;x.movement.spent+=3;record(s,'shuttle_combat_pivot',{shipId:x.id,facing:x.facing,thrustSpent:x.movement.spent});
@@ -362,15 +363,15 @@ export function completePassiveActions(state,die=rollDie){
  for(let i=0;i<500;i++){
   const id=s.passivePlayerId;
   if(!id||!requiredActors(s).includes(id)){s.journal=journal;return s;}
-  const candidates=s.ships.filter(x=>x.owner_id===id&&live(x,s.turn));const ship=s.operations&&s.phase==='movement'&&currentMover(s)?.kind!=='shuttle'?currentMover(s):candidates.find(x=>!s.unitPhaseLocks?.[x.id])||candidates[0];let command;
+  const candidates=s.ships.filter(x=>x.owner_id===id&&live(x,s.turn));const ship=s.operations&&s.phase==='movement'&&!['shuttle','fighter-flight'].includes(currentMover(s)?.kind)?currentMover(s):candidates.find(x=>!s.unitPhaseLocks?.[x.id])||candidates[0];let command;
   if(s.phase==='power')command={type:'power'};
-  else if(s.phase==='initiative'){const units=[...candidates,...activeShuttles(s).filter(x=>x.owner_id===id)];const unit=units.find(x=>(x.kind==='shuttle'?x.initiative:trial(x).initiative)?.turn!==s.turn);command={type:'initiative',unitId:unit?.id};}
+  else if(s.phase==='initiative'){const units=[...candidates,...activeSmallCraft(s).filter(x=>x.owner_id===id)];const unit=units.find(x=>(['shuttle','fighter-flight'].includes(x.kind)?x.initiative:trial(x).initiative)?.turn!==s.turn);command={type:'initiative',unitId:unit?.id};}
   else if(s.phase==='ew_commit')command={type:'ew',defensive:0,offensive:{}};
   else if(s.phase==='ew_disruption'){const r=s.elintDisruptions.find(x=>x.removed===null);let left=r.capacity;const removed={};for(const [key,n] of Object.entries(r.choices)){removed[key]=Math.min(n,left);left-=removed[key];}command={type:'elint-disrupt',scoutId:r.scoutId,targetId:r.targetId,removed};}
   else if(s.phase==='jump_formation')command={type:'jump',open:false};
   else if(s.phase==='vortex_closure')command={type:'vortex',maintain:false};
   else if(s.phase==='hangar'){const o=hangarOptions(s,ship);command={type:'hangar',loss:o.aboard.slice(0,o.lossRequired)};}
-  else if(s.phase==='movement'&&s.operations&&currentMover(s)?.kind==='shuttle')command=currentMover(s).movement.remaining?{type:'move',action:{type:'advance'}}:{type:'movement-done'};
+  else if(s.phase==='movement'&&s.operations&&['shuttle','fighter-flight'].includes(currentMover(s)?.kind))command=currentMover(s).movement.remaining?{type:'move',action:{type:'advance'}}:{type:'movement-done'};
   else if(s.phase==='movement')command=trial(ship).movement.state.remaining?{type:'move',action:{type:'advance',hexes:trial(ship).movement.state.remaining}}:{type:'movement-done'};
   else if(s.phase==='critical_resolution'){const r=s.criticalResolution;command={type:r.stage.endsWith('_roll')?'critical-roll':'critical-ok',stage:r.stage,checkId:r.check.id};}
   else if(s.phase==='fire_commit')command={type:'fire',fire:{shots:[]}};
