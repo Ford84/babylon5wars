@@ -48,22 +48,23 @@ export function hangarOptions(s,ship){
  const heading=x=>Math.abs(x.speed)===0?null:movementHeading(x);
  const recover=activeShuttles(s).filter(x=>x.owner_id===ship.owner_id&&x.q===ship.q&&x.r===ship.r&&heading(x)===heading({...ship,motionFacing:m.motionFacing})&&Math.abs(x.speed)>=Math.abs(ship.speed)&&Math.abs(x.speed)<=Math.abs(ship.speed)+(x.stats?.thrust??SHUTTLE.thrust));
  const fighterAboard=(s.fighterFlights||[]).filter(x=>x.carrierId===ship.id&&x.status==='aboard');
- return {fighterAboard:fighterAboard.map(x=>({id:x.id,label:x.label,count:fighterFlightStatus(x).activeCount})),capacity,rate,aboard:aboard.map(x=>x.id),recover:recover.map(x=>x.id),lossRequired:Math.max(0,aboard.length-capacity),reasons,available:!reasons.length};
+ const fighterSlots=fighterAboard.flatMap(f=>fighterFlightStatus(f).activeSlots.map(slot=>({id:f.id+':'+slot,flightId:f.id,slot,label:f.label+' · Fighter '+slot})));const lossOptions=[...aboard.map(x=>({id:x.id,label:x.label})),...fighterSlots];
+ return {fighterSlots,lossOptions,fighterAboard:fighterAboard.map(x=>({id:x.id,label:x.label,count:fighterFlightStatus(x).activeCount})),capacity,rate,aboard:aboard.map(x=>x.id),recover:recover.map(x=>x.id),lossRequired:Math.max(0,lossOptions.length-capacity),reasons,available:!reasons.length};
 }
 export function applyHangar(s,ship,{launch=[],recover=[],loss=[],launchFighters=[]}){
  const o=hangarOptions(s,ship),unique=a=>Array.isArray(a)&&new Set(a).size===a.length;
  if(![launch,recover,loss,launchFighters].every(unique))fail('Invalid hangar selection');
- if(loss.length!==o.lossRequired||loss.some(id=>!o.aboard.includes(id)))fail('Select the shuttles lost with occupied hangar boxes');
+ if(loss.length!==o.lossRequired||loss.some(id=>!o.lossOptions.some(x=>x.id===id)))fail('Select the craft lost with occupied hangar boxes');
  const selected=launchFighters.map(id=>o.fighterAboard.find(x=>x.id===id));
  if(selected.some(x=>!x||!x.count))fail('Fighter flight is not eligible for launch');
- const fighterCount=selected.reduce((n,x)=>n+x.count,0);
+ const fighterCount=selected.reduce((n,x)=>n+x.count-loss.filter(id=>id.startsWith(x.id+':')).length,0);
  if((launch.length||recover.length||fighterCount)&&(!o.available||launch.length+recover.length+fighterCount>o.rate))fail(o.reasons.join('; ')||'Hangar launch / recovery rate exceeded');
  if(launch.some(id=>!o.aboard.includes(id)||loss.includes(id))||recover.some(id=>!o.recover.includes(id)))fail('Shuttle is not eligible for this hangar action');
- if(o.aboard.length-loss.length-launch.length+recover.length>o.capacity)fail('Insufficient intact hangar boxes');
- for(const id of loss){const x=s.shuttles.find(x=>x.id===id);x.status='destroyed';x.damage=10;log(s,'shuttle_lost_in_hangar',{shipId:ship.id,shuttleId:id});}
+ if(o.lossOptions.length-loss.length-launch.length-fighterCount+recover.length>o.capacity)fail('Insufficient intact hangar boxes');
+ for(const id of loss){const x=s.shuttles.find(x=>x.id===id);if(x){x.status='destroyed';x.damage=10;log(s,'shuttle_lost_in_hangar',{shipId:ship.id,shuttleId:id});}else{const entry=o.fighterSlots.find(x=>x.id===id),f=s.fighterFlights.find(x=>x.id===entry.flightId),craft=f.fighters.find(x=>x.slot===entry.slot);craft.destroyed=true;craft.damage=fighterFlightData(f.flightType).structureBoxes;if(!fighterFlightStatus(f).activeCount)f.status='destroyed';log(s,'fighter_lost_in_hangar',{shipId:ship.id,flightId:f.id,slot:entry.slot});}}
  for(const id of launch){const x=s.shuttles.find(x=>x.id===id);Object.assign(x,{status:'deployed',q:ship.q,r:ship.r,facing:ship.facing,motionFacing:ship.private_state.trial.movement?.state.motionFacing??ship.facing,speed:ship.speed,launchedTurn:s.turn});s.lastHexEntry[x.id]=s.lastHexEntry[ship.id];log(s,'shuttle_launched',{shipId:ship.id,shuttleId:id,q:x.q,r:x.r,facing:x.facing,speed:x.speed});}
  for(const id of recover){Object.assign(s.shuttles.find(x=>x.id===id),{status:'aboard',carrierId:ship.id});log(s,'shuttle_recovered',{shipId:ship.id,shuttleId:id});}
- for(const id of launchFighters){const x=s.fighterFlights.find(x=>x.id===id);Object.assign(x,{status:'deployed',q:ship.q,r:ship.r,facing:ship.facing,motionFacing:ship.private_state.trial.movement?.state.motionFacing??ship.facing,speed:ship.speed,launchedTurn:s.turn});s.lastHexEntry[x.id]=s.lastHexEntry[ship.id];log(s,'fighter_flight_launched',{shipId:ship.id,flightId:id,count:fighterFlightStatus(x).activeCount,q:x.q,r:x.r,facing:x.facing,speed:x.speed});}
+ for(const id of launchFighters){const x=s.fighterFlights.find(x=>x.id===id);if(!fighterFlightStatus(x).activeCount)continue;Object.assign(x,{status:'deployed',q:ship.q,r:ship.r,facing:ship.facing,motionFacing:ship.private_state.trial.movement?.state.motionFacing??ship.facing,speed:ship.speed,launchedTurn:s.turn});s.lastHexEntry[x.id]=s.lastHexEntry[ship.id];log(s,'fighter_flight_launched',{shipId:ship.id,flightId:id,count:fighterFlightStatus(x).activeCount,q:x.q,r:x.r,facing:x.facing,speed:x.speed});}
  if(launch.length||recover.length||fighterCount)ship.private_state.trial.hangarActionTurn=s.turn;
 }
 export function jumpCheck(s,ship,die){
