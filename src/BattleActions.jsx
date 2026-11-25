@@ -19,6 +19,7 @@ const numbers=(max)=>Array.from({length:Math.max(0,Math.floor(max))+1},(_,i)=>i)
 function Amount({label,value,max,onChange}){return <label>{label}<select value={value} onChange={e=>onChange(Number(e.target.value))}>{numbers(max).map(n=><option key={n} value={n}>{n}</option>)}</select></label>;}
 export default function BattleActions(props){
  const {detail,userId,send}=props,[chosen,setChosen]=useState('');
+ if(detail.carrierEscape)return <CarrierEscape key={detail.carrierEscape.carrierId} options={detail.carrierEscape} userId={userId} send={send} busy={props.busy}/>;
  const own=detail.ships.filter(x=>x.owner_id===userId&&!x.withdrawn&&!x.public_state.condition.shipDestroyed),movement=detail.game.phase_id==='movement',selected=movement?own.find(x=>x.id===detail.movingUnitId):own.find(x=>x.id===chosen&&!detail.unitPhaseLocks?.[x.id])||own.find(x=>!detail.unitPhaseLocks?.[x.id])||own[0];
  return <>{!movement&&own.length>1&&detail.needsAction&&!detail.resolution&&!detail.criticalResolution&&!['initiative','ew_disruption'].includes(detail.game.phase_id)&&<label>Acting Ship<select value={selected?.id} onChange={e=>setChosen(e.target.value)}>{own.filter(x=>!detail.unitPhaseLocks?.[x.id]).map(x=><option key={x.id} value={x.id}>{x.label}</option>)}</select></label>}<UnitBattleActions key={selected?.id+':'+detail.game.phase_id} {...props} activeShipId={selected?.id} send={c=>send({...c,shipId:selected?.id})}/></>;
 }
@@ -126,3 +127,5 @@ function Defence({ship,detail,send,busy}){
   <button disabled={busy||[...boundaries.keys()].some(k=>!directions[k])} onClick={()=>send({type:'defence',directions,assignments:reserves.filter(r=>assignments[id(r)]).map(r=>({shipId:r.shipId,mountId:r.mountId,gun:r.gun,attackId:assignments[id(r)]}))})}>Lock Defence And Resolve Fire</button>
  </>;
 }
+
+function CarrierEscape({options:o,userId,send,busy}){const [selected,setSelected]=useState([]);return <section className="panel battle-actions"><h2>Carrier Escape</h2><p>D20: {o.roll} · {o.count} Of {o.craft.length} Craft May Escape</p>{o.actorId!==userId?<p>Waiting For The Carrier Owner To Select Survivors.</p>:<><p>Select exactly {o.count} surviving craft.</p>{o.craft.map(x=><label className="check-row" key={x.id}><input type="checkbox" checked={selected.includes(x.id)} disabled={busy||(!selected.includes(x.id)&&selected.length>=o.count)} onChange={e=>setSelected(old=>e.target.checked?[...old,x.id]:old.filter(id=>id!==x.id))}/>{x.label||x.id}</label>)}<button disabled={busy||selected.length!==o.count} onClick={()=>send({type:'carrier-escape',selected})}>Confirm Survivors ({selected.length}/{o.count})</button></>}</section>;}
