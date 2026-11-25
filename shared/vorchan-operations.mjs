@@ -9,8 +9,8 @@ import {MAP_PRESETS} from './battle-setup.mjs';
 export const SHUTTLE=Object.freeze({id:'centauri-unarmed-shuttle',thrust:4,boxes:10,armour:0,defence:{forward:8,aft:8,port:10,starboard:10},initiativeBonus:9,turnFraction:1/3});
 const fail=m=>{throw new RangeError(m);};
 const log=(s,type,data)=>s.journal.push({turn:s.turn,phase:s.phase,type,...data});
-export const activeShuttles=s=>(s.shuttles||[]).filter(x=>x.status==='deployed');
-export const activeFighterFlights=s=>(s.fighterFlights||[]).filter(x=>x.status==='deployed'&&fighterFlightStatus(x).activeCount>0);
+export const activeShuttles=s=>(s.shuttles||[]).filter(x=>x.status==='deployed'&&x.escapedTurn!==s.turn);
+export const activeFighterFlights=s=>(s.fighterFlights||[]).filter(x=>x.status==='deployed'&&x.escapedTurn!==s.turn&&fighterFlightStatus(x).activeCount>0);
 export const activeSmallCraft=s=>[...activeShuttles(s),...activeFighterFlights(s)];
 export const currentMover=s=>s.operations?(s.unitMoveOrder||[]).map(id=>[...s.ships,...activeSmallCraft(s)].find(x=>x.id===id)).find(x=>x&&!x.withdrawn&&!s.unitLocks?.[x.id]):null;
 export function enableOperations(s){
