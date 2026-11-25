@@ -15,7 +15,7 @@ export function prepareFighterExchange(flights,orders,geometry,die){
   const volleys=Array.from({length:result.hits},()=>Array.from({length:d.weapon.guns},()=>die(6)+bonus));
   attacks.push({attackerId:a.id,targetId:b.id,defenderId:b.owner_id,direction:g.direction,range:g.range,ew,result,volleys});
  }
- return {flights:snapshot,attacks,attackIndex:0,volleyIndex:0,damageLog:[]};
+ return normaliseFighterExchange({flights:snapshot,attacks,attackIndex:0,volleyIndex:0,damageLog:[]});
 }
 export function advanceFighterExchange(exchange,playerId,slot){
  const s=structuredClone(exchange);
@@ -37,3 +37,6 @@ export function fighterExchangePrompt(s){
  const a=s.attacks[s.attackIndex];if(!a)return null;
  return {actorId:a.defenderId,targetId:a.targetId,attackerId:a.attackerId,volleys:a.volleys[s.volleyIndex],slots:fighterFlightStatus(s.flights.find(f=>f.id===a.targetId)).activeSlots};
 }
+
+// Compendium: damaged fighters check dropout after the entire exchange, not between volleys.
+export function finishFighterExchange(exchange,die){if(fighterExchangePrompt(exchange))fail('Resolve all damage first');const flights=structuredClone(exchange.flights),checks=[];for(const f of flights){if(f.status!=='deployed')continue;const boxes=fighterFlightData(f.flightType).structureBoxes;for(const x of f.fighters){if(x.destroyed||x.droppedOut||!x.damage||boxes-x.damage>=10)continue;const roll=die(10);if(!Number.isInteger(roll)||roll<1||roll>10)fail('Invalid dropout roll');x.droppedOut=roll>boxes-x.damage;checks.push({flightId:f.id,slot:x.slot,roll,remaining:boxes-x.damage,droppedOut:x.droppedOut});}if(fighterFlightStatus(f).eliminated)f.status='destroyed';}return {flights,checks,damageLog:exchange.damageLog};}
