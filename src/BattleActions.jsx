@@ -23,6 +23,7 @@ export default function BattleActions(props){
  const {detail,userId,send}=props,[chosen,setChosen]=useState('');
  if(detail.carrierEscape)return <CarrierEscape key={detail.carrierEscape.carrierId} options={detail.carrierEscape} userId={userId} send={send} busy={props.busy}/>;
  if(detail.game.phase_id==='combat_pivot')return <CombatPivots {...props}/>;
+ if(detail.game.phase_id==='close_combat_ew')return <CloseCombatEW key={detail.closeCombatOptions?.[0]?.shipId} {...props}/>;
  if(detail.game.phase_id==='fighter_orders')return <FighterOrders key={detail.game.turn} {...props}/>;
  if(detail.game.phase_id==='fighter_aspect')return <FighterAspect {...props}/>;
  if(detail.game.phase_id==='fighter_damage')return <FighterDamage {...props}/>;
@@ -153,3 +154,8 @@ function CombatPivots({detail,userId,send,busy}){
 }
 
 function FighterAspect({detail,userId,send,busy}){const p=detail.fighterAspect;return <section className="panel battle-actions"><h2>Fighter Defence Aspect</h2>{p?.actorId===userId?<><p>Choose Incoming Direction</p>{p.choices.map(direction=><button key={direction} disabled={busy} onClick={()=>send({type:'fighter-aspect',direction})}>{direction}</button>)}</>:<p>Waiting For Defender</p>}</section>;}
+
+function CloseCombatEW({detail,send,busy}){
+ const [allocation,setAllocation]=useState({});const o=detail.closeCombatOptions?.[0];const spent=Object.values(allocation).reduce((a,b)=>a+b,0);
+ return <section className="panel battle-actions"><h2>Close Combat EW</h2>{!o||!detail.needsAction?<p>Waiting For Opponent</p>:<><h3>{o.label}</h3><p>{o.reserved-spent} / {o.reserved} Points Remaining</p>{o.targets.map(t=><Amount key={t.id} label={t.label} value={allocation[t.id]||0} max={Math.max(0,o.reserved-spent+(allocation[t.id]||0))} onChange={n=>setAllocation(old=>({...old,[t.id]:n}))}/>)}<button disabled={busy||spent>o.reserved} onClick={()=>send({type:'close-combat-ew',shipId:o.shipId,allocation})}>Lock Close Combat EW</button></>}</section>;
+}
