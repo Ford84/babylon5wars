@@ -70,7 +70,8 @@ export function elintAttackEffects({shooter,target,units,initial=units,disruptio
   }
  }
  const ownDefence=alloc(target).defensive||0,defensive=Math.min(loanedDefence+blanket,Math.max(0,baseDefence-ownDefence));
- return {ownOffensive:o.value,disrupted:o.removed,disruptorIds:o.scoutIds,offensive,offensiveScoutId,defensive,loanedDefence,blanket,defensiveSources};
+ const closeCombat=(target.kind==='shuttle'||target.kind==='fighter-flight')&&within(shooter,target,10)?(alloc(shooter).closeCombatTargets?.[ewKey(target)]||0):0;
+ return {ownOffensive:o.value+closeCombat,closeCombat,disrupted:o.removed,disruptorIds:o.scoutIds,offensive,offensiveScoutId,defensive,loanedDefence,blanket,defensiveSources};
 }
 
 // Lost units release their now unusable fixed allocation into self defence.
