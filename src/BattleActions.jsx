@@ -1,3 +1,4 @@
+import {fighterFlightData as pivotFlightData} from '../shared/centauri-combat-data.mjs';
 import {fighterTargeting} from '../shared/fighter-targeting.mjs';
 import {guardianCanProtect,guardianPowerMode} from '../shared/guardian-array.mjs';
 import {EWActions,ElintDisruption} from './ElintActions.jsx';
@@ -21,6 +22,7 @@ function Amount({label,value,max,onChange}){return <label>{label}<select value={
 export default function BattleActions(props){
  const {detail,userId,send}=props,[chosen,setChosen]=useState('');
  if(detail.carrierEscape)return <CarrierEscape key={detail.carrierEscape.carrierId} options={detail.carrierEscape} userId={userId} send={send} busy={props.busy}/>;
+ if(detail.game.phase_id==='combat_pivot')return <CombatPivots {...props}/>;
  if(detail.game.phase_id==='fighter_orders')return <FighterOrders key={detail.game.turn} {...props}/>;
  if(detail.game.phase_id==='fighter_damage')return <FighterDamage {...props}/>;
  const own=detail.ships.filter(x=>x.owner_id===userId&&!x.withdrawn&&!x.public_state.condition.shipDestroyed),movement=detail.game.phase_id==='movement',selected=movement?own.find(x=>x.id===detail.movingUnitId):own.find(x=>x.id===chosen&&!detail.unitPhaseLocks?.[x.id])||own.find(x=>!detail.unitPhaseLocks?.[x.id])||own[0];
@@ -142,4 +144,9 @@ function FighterOrders({detail,userId,send,busy}){
 function FighterDamage({detail,userId,send,busy}){
  const p=detail.fighterDamage,f=(detail.fighterFlights||[]).find(x=>x.id===p?.targetId);
  return <section className="panel battle-actions"><h2>Fighter Damage</h2>{!p||p.actorId!==userId?<p>Waiting For Defender</p>:<><p>{f?.label||p.targetId} · Linked Weapon Damage: {p.volleys.join(' + ')}</p>{p.slots.map(slot=><button key={slot} disabled={busy} onClick={()=>send({type:'fighter-damage',slot})}>Fighter {slot} · {f?.fighters.find(x=>x.slot===slot)?.damage||0} Damage</button>)}</>}</section>;
+}
+
+function CombatPivots({detail,userId,send,busy}){
+ const flights=(detail.fighterFlights||[]).filter(f=>f.owner_id===userId&&f.status==='deployed'&&f.escapedTurn!==detail.game.turn&&f.fighters.some(x=>!x.destroyed&&!x.droppedOut));
+ return <section className="panel battle-actions"><h2>Combat Pivots</h2>{!detail.needsAction?<p>Waiting For Opponent</p>:<>{flights.map(f=>{const left=pivotFlightData(f.flightType).freeThrust-(f.movement?.spent||0);return <div key={f.id}><h3>{f.label}</h3><p>Remaining Thrust: {left} · Facing: {f.facing}</p>{f.combatPivoted?<p>Combat Pivot Complete (−1 To Hit)</p>:[-3,-2,-1,1,2,3].filter(n=>2*Math.abs(n)<=left).map(n=><button key={n} disabled={busy} onClick={()=>send({type:'fighter-combat-pivot',unitId:f.id,steps:n})}>{n<0?'Left':'Right'} {Math.abs(n)*60}° ({2*Math.abs(n)} Thrust)</button>)}</div>;})}<button disabled={busy} onClick={()=>send({type:'combat-pivot-done'})}>Finish Combat Pivots</button></>}</section>;
 }
