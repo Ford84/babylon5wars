@@ -143,7 +143,7 @@ export function shuttleMovementOptions(x){
  return actions.flatMap(action=>{try{const next=moveShuttle(x,action);return [{action,next,cost:next.movement.spent-x.movement.spent}];}catch{return [];}});
 }
 
-export function newFighterMovement(x){newShuttleMovement(x);x.movement.turnDelay=0;x.thrustUsed=0;x.jinking=0;}
+export function newFighterMovement(x){newShuttleMovement(x);x.movement.turnDelay=0;x.thrustUsed=0;x.jinking=0;x.combatPivoted=false;}
 export function moveFighter(x,action){
  const n=structuredClone(x),m=n.movement,d=fighterFlightData(n.flightType),heading=movementHeading(n);
  if(!m||!action)fail('Invalid fighter manoeuvre');
@@ -164,3 +164,5 @@ export function fighterMovementOptions(x){
  const d=fighterFlightData(x.flightType),actions=[{type:'advance'},{type:'roll'},...Array.from({length:d.jinkingLimit},(_,i)=>({type:'jink',levels:i+1})),...[-3,-2,-1,1,2,3].flatMap(steps=>[{type:'turn',steps},{type:'pivot',steps}]),...[-1,1].map(direction=>({type:'slide',direction})),...Array.from({length:d.freeThrust*2+1},(_,i)=>i-d.freeThrust).filter(Boolean).map(change=>({type:'speed',change}))];
  return actions.flatMap(action=>{try{const next=moveFighter(x,action);return [{action,next,cost:next.movement.spent-x.movement.spent}];}catch{return [];}});
 }
+
+export function fighterCombatPivot(x,steps){if(!Number.isInteger(steps)||!steps||Math.abs(steps)>3||!x.movement||x.movement.remaining!==0||x.combatPivoted)fail('Invalid combat pivot');const cost=2*Math.abs(steps);if(x.movement.spent+cost>fighterFlightData(x.flightType).freeThrust)fail('Insufficient fighter thrust');const n=structuredClone(x);n.facing=(n.facing+steps+6)%6;n.movement.spent+=cost;n.thrustUsed=n.movement.spent;n.combatPivoted=true;return n;}
