@@ -1,3 +1,4 @@
+import {beamPlan,applyBeamPart} from './beam-damage.mjs';
 import {hullProfile} from './vorchar.mjs';
 // W8: deterministic same-tier Vorchan damage reducer. This is a pure
 // adjudicator: no dice generation, no DB writes, and no invented defender
@@ -23,22 +24,23 @@ export function adjudicateVorchanShipTier({ships,attacks,rollJournal,defenderCho
   if(!incoming||direction.requiresChoice&&!direction.choices?.includes(incoming)){
    pending.push({attackId:shot.id,type:'incoming',choices:direction.choices||[]});break;
   }
-  const rolledDamage=rollVorchanDamage({libraryId:shooter.private_state?.trial?.libraryId||shooter.public_state?.libraryId,mountId:shot.mountId,chargeTurns:shot.chargeTurns??3,dice:rolled.damageDice,range:hexDistance(shooter,target),mode:shot.mode||'Standard',damageLoss:shooter.private_state?.trial?.condition?.effects?.weapons?.[shot.mountId]?.damageLoss||0});
-  if(target.kind==='shuttle'){const marked=Math.min(10,states[target.id].shuttleDamage+rolledDamage.damage);const trace=[{systemId:'shuttle_hull',armour:0,marked:marked-states[target.id].shuttleDamage,destroyed:marked===10}];states[target.id]={shuttleDamage:marked,shipDestroyed:marked===10};outcomes.push({attackId:shot.id,targetId:target.id,damage:rolledDamage.damage,trace,shipDestroyed:marked===10});continue;}
-  if(rolledDamage.plasmaStream&&target.kind!=='shuttle'){
+  const rolledDamage=rollVorchanDamage({libraryId:shooter.private_state?.trial?.libraryId||shooter.public_state?.libraryId,mountId:shot.mountId,chargeTurns:shot.chargeTurns??3,dice:rolled.damageDice,range:hexDistance(shooter,target),mode:shot.mode||'Standard',targetClass:target.kind==='shuttle'?'shuttle':(hullProfile(target.public_state?.libraryId)||{class:'heavy_combat'}).class,damageLoss:shooter.private_state?.trial?.condition?.effects?.weapons?.[shot.mountId]?.damageLoss||0});
+  if(target.kind==='shuttle'){const marked=Math.min(10,states[target.id].shuttleDamage+Math.max(0,rolledDamage.damage-(rolledDamage.matter?0:rolledDamage.plasma?Math.floor((target.stats?.armour||0)/2):(target.stats?.armour||0))));const trace=[{systemId:'shuttle_hull',armour:target.stats?.armour||0,marked:marked-states[target.id].shuttleDamage,destroyed:marked===10}];states[target.id]={shuttleDamage:marked,shipDestroyed:marked===10};outcomes.push({attackId:shot.id,targetId:target.id,damage:rolledDamage.damage,trace,shipDestroyed:marked===10});continue;}
+  if((rolledDamage.raking||rolledDamage.piercing)&&target.kind!=='shuttle'){
    let state=states[target.id];const trace=[];
    if(rolledDamage.damage===0){outcomes.push({attackId:shot.id,targetId:target.id,damage:0,trace,shipDestroyed:false});continue;}
-   if(!Array.isArray(rolled.subVolleys)||rolled.subVolleys.length>Math.ceil(rolledDamage.damage/5))throw new RangeError('Recorded plasma stream sub-volleys required');
+   const plan=beamPlan(rolledDamage,target.public_state.libraryId,incoming,rolled.piercingSide,rolled.piercingExtras||[]),armourPaid=[];
+   if(!Array.isArray(rolled.subVolleys)||rolled.subVolleys.length>plan.length)throw new RangeError('Recorded plasma stream sub-volleys required');
    for(let i=0;i<rolled.subVolleys.length&&!state.shipDestroyed;i++){
-    const v=rolled.subVolleys[i],result=applyVorchanStandardVolley({state,damage:Math.min(5,rolledDamage.damage-i*5),plasma:true,plasmaStream:true,incoming,locationRoll:v.locationRoll,primaryRoll:v.primaryRoll??null,sideChoice:v.sideChoice,systemChoice:v.systemChoice,eligibleSystemIds:hullProfile(target.public_state?.libraryId)?.hitCharts.primary.find(([min,max])=>v.primaryRoll>=min&&v.primaryRoll<=max)?.[2]==='side_thrust'&&['port','starboard'].includes(incoming)?[incoming==='port'?'port_thrust':'starboard_thrust']:null});
-    if(result.requiresChoice)throw new RangeError('Incomplete recorded raking choice');state=result.state;trace.push(...result.trace);
+    const v=rolled.subVolleys[i],result=applyBeamPart({state,damage:rolledDamage,part:plan[i],location:v,incoming,armourPaid});
+    if(result.requiresChoice)throw new RangeError('Incomplete recorded raking choice');state=result.state;trace.push(...result.trace);armourPaid.push(...result.trace.map(t=>t.systemId));
    }
-   if(!state.shipDestroyed&&rolled.subVolleys.length!==Math.ceil(rolledDamage.damage/5))throw new RangeError('Incomplete plasma stream journal');
+   if(!state.shipDestroyed&&rolled.subVolleys.length!==plan.length)throw new RangeError('Incomplete plasma stream journal');
    states[target.id]=state;outcomes.push({attackId:shot.id,targetId:target.id,damage:rolledDamage.damage,trace,shipDestroyed:state.shipDestroyed});continue;
   }
   const side=['port','starboard'].includes(incoming);
   const relative=direction.relative;
-  const automaticSide=side&&Math.abs(relative-90)>1e-8&&Math.abs(relative-270)>1e-8?(relative<90||relative>270?'forward':'aft'):null;
+  const automaticSide=side&&(hullProfile(target.public_state?.libraryId)||{class:'heavy_combat'}).class!=='capital'&&Math.abs(relative-90)>1e-8&&Math.abs(relative-270)>1e-8?(relative<90||relative>270?'forward':'aft'):null;
   const sideChoice=automaticSide||choice.sideChoice||null;
   const location=rolled.primaryRoll;
   const eligibleSystemIds=side&&hullProfile(target.public_state?.libraryId||target.private_state?.trial?.libraryId)?.hitCharts.primary.find(([min,max])=>location>=min&&location<=max)?.[2]==='side_thrust'?[incoming==='port'?'port_thrust':'starboard_thrust']:null;

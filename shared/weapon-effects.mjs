@@ -1,6 +1,6 @@
 // Presentation only. Server hit/damage outcomes never depend on animation timing.
 export function weaponEffects(event){
- return (event?.public?.attacks||event?.attacks||[]).filter(a=>a.from&&a.to&&[a.from.q,a.from.r,a.to.q,a.to.r].every(Number.isFinite)).map((a,i)=>({...a,delay:i*140,duration:620,colour:a.effect==='plasma'?'#9eff78':a.effect==='beam'?'#ff846f':'#8ce8ff'}));
+ return (event?.public?.attacks||event?.attacks||[]).filter(a=>a.from&&a.to&&[a.from.q,a.from.r,a.to.q,a.to.r].every(Number.isFinite)).map((a,i)=>({...a,delay:i*140,duration:620,colour:a.effect==='plasma'?'#9eff78':['beam','laser'].includes(a.effect)?'#ff846f':'#8ce8ff'}));
 }
 export function sampleWeaponEffect(effect,elapsed){
  const age=elapsed-effect.delay,t=Math.max(0,Math.min(1,age/effect.duration));

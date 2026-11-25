@@ -12,13 +12,13 @@ export const activeShuttles=s=>(s.shuttles||[]).filter(x=>x.status==='deployed')
 export const currentMover=s=>s.operations?(s.unitMoveOrder||[]).map(id=>[...s.ships,...activeShuttles(s)].find(x=>x.id===id)).find(x=>x&&!x.withdrawn&&!s.unitLocks?.[x.id]):null;
 export function enableOperations(s){
  s.operations=true;if(s.scenario)s.scenario={...s.scenario,scope:'Ship weapons, EW, movement, damage, criticals, jump points and unarmed shuttles. Ramming and boarding are not enabled.'};s.jumpPoints??=[];s.lastHexEntry??={};
- s.shuttles??=s.ships.flatMap(ship=>Array.from({length:hullProfile(ship.public_state?.libraryId)?.shuttles??2},(_,i)=>i+1).map(n=>({id:ship.id+'-shuttle-'+n,kind:'shuttle',owner_id:ship.owner_id,carrierId:ship.id,label:ship.label+' · Shuttle '+n,status:'aboard',damage:0,q:ship.q,r:ship.r,facing:ship.facing,motionFacing:ship.facing,speed:0})));
+ s.shuttles??=s.ships.flatMap(ship=>Array.from({length:hullProfile(ship.public_state?.libraryId)?.shuttles??2},(_,i)=>i+1).map(n=>({id:ship.id+'-shuttle-'+n,kind:'shuttle',owner_id:ship.owner_id,carrierId:ship.id,label:ship.label+' · Shuttle '+n,stats:{...SHUTTLE,thrust:hullProfile(ship.public_state?.libraryId)?.hangar?.shuttleThrust??4,armour:hullProfile(ship.public_state?.libraryId)?.hangar?.shuttleArmour??0},status:'aboard',damage:0,q:ship.q,r:ship.r,facing:ship.facing,motionFacing:ship.facing,speed:0})));
  for(const x of s.ships){const t=x.private_state.trial;t.jump??={readyTurn:1,powered:!t.powerAllocation?.reactorShutdown&&!t.powerAllocation?.deactivated?.includes('jump_aft_centre')};if(effectiveCondition(t,s.turn).shipDestroyed||t.condition.damage.tracks.hangar.marked>=hullSystems(t.libraryId).find(x=>x.id==='hangar').boxes)for(const c of s.shuttles.filter(c=>c.carrierId===x.id&&c.status==='aboard')){c.status='destroyed';c.damage=10;}}
  if(s.phase==='movement'&&!s.unitMoveOrder){s.unitMoveOrder=(s.moveOrder||s.ships.map(x=>x.owner_id)).map(id=>s.ships.find(x=>x.owner_id===id)?.id).filter(Boolean);s.unitLocks=Object.fromEntries(s.ships.filter(x=>s.locks[x.owner_id]).map(x=>[x.id,true]));}
  return s;
 }
 export function shuttleCombatUnit(x){return {...x,public_state:{libraryId:SHUTTLE.id,hullClass:'shuttle'},private_state:{trial:{ewAllocation:{defensive:0,offensive:{}}}}};}
-export function shuttleView(x){return {...x,public_state:{libraryId:SHUTTLE.id,hullClass:'shuttle',travelFacing:x.speed===0?null:movementHeading(x),condition:{shipDestroyed:x.status==='destroyed',commandDisabled:false},damage:{shuttleDamage:x.damage}},stats:SHUTTLE};}
+export function shuttleView(x){return {...x,public_state:{libraryId:SHUTTLE.id,hullClass:'shuttle',travelFacing:x.speed===0?null:movementHeading(x),condition:{shipDestroyed:x.status==='destroyed',commandDisabled:false},damage:{shuttleDamage:x.damage}},stats:x.stats||SHUTTLE};}
 export function jumpAvailability(s,ship){
  const t=ship.private_state.trial,e=effectiveCondition(t,s.turn),j=t.jump||{readyTurn:1};
  if(!hullProfile(t.libraryId)?.jumpDelay)return {ready:false,reasons:['No Jump Engine'],risk:0};
@@ -28,7 +28,7 @@ export function jumpAvailability(s,ship){
  if(e.destroyedSystems.includes('jump_aft_centre'))reasons.push('Jump Engine Destroyed');
  if(j.readyTurn>s.turn)reasons.push('Recharging Until Turn '+j.readyTurn);
  if(s.jumpPoints?.some(p=>p.shipId===ship.id&&p.status!=='closed'))reasons.push('Jump Point Already Open');
- return {ready:!reasons.length,reasons,risk:Math.floor((t.condition.damage.tracks.jump_aft_centre.marked||0)*100/SYSTEMS.get('jump_aft_centre').boxes)};
+ return {ready:!reasons.length,reasons,risk:Math.floor((t.condition.damage.tracks.jump_aft_centre.marked||0)*100/hullSystems(ship.private_state.trial.libraryId).find(x=>x.id==='jump_aft_centre').boxes)};
 }
 export function hangarOptions(s,ship){
  const t=ship.private_state.trial,e=effectiveCondition(t,s.turn),m=t.movement?.state||{};
@@ -42,7 +42,7 @@ export function hangarOptions(s,ship){
  const rate=Math.max(0,(hullProfile(t.libraryId)?.hangarRate??2)-t.condition.effects.hangarCollapse);
  if(!rate)reasons.push('Launch / Recovery Rate Reduced To Zero');
  const heading=x=>Math.abs(x.speed)===0?null:movementHeading(x);
- const recover=activeShuttles(s).filter(x=>x.owner_id===ship.owner_id&&x.q===ship.q&&x.r===ship.r&&heading(x)===heading({...ship,motionFacing:m.motionFacing})&&Math.abs(x.speed)>=Math.abs(ship.speed)&&Math.abs(x.speed)<=Math.abs(ship.speed)+SHUTTLE.thrust);
+ const recover=activeShuttles(s).filter(x=>x.owner_id===ship.owner_id&&x.q===ship.q&&x.r===ship.r&&heading(x)===heading({...ship,motionFacing:m.motionFacing})&&Math.abs(x.speed)>=Math.abs(ship.speed)&&Math.abs(x.speed)<=Math.abs(ship.speed)+(x.stats?.thrust??SHUTTLE.thrust));
  return {capacity,rate,aboard:aboard.map(x=>x.id),recover:recover.map(x=>x.id),lossRequired:Math.max(0,aboard.length-capacity),reasons,available:!reasons.length};
 }
 export function applyHangar(s,ship,{launch=[],recover=[],loss=[]}){
@@ -58,7 +58,7 @@ export function applyHangar(s,ship,{launch=[],recover=[],loss=[]}){
  if(launch.length||recover.length)ship.private_state.trial.hangarActionTurn=s.turn;
 }
 export function jumpCheck(s,ship,die){
- const marked=ship.private_state.trial.condition.damage.tracks.jump_aft_centre.marked,risk=Math.floor(marked*100/SYSTEMS.get('jump_aft_centre').boxes);
+ const marked=ship.private_state.trial.condition.damage.tracks.jump_aft_centre.marked,risk=Math.floor(marked*100/hullSystems(ship.private_state.trial.libraryId).find(x=>x.id==='jump_aft_centre').boxes);
  if(!risk)return null;
  const roll=die(100),exploded=roll<=risk,result={roll,risk,exploded};
  ship.private_state.trial.jump.lastCheck={turn:s.turn,...result};
@@ -97,7 +97,7 @@ export function moveShuttle(x,action){
  const n=structuredClone(x),m=n.movement,costs={advance:0,speed:Math.abs(action.change),turn:Math.max(1,Math.ceil(Math.abs(n.speed)/3))+(action.shortenBy||0),slide:1,pivot:Math.abs(action.steps),roll:1,'extended-start':action.initialThrust,'extended-complete':m.extendedTurn?m.extendedTurn.totalCost-m.extendedTurn.initialThrust:NaN,'extended-cancel':0};
  if(!m||!Object.hasOwn(costs,action.type))fail('Invalid shuttle manoeuvre');
  if(m.extendedTurn&&!['advance','extended-complete','extended-cancel'].includes(action.type))fail('Complete The Extended Shuttle Turn First');
- const cost=costs[action.type];if(!Number.isInteger(cost)||cost<0||m.spent+cost>SHUTTLE.thrust)fail('Insufficient shuttle thrust');
+ const cost=costs[action.type];if(!Number.isInteger(cost)||cost<0||m.spent+cost>(n.stats?.thrust??SHUTTLE.thrust))fail('Insufficient shuttle thrust');
  const heading=movementHeading(n),offset=(n.facing-n.motionFacing+6)%6;
  if(action.type==='speed'){
   if(m.started||!Number.isInteger(action.change)||action.change===0||![0,3].includes(offset))fail('Change shuttle speed before movement, while aligned with travel');
@@ -122,7 +122,7 @@ export function moveShuttle(x,action){
   const ext=m.extendedTurn;if(!ext||ext.startedTurn!==m.turn-1||m.started)fail('Complete The Extended Turn At The Start Of Next Movement');
   const travel=(heading+ext.direction+6)%6;n.facing=travel;n.motionFacing=travel;n.speed=Math.abs(n.speed);m.turnDelay=Math.ceil(Math.abs(n.speed)/3);m.extendedTurn=null;
  }else if(action.type==='extended-cancel'){
-  const ext=m.extendedTurn;if(!ext||ext.startedTurn!==m.turn-1||m.started||ext.totalCost-ext.initialThrust<=4)fail('Only An Impossible Extended Turn Can Be Cancelled');m.extendedTurn=null;
+  const ext=m.extendedTurn;if(!ext||ext.startedTurn!==m.turn-1||m.started||ext.totalCost-ext.initialThrust<=(n.stats?.thrust??4))fail('Only An Impossible Extended Turn Can Be Cancelled');m.extendedTurn=null;
  }else n.rolled=!n.rolled;
  m.spent+=cost;m.started=true;return n;
 }

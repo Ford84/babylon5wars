@@ -1,3 +1,4 @@
+import {PRIMUS} from './primus.mjs';
 import {MOGRATTI} from './mogratti.mjs';
 import {MOGRATH} from './mograth.mjs';
 import {VORCHAR} from './vorchar.mjs';
@@ -6,7 +7,7 @@ import {VORCHAR} from './vorchar.mjs';
 // never contributing a positive modifier. All decisions precede attack dice.
 import {VORCHAN_LIBRARY_RECORD as LIB} from './vorchan-trial-library.mjs';
 const attackId=s=>[s.shipId,s.mountId,s.gun].join(':');
-const mounts=new Map([...LIB.weaponMounts,...VORCHAR.weaponMounts,...MOGRATH.weaponMounts,...MOGRATTI.weaponMounts].map(m=>[m.id,m]));
+const mounts=new Map([...LIB.weaponMounts,...VORCHAR.weaponMounts,...MOGRATH.weaponMounts,...MOGRATTI.weaponMounts,...PRIMUS.weaponMounts].map(m=>[m.id,m]));
 export function interceptModifiers({declarations,defences}){
  if(!Array.isArray(declarations)||!Array.isArray(defences))throw new RangeError('Committed fire and defence required');
  const attacks=new Map(),reserves=new Map(),used=new Set(),byAttack=new Map();
@@ -18,6 +19,7 @@ export function interceptModifiers({declarations,defences}){
  for(const d of defences)for(const a of d.defence?.assignments||[]){
   const key=attackId(a),reserve=reserves.get(key),attack=attacks.get(a.attackId),mount=mounts.get(a.mountId);
   if(used.has(key)||!reserve||reserve.playerId!==d.playerId||!attack||attack.playerId===d.playerId||attack.targetId!==a.shipId&&mount?.weaponId!=='guardian-array'||!mount)throw new RangeError('Invalid or duplicated defensive interception');
+  if(mounts.get(attack.mountId)?.weaponId==='battle-laser')throw new RangeError('Laser weapons cannot be intercepted');
   const weapon=[...LIB.weapons,...MOGRATH.weapons].find(w=>w.id===mount.weaponId);
   if(!Number.isInteger(weapon?.intercept)||weapon.intercept>=0)throw new RangeError('Weapon cannot intercept');
   used.add(key);

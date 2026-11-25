@@ -1,18 +1,15 @@
+import {hullSystems} from './vorchar.mjs';
+export const thrusterGroups=id=>Object.fromEntries(['aft','forward','port','starboard'].map(section=>[section,hullSystems(id).filter(s=>s.kind==='thruster'&&s.section===section).map(s=>s.id)]));
 // Second Edition Compendium: Movement & Maneuver, acceleration, turns, slides,
 // pivots and rolls. Validate *which* physical thrusters channel manoeuvre thrust.
 // IDs describe ship positions; no capacity is inferred from damage boxes.
-const aft=['aft_port_thrust','aft_starboard_thrust'];
-const forward=['forward_port_thrust','forward_starboard_thrust'];
-const port=['port_thrust'],starboard=['starboard_thrust'];
 const sum=(a,ids)=>ids.reduce((n,id)=>n+(a[id]||0),0);
 const total=a=>Object.values(a).reduce((n,v)=>n+v,0);
-const opposite=dir=>dir===1?port:starboard; // clockwise/right uses port
-const same=dir=>dir===1?starboard:port;
-const groupForPair={'forward-port':[forward,port],'forward-starboard':[forward,starboard],'aft-port':[aft,port],'aft-starboard':[aft,starboard]};
-export function validateManoeuvreThrusters({action,oldState,cost,allocation}){
+export function validateManoeuvreThrusters({action,oldState,cost,allocation,libraryId}){
  if(!action||!oldState||!Number.isInteger(cost)||cost<0||!allocation||typeof allocation!=='object'||Array.isArray(allocation))throw new RangeError('Invalid manoeuvre allocation');
  if(Object.values(allocation).some(v=>!Number.isInteger(v)||v<0)||total(allocation)!==cost)throw new RangeError('Thruster allocation must exactly equal manoeuvre cost');
  if(cost===0)return true;
+ const {aft,forward,port,starboard}=thrusterGroups(libraryId),opposite=dir=>dir===1?port:starboard,same=dir=>dir===1?starboard:port,groupForPair={'forward-port':[forward,port],'forward-starboard':[forward,starboard],'aft-port':[aft,port],'aft-starboard':[aft,starboard]};
  let groups=[];
  if(action.type==='speed'){
   // Acceleration/deceleration refers to signed speed change, including reverse.

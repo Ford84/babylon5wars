@@ -58,11 +58,11 @@ export function turnCostAtSpeed(speed,chart,divisor=2){
 }
 
 // Vorchan printed delay table corresponds to a 1/3 turn delay; rounding up.
-export function vorchanTurnDelayAtSpeed(speed,chart){
+export function vorchanTurnDelayAtSpeed(speed,chart,divisor=3){
  if(!integer(speed)||!Array.isArray(chart)||chart.length!==12)throw new RangeError('Invalid speed/turn delay chart');
  const n=Math.abs(speed);
  if(n===0)return 0;
- if(n>12)return Math.ceil(n/3);
+ if(n>12)return Math.ceil(n/divisor);
  const value=chart[n-1];
  if(!integer(value)||value<0)throw new RangeError('Invalid printed delay');
  return value;
