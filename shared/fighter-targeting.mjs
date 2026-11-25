@@ -1,8 +1,13 @@
 import {fighterFlightData,fighterEWModifiers} from './centauri-combat-data.mjs';
 import {bearingDegrees,facingDirections,lineOfSight} from './weapon-targeting.mjs';
 import {hexDistance} from './phases.mjs';
-// The printed fighter arc is a hex diagram. Require a verified arc predicate rather than substituting a ship arc.
-export function fighterTargeting(attacker,target,{arcAllows,defenderDirection=null,blockingHexes=[],sameHexPrevious=null}={}){
+// Rules Compendium printed p.33: narrow forward hex wedge, including boundary hexes.
+export function standardFighterArc(attacker,target,bearing){
+ if(bearing.requiresChoice||!Number.isInteger(attacker.facing)||attacker.facing<0||attacker.facing>5)return false;
+ const relative=((bearing.angle-(-60+attacker.facing*60)+540)%360)-180;
+ return Math.abs(relative)<=30+1e-8;
+}
+export function fighterTargeting(attacker,target,{arcAllows=standardFighterArc,defenderDirection=null,blockingHexes=[],sameHexPrevious=null}={}){
  const data=fighterFlightData(attacker.flightType),range=hexDistance(attacker,target);
  const bearing=bearingDegrees(attacker,target,{sameHexPrevious});
  const incoming=facingDirections(attacker,target,{sameHexPrevious});
