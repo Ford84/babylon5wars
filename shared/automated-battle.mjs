@@ -1,3 +1,4 @@
+import {fighterPurchase} from './fleet-setup.mjs';
 import {guardianPowerMode} from './guardian-array.mjs';
 import {elintBudget,validateElint,fixedEWForUnits,ewPositionSnapshot,disruptionQueue,selectDisruption} from './elint.mjs';
 import {hullProfile,hullSystems} from './vorchar.mjs';
@@ -44,7 +45,7 @@ export function createBattle(rows,players,mapPreset='standard',{passivePlayerId=
   const n={...structuredClone(t),rulesRevision:RULES_REVISION,condition:newCondition(hull.id),weaponReadiness:initialWeaponHistory(1,hull.id)};
   // Scenario starts with all weapons fully armed. Reactivation subsequently starts from scratch.
   for(const guns of Object.values(n.weaponReadiness))for(const h of Object.values(guns)){h.lastFiredTurn=-2;h.lastActivatedTurn=-1;}
-  return {id:row.id,owner_id:row.owner_id,label:row.label,q:row.q,r:row.r,facing:row.facing,speed:row.speed||0,public_state:{libraryId:hull.id,trial:true,combatPoints:hull.combatPoints},private_state:{trial:projectTrial(n,1)}};
+  return {id:row.id,owner_id:row.owner_id,label:row.label,q:row.q,r:row.r,facing:row.facing,speed:row.speed||0,public_state:{libraryId:hull.id,trial:true,combatPoints:hull.combatPoints+fighterPurchase(hull,t.fighterFlights??{}).points,fighterFlights:t.fighterFlights??{}},private_state:{trial:projectTrial(n,1)}};
  });
  const battle={passivePlayerId,combatFlow,schema:RULES_REVISION,phase:'power',turn:1,status:'active',mapPreset,ships,locks:{},declarations:[],defences:[],dice:[],choices:{},approaches:{},journal:[],scenario:SCENARIO_RULES};if(operations)enableOperations(battle);return completePassiveActions(battle);
 }
