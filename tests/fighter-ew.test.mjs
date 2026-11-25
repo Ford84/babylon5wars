@@ -1,0 +1,14 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {newSentriFlight,newRazikFlight,fighterEWModifiers} from '../shared/centauri-combat-data.mjs';
+import {newFighterMovement,moveFighter} from '../shared/vorchan-operations.mjs';
+const sentri=(jinking=0)=>({...newSentriFlight(),kind:'fighter-flight',jinking,q:5,r:5,facing:0,motionFacing:0,speed:6});
+const razik=(jinking=0)=>({...newRazikFlight(),kind:'fighter-flight',jinking,q:5,r:5,facing:0,motionFacing:0,speed:6});
+const ship={kind:'ship'};
+test('jinking costs thrust, is cumulative and limited',()=>{const f=sentri();newFighterMovement(f);const a=moveFighter(f,{type:'jink',levels:5});const b=moveFighter(a,{type:'jink',levels:3});assert.equal(b.jinking,8);assert.equal(b.movement.spent,8);assert.throws(()=>moveFighter(b,{type:'jink',levels:1}));newFighterMovement(b);assert.equal(b.jinking,0);});
+test('Razik cannot exceed remaining thrust',()=>{const f=razik();newFighterMovement(f);const a=moveFighter(f,{type:'speed',change:5});assert.throws(()=>moveFighter(a,{type:'jink',levels:10}));});
+test('fighter ignores ordinary ship DEW with direct fire',()=>assert.equal(fighterEWModifiers({attacker:sentri(2),target:ship,range:1,shipDefensiveEW:5}).total,5));
+test('same hex non-jinking fighter ignores target jinking',()=>assert.equal(fighterEWModifiers({attacker:sentri(),target:razik(6),range:0}).total,7));
+test('jinking attacker does not ignore target jinking',()=>assert.equal(fighterEWModifiers({attacker:sentri(2),target:razik(6),range:0}).total,-1));
+test('ship fire applies target jinking and OEW',()=>assert.equal(fighterEWModifiers({attacker:ship,target:razik(6),range:2,shipOffensiveEW:4}).total,-2));
+test('close combat EW limited to ten hexes',()=>{assert.equal(fighterEWModifiers({attacker:ship,target:razik(),range:10,closeCombatEW:3}).total,3);assert.equal(fighterEWModifiers({attacker:ship,target:razik(),range:11,closeCombatEW:3}).total,0);});
